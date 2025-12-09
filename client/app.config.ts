@@ -38,9 +38,13 @@ const androidPackages = {
   prod: "com.devzano.CreatureRealm",
 };
 
-const icons = {
+const iOSIcons = {
   dev: "./assets/images/icon.png",
   prod: "./assets/images/icon.png",
+};
+const androidIcons = {
+  dev: "./assets/images/adaptive-icon.png",
+  prod: "./assets/images/adaptive-icon.png",
 };
 
 // const splashPluginConfig = {
@@ -52,7 +56,7 @@ const icons = {
 //   backgroundColor: "#071826"
 // };
 
-const BUILD_NUMBER = 5;
+const BUILD_NUMBER = 7;
 
 const config: ExpoConfig = {
   name: pick(appNames),
@@ -61,7 +65,7 @@ const config: ExpoConfig = {
 
   version: "1.0.0",
   orientation: "portrait",
-  icon: pick(icons),
+  icon: pick(iOSIcons),
   userInterfaceStyle: "automatic",
   newArchEnabled: true,
 
@@ -80,7 +84,7 @@ const config: ExpoConfig = {
     package: pick(androidPackages),
     adaptiveIcon: {
       backgroundColor: "#071826",
-      foregroundImage: pick(icons),
+      foregroundImage: pick(androidIcons),
       // backgroundImage: pick(adaptiveBackgrounds),
       // monochromeImage: pick(adaptiveMonochrome),
     },
@@ -99,6 +103,7 @@ const config: ExpoConfig = {
     "expo-secure-store",
     "expo-font",
     "expo-web-browser",
+    "expo-audio",
     // "@react-native-google-signin/google-signin",
     // [
     //   "expo-splash-screen",

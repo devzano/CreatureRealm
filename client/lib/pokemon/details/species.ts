@@ -19,10 +19,9 @@ export type PokemonSpecies = {
     url: string;
   } | null;
 
-  // 👇 add this if it's not already there
+  // National / regional dex numbers
   pokedex_numbers?: PokemonSpeciesPokedexNumber[];
 
-  // existing fields...
   color?: {
     name: string;
     url: string;
@@ -55,14 +54,45 @@ export type PokemonSpecies = {
   }[];
 };
 
+/**
+ * Evolution details as returned by PokeAPI on each evolves_to link.
+ * This is where things like "trade", "use-item", "min_level", etc. live.
+ */
+export type EvolutionDetail = {
+  item: NamedAPIResource | null;
+  trigger: NamedAPIResource | null;
+  gender: number | null;
+  held_item: NamedAPIResource | null;
+  known_move: NamedAPIResource | null;
+  known_move_type: NamedAPIResource | null;
+  location: NamedAPIResource | null;
+  min_affection: number | null;
+  min_beauty: number | null;
+  min_happiness: number | null;
+  min_level: number | null;
+  needs_overworld_rain: boolean;
+  party_species: NamedAPIResource | null;
+  party_type: NamedAPIResource | null;
+  relative_physical_stats: number | null;
+  time_of_day: string;
+  trade_species: NamedAPIResource | null;
+  turn_upside_down: boolean;
+};
+
 export type EvolutionChainLink = {
   species: NamedAPIResource;
   evolves_to: EvolutionChainLink[];
+
+  // 👇 this is what the detail screen inspects
+  evolution_details: EvolutionDetail[];
 };
 
 export type EvolutionChain = {
   id: number;
   chain: EvolutionChainLink;
+
+  // sometimes present, not strictly needed for your use-case
+  baby_trigger_item?: NamedAPIResource | null;
 };
 
 /**
@@ -80,5 +110,6 @@ export async function getPokemonSpecies(
 export async function getEvolutionChainByUrl(
   url: string
 ): Promise<EvolutionChain> {
+  // fetchJson in your base module should already handle full URLs
   return fetchJson<EvolutionChain>(url);
 }

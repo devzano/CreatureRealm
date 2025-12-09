@@ -3,15 +3,34 @@ import { useEffect, useState, useMemo } from "react";
 import { View, Text, ActivityIndicator, Image, TouchableOpacity, TextInput } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { useAudioPlayer, useAudioPlayerStatus } from "expo-audio";
 import LiquidGlass from "@/components/ui/LiquidGlass";
 import { getTypeStyle } from "@/lib/ui/typeStyles";
 
 import PageWrapper from "@/components/PageWrapper";
-import { usePokemonCollectionStore, type HuntMethod } from "@/store/collectionStore";
+import {
+  usePokemonCollectionStore,
+  type HuntMethod,
+} from "@/store/collectionStore";
 import { getGameById, games } from "@/lib/data/pokemon/gameFilters";
-import { getPokedex, EvolutionChain, EvolutionChainLink, getEvolutionChainByUrl, getPokemon, getPokemonEncounters, getPokemonSpecies, getType, LocationAreaEncounter, Pokemon, PokemonSpecies } from "@/lib/pokemon/index";
+import {
+  getPokedex,
+  type EvolutionChain,
+  type EvolutionChainLink,
+  getEvolutionChainByUrl,
+  getPokemon,
+  getPokemonEncounters,
+  getPokemonSpecies,
+  getType,
+  type LocationAreaEncounter,
+  type Pokemon,
+  type PokemonSpecies,
+} from "@/lib/pokemon/index";
 
-import PokemonVariantBrowser, { type PokemonVariant, type PokemonVariantKind } from "@/components/Pokemon/PokemonDetails/PokemonVariantBrowser";
+import PokemonVariantBrowser, {
+  type PokemonVariant,
+  type PokemonVariantKind,
+} from "@/components/Pokemon/PokemonDetails/PokemonVariantBrowser";
 import PokemonStatsCard from "@/components/Pokemon/PokemonDetails/PokemonStatsCard";
 import PokemonTypeMatchups from "@/components/Pokemon/PokemonDetails/PokemonTypeMatchups";
 import PokemonEvolutionLine from "@/components/Pokemon/PokemonDetails/PokemonEvolutionLine";
@@ -84,6 +103,109 @@ type DexSlot = {
   labels: string[];
 };
 
+type EvolutionStep = {
+  fromName: string;
+  toName: string;
+  details: string;
+};
+
+type EvolutionDetail =
+  EvolutionChainLink["evolves_to"][number]["evolution_details"][number];
+
+function formatEvolutionDetails(detail: EvolutionDetail): string {
+  const parts: string[] = [];
+  const trigger = detail.trigger?.name;
+
+  if (trigger === "trade") {
+    parts.push("Trade");
+    if (detail.held_item) {
+      parts.push(`while holding ${humanizeSlug(detail.held_item.name)}`);
+    }
+    if (detail.trade_species) {
+      parts.push(`for ${humanizeSlug(detail.trade_species.name)}`);
+    }
+  } else if (trigger === "use-item" && detail.item) {
+    parts.push(`Use ${humanizeSlug(detail.item.name)}`);
+  } else if (trigger === "level-up") {
+    if (detail.min_level != null) {
+      parts.push(`Level ${detail.min_level}`);
+    } else {
+      parts.push("Level up");
+    }
+  } else if (trigger) {
+    parts.push(humanizeSlug(trigger));
+  } else {
+    parts.push("Evolves");
+  }
+
+  if (detail.time_of_day) {
+    parts.push(`during the ${detail.time_of_day}`);
+  }
+
+  if (detail.min_happiness != null) {
+    parts.push("with high friendship");
+  }
+
+  if (detail.location) {
+    parts.push(`at ${humanizeSlug(detail.location.name)}`);
+  }
+
+  if (detail.gender != null) {
+    const genderText = detail.gender === 1 ? "female" : "male";
+    parts.push(`(${genderText} only)`);
+  }
+
+  if (detail.needs_overworld_rain) {
+    parts.push("while it's raining");
+  }
+
+  if (detail.turn_upside_down) {
+    parts.push("while the console is upside down");
+  }
+
+  if (detail.known_move) {
+    parts.push(`knowing ${humanizeSlug(detail.known_move.name)}`);
+  }
+
+  if (detail.known_move_type) {
+    parts.push(
+      `knowing a ${humanizeSlug(detail.known_move_type.name)}-type move`
+    );
+  }
+
+  if (detail.party_species) {
+    parts.push(
+      `with ${humanizeSlug(detail.party_species.name)} in the party`
+    );
+  }
+
+  if (detail.party_type) {
+    parts.push(
+      `with a ${humanizeSlug(detail.party_type.name)}-type Pokémon in the party`
+    );
+  }
+
+  if (detail.relative_physical_stats != null) {
+    if (detail.relative_physical_stats === 1) {
+      parts.push("with Attack > Defense");
+    } else if (detail.relative_physical_stats === -1) {
+      parts.push("with Attack < Defense");
+    } else {
+      parts.push("with Attack = Defense");
+    }
+  }
+
+  if (detail.min_beauty != null) {
+    parts.push("with high beauty");
+  }
+
+  if (detail.min_affection != null) {
+    parts.push("with high affection");
+  }
+
+  return parts.join(" ");
+}
+
 export default function PokemonDetailScreen() {
   const { id, gameId } = useLocalSearchParams<{
     id: string;
@@ -95,14 +217,15 @@ export default function PokemonDetailScreen() {
   const [weaknesses, setWeaknesses] = useState<string[]>([]);
   const [strengths, setStrengths] = useState<string[]>([]);
   const [evolutionNames, setEvolutionNames] = useState<string[]>([]);
+  const [evolutionSteps, setEvolutionSteps] = useState<EvolutionStep[]>([]);
   const [loading, setLoading] = useState(true);
   const [movesSheetVisible, setMovesSheetVisible] = useState(false);
   const [abilitiesSheetVisible, setAbilitiesSheetVisible] = useState(false);
 
   const [variants, setVariants] = useState<PokemonVariant[]>([]);
-  const [variantMonByKey, setVariantMonByKey] = useState<
-    Record<string, Pokemon>
-  >({});
+  const [variantMonByKey, setVariantMonByKey] = useState<Record<string, Pokemon>>(
+    {}
+  );
   const [activeVariantKey, setActiveVariantKey] = useState<string>("");
 
   const [showShiny, setShowShiny] = useState(false);
@@ -147,6 +270,43 @@ export default function PokemonDetailScreen() {
         : [],
     [availableGames]
   );
+
+  const cryUrl = data?.cries?.latest ?? null;
+  const cryPlayer = useAudioPlayer(cryUrl, {
+    downloadFirst: true,
+  });
+  const cryStatus = useAudioPlayerStatus(cryPlayer);
+  const [hasAutoplayedCry, setHasAutoplayedCry] = useState(false);
+
+  useEffect(() => {
+    setHasAutoplayedCry(false);
+  }, [cryUrl]);
+
+  useEffect(() => {
+    if (loading) return;
+
+    if (!cryUrl) return;
+    if (!cryStatus.isLoaded) return;
+    if (hasAutoplayedCry) return;
+
+    try {
+      cryPlayer.seekTo(0);
+      cryPlayer.play();
+      setHasAutoplayedCry(true);
+    } catch (e) {
+      console.warn("Failed to auto-play Pokémon cry:", e);
+    }
+  }, [cryUrl, cryStatus.isLoaded, hasAutoplayedCry, cryPlayer, loading]);
+
+  const handlePlayCry = () => {
+    if (!cryUrl) return;
+    try {
+      cryPlayer.seekTo(0);
+      cryPlayer.play();
+    } catch (e) {
+      console.warn("Failed to replay Pokémon cry:", e);
+    }
+  };
 
   useEffect(() => {
     if (!id) return;
@@ -196,14 +356,40 @@ export default function PokemonDetailScreen() {
           if (!isMounted) return;
 
           const names: string[] = [];
+          const steps: EvolutionStep[] = [];
+
           const walk = (node: EvolutionChainLink) => {
             names.push(node.species.name);
-            node.evolves_to.forEach(walk);
+
+            node.evolves_to.forEach((child) => {
+              const fromName = node.species.name;
+              const toName = child.species.name;
+
+              const detail = child.evolution_details?.[0] as
+                | EvolutionDetail
+                | undefined;
+
+              const detailsText = detail
+                ? formatEvolutionDetails(detail)
+                : "Evolves";
+
+              steps.push({
+                fromName,
+                toName,
+                details: detailsText,
+              });
+
+              walk(child);
+            });
           };
+
           walk(chain.chain);
+
           setEvolutionNames(names);
+          setEvolutionSteps(steps);
         } else {
           setEvolutionNames([]);
+          setEvolutionSteps([]);
         }
 
         if (speciesData.varieties && speciesData.varieties.length > 0) {
@@ -447,7 +633,6 @@ export default function PokemonDetailScreen() {
 
     const s = monToDisplay.sprites;
     type ArtItem = { key: string; label: string; url: string; };
-
     const items: ArtItem[] = [];
     const wantShiny = showShiny;
 
@@ -476,12 +661,7 @@ export default function PokemonDetailScreen() {
     );
 
     pushIf("home", "Home", s.other?.home?.front_default ?? null, false);
-    pushIf(
-      "home-shiny",
-      "Home shiny",
-      s.other?.home?.front_shiny ?? null,
-      true
-    );
+    pushIf("home-shiny", "Home shiny", s.other?.home?.front_shiny ?? null, true);
 
     pushIf(
       "showdown-front",
@@ -585,7 +765,26 @@ export default function PokemonDetailScreen() {
   const captureRateText = species ? `${species.capture_rate}` : "-";
   const baseHappinessText = species ? `${species.base_happiness}` : "-";
 
-  // 👉 front/back sprites used in thumbnails & hero
+  const evolutionRequirementForCurrent = useMemo(() => {
+    if (!data || evolutionSteps.length === 0) return null;
+
+    const current = data.name;
+
+    const incoming = evolutionSteps.find((s) => s.toName === current);
+    if (incoming) {
+      return `Evolves from ${capitalize(incoming.fromName)}: ${incoming.details}`;
+    }
+
+    const outgoing = evolutionSteps.find((s) => s.fromName === current);
+    if (outgoing) {
+      return `Evolves into ${capitalize(
+        outgoing.toName
+      )}: ${outgoing.details}`;
+    }
+
+    return null;
+  }, [data, evolutionSteps]);
+
   const frontSprite = useMemo(
     () =>
       monToDisplay
@@ -608,17 +807,16 @@ export default function PokemonDetailScreen() {
     [monToDisplay, showShiny]
   );
 
-  // 👇 Hero selection state: lets thumbnails override the main art
   const [selectedHeroUrl, setSelectedHeroUrl] = useState<string | null>(null);
-  const [selectedHeroLabel, setSelectedHeroLabel] = useState<string | null>(null);
+  const [selectedHeroLabel, setSelectedHeroLabel] = useState<string | null>(
+    null
+  );
 
-  // Reset hero selection whenever form or mode changes
   useEffect(() => {
     setSelectedHeroUrl(null);
     setSelectedHeroLabel(null);
   }, [monToDisplay, showShiny]);
 
-  // Thumbnail list (sprites + art) – still a hook, so it must be above any early return
   const heroThumbnails = useMemo(() => {
     type Thumb = { key: string; label: string; url: string; };
     const thumbs: Thumb[] = [];
@@ -650,7 +848,6 @@ export default function PokemonDetailScreen() {
     return thumbs;
   }, [frontSprite, backSprite, artGallery, showShiny]);
 
-  // ✅ all hooks are above this early return now
   if (loading || !data || !monToDisplay) {
     return (
       <PageWrapper title="Pokémon Detail" scroll={false}>
@@ -740,7 +937,8 @@ export default function PokemonDetailScreen() {
       }
     >
       {game ? (
-        <View className="inline-flex self-start rounded-full px-3 py-1 bg-slate-900 border border-slate-700 mb-3">
+        <View className="inline-flex self-start rounded-full px-3 py-1 bg-s
+late-900 border border-slate-700 mb-3">
           <Text
             className="text-[11px] font-semibold"
             style={{ color: game.accentColor[0] }}
@@ -800,6 +998,23 @@ export default function PokemonDetailScreen() {
                 {heroLabel}
               </Text>
             </View>
+          )}
+
+          {/* 🔊 Play cry button */}
+          {data.cries?.latest && (
+            <TouchableOpacity
+              onPress={handlePlayCry}
+              className="flex-row items-center rounded-full bg-slate-900 border border-slate-700 px-3 py-1.5 mb-1"
+            >
+              <MaterialCommunityIcons
+                name="volume-high"
+                size={16}
+                color="#e5e7eb"
+              />
+              <Text className="ml-1 text-[11px] text-slate-100 font-semibold">
+                Play cry
+              </Text>
+            </TouchableOpacity>
           )}
 
           {/* Thumbnails: sprites + main arts */}
@@ -1099,6 +1314,18 @@ export default function PokemonDetailScreen() {
       />
 
       <PokemonTypeMatchups weakTo={weaknesses} superEffectiveVs={strengths} />
+
+      {/* Evolution requirement card */}
+      {evolutionRequirementForCurrent && (
+        <View className="mb-3 rounded-3xl bg-slate-950/90 border border-slate-800 px-3 py-3">
+          <Text className="text-[11px] font-semibold text-slate-400 mb-1.5">
+            Evolution requirement
+          </Text>
+          <Text className="text-[12px] text-slate-100">
+            {evolutionRequirementForCurrent}
+          </Text>
+        </View>
+      )}
 
       <PokemonEvolutionLine
         evolutionNames={evolutionNames}

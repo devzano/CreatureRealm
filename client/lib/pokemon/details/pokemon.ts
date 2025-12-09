@@ -47,6 +47,11 @@ export type PokemonSpriteSet = {
   };
 };
 
+export type PokemonCries = {
+  latest: string | null;
+  legacy: string | null;
+};
+
 // --- Stats ---
 
 export type PokemonStatRef = NamedAPIResource;
@@ -93,10 +98,10 @@ export type Pokemon = {
   name: string;
   types: PokemonTypeSlot[];
   sprites: PokemonSpriteSet;
-
   stats: PokemonStat[];
   abilities: PokemonAbilitySlot[];
   moves: PokemonMoveSlot[];
+  cries?: PokemonCries;
 };
 
 /**

@@ -7,23 +7,20 @@ import { Stack } from "expo-router";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import * as SplashScreen from "expo-splash-screen";
 import * as Updates from "expo-updates";
+import * as NavigationBar from 'expo-navigation-bar';
 import Constants from "expo-constants";
 
 import { ThemeProvider } from "@/context/themeContext";
 import AnimatedSplashScreen from "@/components/ui/AnimatedSplashScreen";
 import UpdateAvailableModal from "@/components/UpdateAvailableModal";
 
-// Keep native splash visible until we explicitly hide it
-SplashScreen.preventAutoHideAsync().catch(() => {
-  // it's safe to ignore if this throws (e.g. already hidden)
-});
+SplashScreen.preventAutoHideAsync().catch(() => { });
 
 type UpdateMode = "store" | "ota" | null;
 
 function getVersioningInfo() {
   const extra = (Constants.expoConfig as any)?.extra ?? {};
 
-  // current build number (you set this in app.json/app.config.ts)
   const rawBuild = extra?.buildNumber;
   let currentBuild = 1;
 
@@ -118,6 +115,21 @@ export default function RootLayout() {
         console.warn("[update] Error checking for updates:", err);
       }
     })();
+  }, []);
+
+  useEffect(() => {
+    if (Platform.OS !== "android") return;
+
+    const hideNavigationBar = async () => {
+      try {
+        await NavigationBar.setVisibilityAsync("hidden");
+
+      } catch (e) {
+        console.warn("[navigation] Failed to configure nav bar:", e);
+      }
+    };
+
+    hideNavigationBar();
   }, []);
 
   const handleUpdateNow = useCallback(async () => {

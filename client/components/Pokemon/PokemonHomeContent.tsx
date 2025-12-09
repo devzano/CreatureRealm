@@ -589,7 +589,7 @@ const PokemonHomeContent: React.FC<PokemonHomeContentProps> = ({
 
           {/* Sub-tabs: Maps / Games / Dex */}
           <View className="flex-row items-center rounded-full bg-slate-900/80 border border-slate-700 p-1 mt-2">
-            <Pressable
+            {/* <Pressable
               onPress={() => setActiveTab("maps")}
               className={`flex-1 rounded-full px-3 py-1.5 items-center justify-center ${
                 activeTab === "maps" ? "bg-slate-800" : ""
@@ -602,7 +602,7 @@ const PokemonHomeContent: React.FC<PokemonHomeContentProps> = ({
               >
                 Maps
               </Text>
-            </Pressable>
+            </Pressable> */}
 
             <Pressable
               onPress={() => setActiveTab("dex")}
