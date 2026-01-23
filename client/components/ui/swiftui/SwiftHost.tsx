@@ -1,4 +1,4 @@
-// components/swiftui/SwiftHost.tsx
+// components/ui/swiftui/SwiftHost.tsx
 import React from 'react';
 import type { ReactNode } from 'react';
 import type { ViewStyle, StyleProp } from 'react-native';

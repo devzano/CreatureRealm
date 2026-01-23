@@ -3,8 +3,8 @@ import React, { useMemo } from "react";
 import { View, Text, ScrollView, Pressable, Image } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 
-import { games, type CreatureRealmGame } from "@/lib/data/pokemon/gameFilters";
-import { usePokemonCollectionStore } from "@/store/collectionStore";
+import { games, type CreatureRealmGame } from "@/lib/pokemon/gameFilters";
+import { usePokemonCollectionStore } from "@/store/pokemonCollectionStore";
 
 type OwnershipEntry = {
   caught?: boolean;

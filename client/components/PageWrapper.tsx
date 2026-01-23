@@ -42,6 +42,13 @@ type PageWrapperProps = {
 
   /** Optional override for page background, defaults to slate-950 */
   backgroundColor?: string;
+
+  /**
+   * Header layout variant:
+   * - 'inline': Title/subtitle appear inline with back button and leftActions
+   * - 'stacked': Title/subtitle appear below the nav row (default)
+   */
+  headerLayout?: 'inline' | 'stacked';
 } & Omit<ViewProps, "children">;
 
 const PageWrapper: React.FC<PageWrapperProps> = ({
@@ -54,7 +61,8 @@ const PageWrapper: React.FC<PageWrapperProps> = ({
   leftActions,
   rightActions,
   onBackPress,
-  backgroundColor = "#020617", // slate-950
+  backgroundColor = "#020617",
+  headerLayout = 'stacked',
   style,
   ...rest
 }) => {
@@ -77,40 +85,82 @@ const PageWrapper: React.FC<PageWrapperProps> = ({
         backgroundColor: hideHeaderChrome ? "transparent" : backgroundColor,
       }}
     >
-      {/* Top nav row */}
-      <View className="flex-row items-center justify-between mb-1.5">
-        <View className="flex-row items-center">
-          {!hideBackButton && (
-            <TouchableOpacity
-              onPress={handleBack}
-              className="w-9 h-9 rounded-full bg-slate-900 border border-slate-700 items-center justify-center mr-2"
-              hitSlop={8}
-            >
-              <Feather name="chevron-left" size={18} color="#e5e7eb" />
-            </TouchableOpacity>
-          )}
+      {headerLayout === 'inline' ? (
+        <View className="flex-row items-center justify-between">
+          <View className="flex-row items-center flex-1 mr-4">
+            {!hideBackButton && (
+              <TouchableOpacity
+                onPress={handleBack}
+                className="w-9 h-9 rounded-full bg-slate-900 border border-slate-700 items-center justify-center mr-2"
+                hitSlop={8}
+              >
+                <Feather name="chevron-left" size={18} color="#e5e7eb" />
+              </TouchableOpacity>
+            )}
 
-          {/* Left actions (e.g. small label button) */}
-          {leftActions}
+            {/* Left actions */}
+            {leftActions}
+
+            {/* Header text inline */}
+            {!hideHeaderChrome && (
+              <View className="ml-2 flex-shrink">
+                {title && (
+                  <Text className="text-lg font-extrabold text-slate-50" numberOfLines={1}>
+                    {title}
+                  </Text>
+                )}
+                {subtitle && (
+                  <Text className="text-[10px] text-slate-400" numberOfLines={1}>
+                    {subtitle}
+                  </Text>
+                )}
+              </View>
+            )}
+          </View>
+
+          {/* RIGHT-SIDE CONTENT */}
+          <View className="flex-row items-center">
+            {rightActions}
+          </View>
         </View>
-
-        {/* Right-side nav buttons */}
-        <View className="flex-row items-center">{rightActions}</View>
-      </View>
-
-      {/* Header text (can be entirely removed with hideHeaderChrome) */}
-      {!hideHeaderChrome && (
+      ) : (
         <>
-          {title ? (
-            <Text className="text-xl font-extrabold text-slate-50">
-              {title}
-            </Text>
-          ) : null}
-          {subtitle ? (
-            <Text className="text-[12px] text-slate-400 mt-0.5">
-              {subtitle}
-            </Text>
-          ) : null}
+          {/* Top nav row */}
+          <View className="flex-row items-center justify-between mb-1.5">
+            <View className="flex-row items-center">
+              {!hideBackButton && (
+                <TouchableOpacity
+                  onPress={handleBack}
+                  className="w-9 h-9 rounded-full bg-slate-900 border border-slate-700 items-center justify-center mr-2"
+                  hitSlop={8}
+                >
+                  <Feather name="chevron-left" size={18} color="#e5e7eb" />
+                </TouchableOpacity>
+              )}
+
+              {/* Left actions */}
+              {leftActions}
+            </View>
+
+            {/* Right-side nav buttons */}
+            <View className="flex-row items-center">{rightActions}</View>
+          </View>
+
+          {/* Header text below nav row */}
+          {!hideHeaderChrome && (
+            <>
+              {title && (
+                <Text className="text-xl font-extrabold text-slate-50">
+                  {title}
+                </Text>
+              )}
+              {subtitle && (
+                <Text className="text-[12px] text-slate-400 mt-0.5">
+                  {subtitle}
+                </Text>
+              )}
+            </>
+          )}
         </>
       )}
     </View>

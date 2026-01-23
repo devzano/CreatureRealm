@@ -2,7 +2,7 @@
 import React from "react";
 import { View, Text } from "react-native";
 import LiquidGlass from "@/components/ui/LiquidGlass";
-import { getTypeStyle } from "@/lib/ui/typeStyles";
+import { getTypeStyle } from "@/lib/pokemon/ui/typeStyles";
 
 type PokemonWeaknessesProps = {
   weaknesses: string[];

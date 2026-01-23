@@ -1,17 +1,6 @@
 // components/ui/BottomSheetModal.tsx
 import React, { useEffect, useState } from "react";
-import {
-  Modal,
-  View,
-  TouchableWithoutFeedback,
-  Keyboard,
-  Platform,
-  StyleSheet,
-  KeyboardEvent,
-  StyleProp,
-  ViewStyle,
-  useWindowDimensions,
-} from "react-native";
+import { Modal, View, TouchableWithoutFeedback, Keyboard, Platform, StyleSheet, KeyboardEvent, StyleProp, ViewStyle, useWindowDimensions } from "react-native";
 import LiquidGlass from "@/components/ui/LiquidGlass";
 import { useTheme } from "@/context/themeContext";
 import AppColors from "@/constants/colors";
@@ -24,8 +13,6 @@ type BottomSheetModalProps = {
   sheetStyle?: StyleProp<ViewStyle>;
   overlayColor?: string;
   tintColor?: string;
-
-  /** Optional: lock sheet to an exact height (in px). */
   fixedHeight?: number;
 };
 
@@ -67,18 +54,15 @@ const BottomSheetModal: React.FC<BottomSheetModalProps> = ({
     };
   }, []);
 
-  // Darker overlay + proper dark sheet tint
-  const overlayBgDefault = "rgba(3,7,18,0.85)"
-  const sheetTintDefault = "#020617"
+  const overlayBgDefault = "rgba(3,7,18,0.85)";
+  const sheetTintDefault = "#020617";
 
   const overlayBg = overlayColor ?? overlayBgDefault;
   const sheetTint = tintColor ?? sheetTintDefault;
 
-  // Desired lift when keyboard is visible
   const desiredBottom =
     keyboardOffset > 0 ? keyboardOffset + extraKeyboardPadding : 0;
 
-  // Prevent the sheet from going off the top of the screen
   const topMargin = Platform.OS === "ios" ? 48 : 32;
 
   let bottomOffset = desiredBottom;
@@ -87,7 +71,6 @@ const BottomSheetModal: React.FC<BottomSheetModalProps> = ({
     bottomOffset = Math.min(desiredBottom, maxBottom);
   }
 
-  // Build sheet style: base + (fixed or min/max) + caller overrides
   const resolvedSheetStyle: StyleProp<ViewStyle> = [
     styles.sheet,
     fixedHeight
@@ -105,7 +88,6 @@ const BottomSheetModal: React.FC<BottomSheetModalProps> = ({
       statusBarTranslucent
     >
       <View style={[styles.overlay, { backgroundColor: overlayBg }]}>
-        {/* Backdrop tap closes sheet */}
         <TouchableWithoutFeedback
           onPress={() => {
             Keyboard.dismiss();
@@ -115,12 +97,8 @@ const BottomSheetModal: React.FC<BottomSheetModalProps> = ({
           <View style={styles.backdrop} />
         </TouchableWithoutFeedback>
 
-        {/* Sheet */}
         <View
-          style={[
-            styles.sheetWrapper,
-            { marginBottom: bottomOffset },
-          ]}
+          style={[styles.sheetWrapper, { marginBottom: bottomOffset }]}
           onLayout={(e) => {
             setSheetHeight(e.nativeEvent.layout.height);
           }}
@@ -151,6 +129,7 @@ const styles = StyleSheet.create({
   },
   sheetWrapper: {
     width: "100%",
+    paddingBottom: 10,
   },
   sheet: {
     borderTopLeftRadius: 24,

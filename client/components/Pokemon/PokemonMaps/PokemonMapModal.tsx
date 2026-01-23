@@ -14,7 +14,7 @@ import {
   FULLSCREEN_HACK_JS,
   MAP_CONTROL_HELPERS_JS,
   buildCRMapScript,
-} from "./mapScripts";
+} from "../../../lib/maps/mapScripts";
 
 type MapToggleKind = "parent" | "sub" | "item";
 

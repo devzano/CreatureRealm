@@ -1,5 +1,5 @@
 // lib/pokemon/pokeapi/dex/gamedex.ts
-import { CreatureRealmGame, games } from "@/lib/data/pokemon/gameFilters";
+import { CreatureRealmGame, games } from "@/lib/pokemon/gameFilters";
 import { extractPokemonIdFromUrl } from "@/lib/pokemon/base";
 import { getVersionGroup } from "@/lib/pokemon/dex/versionGroup";
 import { getPokedex, Pokedex } from "@/lib/pokemon/dex/pokedex";

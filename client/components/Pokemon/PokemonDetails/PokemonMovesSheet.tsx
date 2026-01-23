@@ -8,8 +8,8 @@ import {
   type PokemonMoveSlot,
   type PokemonMoveVersionDetail,
 } from "@/lib/pokemon/index";
-import { getGameById } from "@/lib/data/pokemon/gameFilters";
-import { getTypeStyle } from "@/lib/ui/typeStyles";
+import { getGameById } from "@/lib/pokemon/gameFilters";
+import { getTypeStyle } from "@/lib/pokemon/ui/typeStyles";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 
 type PokemonMovesSheetProps = {
@@ -148,13 +148,6 @@ export default function PokemonMovesSheet({
               const detail = await getMoveByUrl(url);
               return { name, detail };
             } catch (e: any) {
-              if (__DEV__) {
-                console.log(
-                  `[CreatureRealm] Move detail unavailable for "${name}" from "${url}" (${String(
-                    e?.message ?? e
-                  )})`
-                );
-              }
               return { name, detail: null as Move | null };
             }
           })

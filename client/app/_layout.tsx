@@ -8,11 +8,13 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import * as SplashScreen from "expo-splash-screen";
 import * as Updates from "expo-updates";
 import * as NavigationBar from 'expo-navigation-bar';
+import { Asset } from "expo-asset";
 import Constants from "expo-constants";
 
 import { ThemeProvider } from "@/context/themeContext";
 import AnimatedSplashScreen from "@/components/ui/AnimatedSplashScreen";
 import UpdateAvailableModal from "@/components/UpdateAvailableModal";
+import AppImages from "@/constants/images";
 
 SplashScreen.preventAutoHideAsync().catch(() => { });
 
@@ -61,6 +63,7 @@ function getVersioningInfo() {
 }
 
 export default function RootLayout() {
+  const [appIsReady, setAppIsReady] = useState(false);
   const [splashFinished, setSplashFinished] = useState(false);
 
   const [updateModalVisible, setUpdateModalVisible] = useState(false);
@@ -72,50 +75,49 @@ export default function RootLayout() {
     setSplashFinished(true);
   }, []);
 
-  // Check for store or OTA updates
   useEffect(() => {
-    if (__DEV__) return;
-
-    (async () => {
+    async function prepare() {
       try {
-        const {
-          currentBuild,
-          minSupportedBuildNumber,
-          iosStoreUrl,
-          androidStoreUrl,
-        } = getVersioningInfo();
+        const imageAssets = Object.values(AppImages).map((image) => {
+          return Asset.fromModule(image).downloadAsync();
+        });
 
-        // 1) Hard, store-forced update based on build numbers
-        if (
-          minSupportedBuildNumber != null &&
-          currentBuild < minSupportedBuildNumber
-        ) {
-          setUpdateMode("store");
-          const url =
-            Platform.OS === "ios" ? iosStoreUrl : androidStoreUrl;
+        await Promise.all([
+          ...imageAssets,
+          checkUpdates(),
+        ]);
 
-          if (!url) {
-            console.warn(
-              "[update] minSupportedBuildNumber set but store URL missing for this platform"
-            );
-          }
-
-          setStoreUrl(url ?? null);
-          setUpdateModalVisible(true);
-          return;
-        }
-
-        // 2) Otherwise, check for OTA updates
-        const result = await Updates.checkForUpdateAsync();
-        if (result.isAvailable) {
-          setUpdateMode("ota");
-          setUpdateModalVisible(true);
-        }
-      } catch (err) {
-        console.warn("[update] Error checking for updates:", err);
+      } catch (e) {
+        console.warn("[prepare] Error during loading:", e);
+      } finally {
+        setAppIsReady(true);
       }
-    })();
+    }
+
+    prepare();
   }, []);
+
+  const checkUpdates = async () => {
+    if (__DEV__) return;
+    try {
+      const { currentBuild, minSupportedBuildNumber, iosStoreUrl, androidStoreUrl } = getVersioningInfo();
+
+      if (minSupportedBuildNumber != null && currentBuild < minSupportedBuildNumber) {
+        setUpdateMode("store");
+        setStoreUrl(Platform.OS === "ios" ? iosStoreUrl : androidStoreUrl);
+        setUpdateModalVisible(true);
+        return;
+      }
+
+      const result = await Updates.checkForUpdateAsync();
+      if (result.isAvailable) {
+        setUpdateMode("ota");
+        setUpdateModalVisible(true);
+      }
+    } catch (err) {
+      console.warn("[update] Error checking for updates:", err);
+    }
+  };
 
   useEffect(() => {
     if (Platform.OS !== "android") return;
@@ -165,33 +167,27 @@ export default function RootLayout() {
     console.warn("[update] handleUpdateNow called with no updateMode");
   }, [storeUrl, updateMode]);
 
+  if (!appIsReady) {
+    return null;
+  }
+
   return (
     <ThemeProvider>
       <SafeAreaProvider>
-        <View style={{ flex: 1 }}>
+        <View style={{ flex: 1, backgroundColor: "#020617"}}>
           <Stack>
-            <Stack.Screen
-              name="(tabs)"
-              options={{ headerShown: false }}
-            />
-            <Stack.Screen
-              name="game/[id]"
-              options={{ headerShown: false }}
-            />
-            <Stack.Screen
-              name="pokemon/[id]"
-              options={{ headerShown: false }}
-            />
+            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+            <Stack.Screen name="(pokemon)" options={{ headerShown: false }} />
+            <Stack.Screen name="(palworld)" options={{ headerShown: false }} />
+            <Stack.Screen name="(animalCrossing)" options={{ headerShown: false }} />
           </Stack>
 
-          {/* Update Modal (store or OTA) */}
           <UpdateAvailableModal
             visible={updateModalVisible}
             onUpdateNow={handleUpdateNow}
             isUpdating={isUpdating}
           />
 
-          {/* Animated splash overlay */}
           {!splashFinished && (
             <AnimatedSplashScreen onAnimationFinish={handleSplashFinish} />
           )}

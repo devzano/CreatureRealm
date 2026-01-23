@@ -26,7 +26,7 @@ const FloatingTabBar: React.FC<BottomTabBarProps> = ({
 
   const isFullscreenOverlayVisible = useUiOverlayStore(
     (s) => s.isFullscreenOverlayVisible
-  ); // 👈 hook is called here with other hooks
+  );
 
   const routes = state.routes;
   const count = routes.length;

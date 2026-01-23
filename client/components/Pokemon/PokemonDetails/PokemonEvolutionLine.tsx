@@ -5,7 +5,7 @@ import { useRouter } from "expo-router";
 
 import BottomSheetModal from "@/components/ui/BottomSheetModal";
 import { getPokemon, getPokemonSpecies, getType, type Pokemon } from "@/lib/pokemon/index";
-import { DEFAULT_EVOLUTION_CHIP_STYLE, type EvolutionChipStyle, getEvolutionChipStyleFromSpeciesColor, getTypeStyle } from "@/lib/ui/typeStyles";
+import { DEFAULT_EVOLUTION_CHIP_STYLE, type EvolutionChipStyle, getEvolutionChipStyleFromSpeciesColor, getTypeStyle } from "@/lib/pokemon/ui/typeStyles";
 import LiquidGlass from "@/components/ui/LiquidGlass";
 
 type PokemonEvolutionLineProps = {

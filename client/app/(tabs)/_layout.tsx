@@ -16,23 +16,9 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: "Games",
+          title: "Home",
           tabBarIcon: ({ color, size }) => (
             <MaterialIcons name="sports-esports" color={color} size={size} />
-          ),
-        }}
-      />
-
-      <Tabs.Screen
-        name="collection"
-        options={{
-          title: "Collection",
-          tabBarIcon: ({ color, size }) => (
-            <MaterialCommunityIcons
-              name="account-group"
-              color={color}
-              size={size}
-            />
           ),
         }}
       />

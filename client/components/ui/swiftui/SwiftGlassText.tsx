@@ -1,4 +1,4 @@
-// components/swiftui/SwiftGlassText.tsx
+// components/ui/swiftui/SwiftGlassText.tsx
 import React from 'react';
 import { Text } from '@expo/ui/swift-ui';
 import {

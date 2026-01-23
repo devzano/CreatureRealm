@@ -1,4 +1,4 @@
-// components/swiftui/SwiftSettingsRow.tsx
+// components/ui/swiftui/SwiftSettingsRow.tsx
 import React from 'react';
 import {
   HStack,

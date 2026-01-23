@@ -29,8 +29,8 @@ import PokemonNationalDex, {
   type DexViewMode,
 } from "@/components/Pokemon/PokemonNationalDex";
 
-import MapCard from "./PokemonMaps/MapCard";
-import { games } from "@/lib/data/pokemon/gameFilters";
+import MapCard from "../MapCard";
+import { games } from "@/lib/pokemon/gameFilters";
 
 type PokemonHomeContentProps = {
   onBackToCollections: () => void;
@@ -95,7 +95,7 @@ const PokemonHomeContent: React.FC<PokemonHomeContentProps> = ({
       case "games":
         return "Game Pokédexes";
       default:
-        return "CreatureRealm • Pokémon";
+        return "Pokémon";
     }
   }, [activeTab]);
 
@@ -543,7 +543,7 @@ const PokemonHomeContent: React.FC<PokemonHomeContentProps> = ({
         subtitle={pageSubtitle}
         leftActions={
           <Text className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-            CreatureRealm • Pokémon
+            Pokémon
           </Text>
         }
         rightActions={
@@ -589,7 +589,7 @@ const PokemonHomeContent: React.FC<PokemonHomeContentProps> = ({
 
           {/* Sub-tabs: Maps / Games / Dex */}
           <View className="flex-row items-center rounded-full bg-slate-900/80 border border-slate-700 p-1 mt-2">
-            {/* <Pressable
+            <Pressable
               onPress={() => setActiveTab("maps")}
               className={`flex-1 rounded-full px-3 py-1.5 items-center justify-center ${
                 activeTab === "maps" ? "bg-slate-800" : ""
@@ -602,7 +602,7 @@ const PokemonHomeContent: React.FC<PokemonHomeContentProps> = ({
               >
                 Maps
               </Text>
-            </Pressable> */}
+            </Pressable>
 
             <Pressable
               onPress={() => setActiveTab("dex")}

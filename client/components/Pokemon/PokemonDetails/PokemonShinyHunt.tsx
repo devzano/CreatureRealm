@@ -1,7 +1,7 @@
 // components/PokemonShinyHunt.tsx
 import React from "react";
 import { View, Text, TouchableOpacity } from "react-native";
-import type { HuntMethod } from "@/store/collectionStore";
+import type { HuntMethod } from "@/store/pokemonCollectionStore";
 
 type PokemonShinyHuntProps = {
   count: number;
