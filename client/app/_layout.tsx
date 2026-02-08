@@ -7,9 +7,11 @@ import { Stack } from "expo-router";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import * as SplashScreen from "expo-splash-screen";
 import * as Updates from "expo-updates";
-import * as NavigationBar from 'expo-navigation-bar';
+import * as NavigationBar from "expo-navigation-bar";
 import { Asset } from "expo-asset";
 import Constants from "expo-constants";
+
+import mobileAds from "react-native-google-mobile-ads";
 
 import { ThemeProvider } from "@/context/themeContext";
 import AnimatedSplashScreen from "@/components/ui/AnimatedSplashScreen";
@@ -50,9 +52,7 @@ function getVersioningInfo() {
   const iosStoreUrl: string | null =
     typeof extra?.iosStoreUrl === "string" ? extra.iosStoreUrl : null;
   const androidStoreUrl: string | null =
-    typeof extra?.androidStoreUrl === "string"
-      ? extra.androidStoreUrl
-      : null;
+    typeof extra?.androidStoreUrl === "string" ? extra.androidStoreUrl : null;
 
   return {
     currentBuild,
@@ -60,6 +60,26 @@ function getVersioningInfo() {
     iosStoreUrl,
     androidStoreUrl,
   };
+}
+
+async function initMobileAds() {
+  if (Platform.OS === "web") return;
+
+  try {
+    await mobileAds().setRequestConfiguration({
+      testDeviceIdentifiers: [
+        "9279d05aaca0f38b5740572b17ae0ace", // iPhone 15
+      ],
+      // Optional extras you may want later:
+      // maxAdContentRating: MaxAdContentRating.PG,
+      // tagForChildDirectedTreatment: false,
+      // tagForUnderAgeOfConsent: false,
+    });
+
+    await mobileAds().initialize();
+  } catch (e) {
+    console.warn("[ads] Failed to initialize mobile ads:", e);
+  }
 }
 
 export default function RootLayout() {
@@ -75,32 +95,11 @@ export default function RootLayout() {
     setSplashFinished(true);
   }, []);
 
-  useEffect(() => {
-    async function prepare() {
-      try {
-        const imageAssets = Object.values(AppImages).map((image) => {
-          return Asset.fromModule(image).downloadAsync();
-        });
-
-        await Promise.all([
-          ...imageAssets,
-          checkUpdates(),
-        ]);
-
-      } catch (e) {
-        console.warn("[prepare] Error during loading:", e);
-      } finally {
-        setAppIsReady(true);
-      }
-    }
-
-    prepare();
-  }, []);
-
   const checkUpdates = async () => {
     if (__DEV__) return;
     try {
-      const { currentBuild, minSupportedBuildNumber, iosStoreUrl, androidStoreUrl } = getVersioningInfo();
+      const { currentBuild, minSupportedBuildNumber, iosStoreUrl, androidStoreUrl } =
+        getVersioningInfo();
 
       if (minSupportedBuildNumber != null && currentBuild < minSupportedBuildNumber) {
         setUpdateMode("store");
@@ -120,12 +119,33 @@ export default function RootLayout() {
   };
 
   useEffect(() => {
+    async function prepare() {
+      try {
+        const imageAssets = Object.values(AppImages).map((image) => {
+          return Asset.fromModule(image).downloadAsync();
+        });
+
+        await Promise.all([
+          ...imageAssets,
+          checkUpdates(),
+          initMobileAds(),
+        ]);
+      } catch (e) {
+        console.warn("[prepare] Error during loading:", e);
+      } finally {
+        setAppIsReady(true);
+      }
+    }
+
+    prepare();
+  }, []);
+
+  useEffect(() => {
     if (Platform.OS !== "android") return;
 
     const hideNavigationBar = async () => {
       try {
         await NavigationBar.setVisibilityAsync("hidden");
-
       } catch (e) {
         console.warn("[navigation] Failed to configure nav bar:", e);
       }
@@ -137,9 +157,7 @@ export default function RootLayout() {
   const handleUpdateNow = useCallback(async () => {
     if (updateMode === "store") {
       if (!storeUrl) {
-        console.warn(
-          "[update] Store update requested but no store URL configured"
-        );
+        console.warn("[update] Store update requested but no store URL configured");
         return;
       }
 
@@ -174,7 +192,7 @@ export default function RootLayout() {
   return (
     <ThemeProvider>
       <SafeAreaProvider>
-        <View style={{ flex: 1, backgroundColor: "#020617"}}>
+        <View style={{ flex: 1, backgroundColor: "#020617" }}>
           <Stack>
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
             <Stack.Screen name="(pokemon)" options={{ headerShown: false }} />

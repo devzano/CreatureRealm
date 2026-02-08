@@ -56,7 +56,7 @@ const androidIcons = {
 //   backgroundColor: "#071826"
 // };
 
-const BUILD_NUMBER = 9;
+const BUILD_NUMBER = 10;
 
 const config: ExpoConfig = {
   name: pick(appNames),
@@ -110,6 +110,13 @@ const config: ExpoConfig = {
     //   splashPluginConfig,
     // ],
     [
+      "react-native-google-mobile-ads",
+      {
+        iosAppId: "ca-app-pub-7336849218717327~6986681648",
+        androidAppId: "ca-app-pub-7336849218717327~7509318020",
+      },
+    ],
+    [
       "expo-asset",
       {
         assets: ["./assets/sounds"],
@@ -152,10 +159,14 @@ const config: ExpoConfig = {
     eas: { projectId: "05c97fca-c5bb-4b54-a744-8855a250248d" },
     buildNumber: BUILD_NUMBER,
     minSupportedBuildNumber: BUILD_NUMBER,
+
+    admobBannerUnitIdIos: "ca-app-pub-7336849218717327/8053911801",
+    admobBannerUnitIdAndroid: "ca-app-pub-7336849218717327/6995244912",
+
     iosStoreUrl:
-      "https://apps.apple.com/app/your-creaturerealm-id",
+      "https://apps.apple.com/app/creaturerealm/id6755702513",
     androidStoreUrl:
-      "https://play.google.com/store/apps/details?id=your.bundle.id",
+      "https://play.google.com/store/apps/details?id=com.devzano.CreatureRealm",
   },
 
   updates: {
