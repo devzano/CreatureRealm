@@ -9,15 +9,19 @@ type Mode = "furniture" | "interior";
 type ACFurnitureInteriorViewProps = {
   search: string;
   initialMode?: Mode;
+
+  collectedOnly?: boolean;
+  collectedIds?: string[];
 };
 
 export default function ACFurnitureInteriorView({
   search,
   initialMode = "furniture",
+  collectedOnly = false,
+  collectedIds,
 }: ACFurnitureInteriorViewProps) {
   const [mode, setMode] = useState<Mode>(initialMode);
 
-  // If parent changes which tab is selected (furniture vs interior), sync the toggle
   useEffect(() => {
     setMode(initialMode);
   }, [initialMode]);
@@ -31,7 +35,6 @@ export default function ACFurnitureInteriorView({
 
   return (
     <View className="flex-1">
-      {/* Segmented control */}
       <View className="px-1 mt-2 mb-2">
         <View className="flex-row items-center rounded-full bg-slate-900/80 border border-slate-700 p-1">
           <Pressable
@@ -40,11 +43,7 @@ export default function ACFurnitureInteriorView({
               mode === "furniture" ? "bg-slate-800" : ""
             }`}
           >
-            <Text
-              className={`text-[11px] font-semibold ${
-                mode === "furniture" ? "text-slate-50" : "text-slate-400"
-              }`}
-            >
+            <Text className={`text-[11px] font-semibold ${mode === "furniture" ? "text-slate-50" : "text-slate-400"}`}>
               Furniture
             </Text>
           </Pressable>
@@ -55,11 +54,7 @@ export default function ACFurnitureInteriorView({
               mode === "interior" ? "bg-slate-800" : ""
             }`}
           >
-            <Text
-              className={`text-[11px] font-semibold ${
-                mode === "interior" ? "text-slate-50" : "text-slate-400"
-              }`}
-            >
+            <Text className={`text-[11px] font-semibold ${mode === "interior" ? "text-slate-50" : "text-slate-400"}`}>
               Interior
             </Text>
           </Pressable>
@@ -70,8 +65,11 @@ export default function ACFurnitureInteriorView({
         </Text>
       </View>
 
-      {/* The actual grid */}
-      {mode === "furniture" ? <ACFurnitureGrid search={search} /> : <ACInteriorGrid search={search} />}
+      {mode === "furniture" ? (
+        <ACFurnitureGrid search={search} collectedOnly={collectedOnly} collectedIds={collectedIds} />
+      ) : (
+        <ACInteriorGrid search={search} collectedOnly={collectedOnly} collectedIds={collectedIds} />
+      )}
     </View>
   );
 }

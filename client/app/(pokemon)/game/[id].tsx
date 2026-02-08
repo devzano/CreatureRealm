@@ -1,19 +1,23 @@
 // app/game/[id].tsx
 import React, { useEffect, useMemo, useState } from "react";
-import { View, Text, ActivityIndicator, FlatList, Image, Pressable } from "react-native";
+import { View, Text, ActivityIndicator, FlatList, Pressable } from "react-native";
+import { Image as ExpoImage } from "expo-image";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
+
 import {
   getPokemonList,
   extractPokemonIdFromUrl,
   type PokemonListResult,
   type PokemonListResponse,
 } from "@/lib/pokemon";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
 
 import { usePokemonCollectionStore } from "@/store/pokemonCollectionStore";
 import PageWrapper from "@/components/PageWrapper";
 import { getGameById, type CreatureRealmGame } from "@/lib/pokemon/gameFilters";
 import { fetchGameDexIds, type GameId } from "@/lib/pokemon/index";
+import AppImages from "@/constants/images";
+import LocalIcon from "@/components/LocalIcon";
 
 type ListItem = {
   id: number;
@@ -27,61 +31,76 @@ function capitalize(str: string) {
   return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
-// Tweak cover box size/aspect by platform family so art feels more natural
 function getCoverArtStyle(game: CreatureRealmGame | null) {
   const platform = game?.platforms?.[0] ?? "";
 
-  // Switch cases are tall and slim
-  if (platform.includes("Switch")) {
-    return {
-      width: 88,
-      aspectRatio: 10 / 17, // tall Switch case
-      maxHeight: 150,
-    };
-  }
+  if (platform.includes("Switch")) return { width: 88, aspectRatio: 10 / 17, maxHeight: 150 };
+  if (platform.includes("Nintendo 3DS") || platform.includes("Nintendo DS"))
+    return { width: 96, aspectRatio: 2 / 3, maxHeight: 150 };
+  if (platform.includes("Game Boy Advance")) return { width: 92, aspectRatio: 2 / 3, maxHeight: 145 };
+  if (platform.includes("Game Boy Color") || platform.includes("Game Boy"))
+    return { width: 88, aspectRatio: 3 / 4, maxHeight: 135 };
 
-  // DS / 3DS cases
-  if (platform.includes("Nintendo 3DS") || platform.includes("Nintendo DS")) {
-    return {
-      width: 96,
-      aspectRatio: 2 / 3,
-      maxHeight: 150,
-    };
-  }
+  return { width: 96, aspectRatio: 3 / 4, maxHeight: 150 };
+}
 
-  // GBA cases
-  if (platform.includes("Game Boy Advance")) {
-    return {
-      width: 92,
-      aspectRatio: 2 / 3,
-      maxHeight: 145,
-    };
-  }
+type CircleIconToggleProps = {
+  active: boolean;
+  activeColor: string;
+  onPress: () => void;
+  mciName?: string;
+  imageSource?: any;
+  size?: number;
+  iconSize?: number;
+};
 
-  // Game Boy / Game Boy Color – a bit squarer
-  if (platform.includes("Game Boy Color") || platform.includes("Game Boy")) {
-    return {
-      width: 88,
-      aspectRatio: 3 / 4,
-      maxHeight: 135,
-    };
-  }
-
-  // Fallback for anything else
-  return {
-    width: 96,
-    aspectRatio: 3 / 4,
-    maxHeight: 150,
-  };
+function CircleIconToggle({
+  active,
+  activeColor,
+  onPress,
+  mciName,
+  imageSource,
+  size = 28,
+  iconSize = 14,
+}: CircleIconToggleProps) {
+  return (
+    <Pressable onPress={onPress} hitSlop={10}>
+      <View
+        className="rounded-full border items-center justify-center"
+        style={{
+          width: size,
+          height: size,
+          borderColor: active ? `${activeColor}99` : "rgba(55,65,81,0.8)",
+          backgroundColor: active ? `${activeColor}22` : "rgba(15,23,42,0.40)",
+        }}
+      >
+        {imageSource ? (
+          <LocalIcon
+            source={imageSource}
+            size={iconSize}
+            tintColor={active ? activeColor : "#9ca3af"}
+            opacity={active ? 1 : 0.9}
+            roundedClassName="rounded-none"
+            placeholderClassName="bg-transparent border-0"
+          />
+        ) : (
+          <MaterialCommunityIcons
+            name={(mciName ?? "help-circle-outline") as any}
+            size={iconSize}
+            color={active ? activeColor : "#9ca3af"}
+          />
+        )}
+      </View>
+    </Pressable>
+  );
 }
 
 export default function GameDexScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id } = useLocalSearchParams<{ id: string; }>();
   const router = useRouter();
 
   const game = useMemo(() => (id ? getGameById(id) : null), [id]);
 
-  // Only Legends games support alphas (Arceus, Z-A, etc.)
   const supportsAlpha = useMemo(() => {
     if (!game) return false;
     return game.id.toLowerCase().includes("legends");
@@ -97,7 +116,6 @@ export default function GameDexScreen() {
   const toggleShiny = usePokemonCollectionStore((state) => state.toggleShiny);
   const toggleAlpha = usePokemonCollectionStore((state) => state.toggleAlpha);
 
-  // Load ALL Pokémon that appear in this specific game
   useEffect(() => {
     if (!game) return;
 
@@ -114,21 +132,14 @@ export default function GameDexScreen() {
 
         listRes.results.forEach((p: PokemonListResult) => {
           const pid = extractPokemonIdFromUrl(p.url);
-          if (pid != null) {
-            idToName.set(pid, p.name);
-          }
+          if (pid != null) idToName.set(pid, p.name);
         });
 
         const mapped: ListItem[] = ids
           .map((pid, index) => {
             const name = idToName.get(pid);
             if (!name) return null;
-
-            return {
-              id: pid,
-              name,
-              gameDexNumber: index + 1, // 1-based game dex index
-            };
+            return { id: pid, name, gameDexNumber: index + 1 };
           })
           .filter(Boolean) as ListItem[];
 
@@ -150,16 +161,7 @@ export default function GameDexScreen() {
   }, [game]);
 
   const completion = useMemo(() => {
-    if (!game) {
-      return {
-        caught: 0,
-        shiny: 0,
-        alpha: 0,
-        caughtPct: 0,
-        shinyPct: 0,
-        alphaPct: 0,
-      };
-    }
+    if (!game) return { caught: 0, shiny: 0, alpha: 0, caughtPct: 0, shinyPct: 0, alphaPct: 0 };
 
     const prefix = `${game.id}:`;
     let caught = 0;
@@ -183,11 +185,7 @@ export default function GameDexScreen() {
 
   const filteredItems = useMemo(() => {
     if (!game) return [];
-
-    if (!supportsAlpha && statusFilter === "alpha") {
-      return items;
-    }
-
+    if (!supportsAlpha && statusFilter === "alpha") return items;
     if (statusFilter === "all") return items;
 
     return items.filter((item) => {
@@ -216,34 +214,31 @@ export default function GameDexScreen() {
         subtitle={game.subtitle}
         headerLayout="inline"
         leftActions={
-          <Text
-            className="text-xs font-semibold uppercase tracking-[0.2em]"
-            style={{ color: game.accentColor[0] }}
-          >
+          <Text className="text-xs font-semibold uppercase tracking-[0.2em]" style={{ color: game.accentColor[0] }}>
             Generation {game.generationId}
           </Text>
         }
       >
         <View className="flex-1 items-center justify-center">
           <ActivityIndicator />
-          <Text className="text-slate-300 mt-2 text-sm">
-            Loading {game.title} Pokédex…
-          </Text>
+          <Text className="text-slate-300 mt-2 text-sm">Loading {game.title} Pokédex…</Text>
         </View>
       </PageWrapper>
     );
   }
 
-  const renderItem = ({ item }: { item: ListItem }) => {
+  const renderItem = ({ item }: { item: ListItem; }) => {
     const spriteUrl =
-      "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/" +
-      item.id +
-      ".png";
+      "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/" + item.id + ".png";
     const entry = getEntry(game.id, item.id);
 
     const isCaught = entry.caught;
     const borderColor = isCaught ? game.accentColor[0] : "#1f2937";
     const bgOpacity = isCaught ? 0.95 : 0.85;
+
+    const CAUGHT_COLOR = game.accentColor[0];
+    const SHINY_COLOR = "#facc15";
+    const ALPHA_COLOR = "#ef4444";
 
     return (
       <Pressable
@@ -262,67 +257,57 @@ export default function GameDexScreen() {
             backgroundColor: `rgba(15,23,42,${bgOpacity})`,
           }}
         >
-          {/* top row: dex pill + sprite */}
           <View className="flex-row justify-between items-start mb-1.5">
-            <View
-              className="px-2 py-0.5 rounded-full"
-              style={{ backgroundColor: `${game.accentColor[0]}22` }}
-            >
-              <Text
-                className="text-[10px] font-semibold tracking-wide"
-                style={{ color: game.accentColor[0] }}
-              >
+            <View className="px-2 py-0.5 rounded-full" style={{ backgroundColor: `${game.accentColor[0]}22` }}>
+              <Text className="text-[10px] font-semibold tracking-wide" style={{ color: game.accentColor[0] }}>
                 #{String(item.gameDexNumber).padStart(3, "0")}
               </Text>
             </View>
 
-            <Image
+            <ExpoImage
               source={{ uri: spriteUrl }}
-              style={{
-                width: 70,
-                height: 70,
-              }}
-              className="ml-2"
-              resizeMode="contain"
+              style={{ width: 70, height: 70 }}
+              contentFit="contain"
+              transition={120}
+              cachePolicy="disk"
             />
           </View>
 
-          {/* name + national id */}
           <View className="mt-1">
             <Text className="text-sm font-semibold text-slate-50" numberOfLines={1}>
               {capitalize(item.name)}
             </Text>
-            <Text className="text-[10px] text-slate-400 mt-0.5">
-              National #{String(item.id).padStart(3, "0")}
-            </Text>
+            <Text className="text-[10px] text-slate-400 mt-0.5">National #{String(item.id).padStart(3, "0")}</Text>
           </View>
 
-          {/* status row */}
           <View className="flex-row mt-2 justify-between items-center">
-            <Pressable onPress={() => toggleCaught(game.id, item.id)} hitSlop={8}>
-              <MaterialCommunityIcons
-                name="pokeball"
-                size={18}
-                color={entry.caught ? game.accentColor[0] : "#64748b"}
-              />
-            </Pressable>
+            <CircleIconToggle
+              active={!!entry.caught}
+              activeColor={CAUGHT_COLOR}
+              mciName="pokeball"
+              onPress={() => toggleCaught(game.id, item.id)}
+              size={28}
+              iconSize={14}
+            />
 
-            <Pressable onPress={() => toggleShiny(game.id, item.id)} hitSlop={8}>
-              <MaterialCommunityIcons
-                name={entry.shiny ? "star-four-points" : "star-four-points-outline"}
-                size={18}
-                color={entry.shiny ? "#facc15" : "#64748b"}
-              />
-            </Pressable>
+            <CircleIconToggle
+              active={!!entry.shiny}
+              activeColor={SHINY_COLOR}
+              imageSource={AppImages.shinyPokemonIcon}
+              onPress={() => toggleShiny(game.id, item.id)}
+              size={28}
+              iconSize={14}
+            />
 
             {supportsAlpha && (
-              <Pressable onPress={() => toggleAlpha(game.id, item.id)} hitSlop={8}>
-                <MaterialCommunityIcons
-                  name="alpha-a"
-                  size={24}
-                  color={entry.alpha ? "#38bdf8" : "#64748b"}
-                />
-              </Pressable>
+              <CircleIconToggle
+                active={!!entry.alpha}
+                activeColor={ALPHA_COLOR}
+                imageSource={AppImages.alphaPokemonIcon}
+                onPress={() => toggleAlpha(game.id, item.id)}
+                size={28}
+                iconSize={14}
+              />
             )}
           </View>
         </View>
@@ -330,43 +315,53 @@ export default function GameDexScreen() {
     );
   };
 
-  const StatusChip = ({ label, value }: { label: string; value: StatusFilter }) => {
+  const StatusChip = ({ label, value }: { label: string; value: StatusFilter; }) => {
     const active = statusFilter === value;
+
+    const config = {
+      caught: { color: game.accentColor[0], icon: "pokeball" },
+      shiny: { color: "#facc15", icon: AppImages.shinyPokemonIcon },
+      alpha: { color: "#ef4444", icon: AppImages.alphaPokemonIcon },
+      all: { color: "#94a3b8", icon: null } // Fallback for 'all'
+    }[value] || { color: "#94a3b8", icon: null };
+
+    if (value === "alpha" && !supportsAlpha) return null;
+
     return (
       <Pressable
         onPress={() => setStatusFilter(value)}
-        className="px-3 py-1.5 rounded-full mr-2 mb-2 flex-row items-center"
+        className="h-8 px-3 rounded-lg mr-2 mb-2 flex-row items-center border"
         style={{
-          backgroundColor: active ? game.accentColor[0] : "#020617",
+          backgroundColor: active ? `${config.color}20` : "transparent",
+          borderColor: active ? config.color : "rgba(255,255,255,0.1)",
         }}
       >
         {value === "caught" && (
-          <MaterialCommunityIcons
-            name="pokeball"
-            size={13}
-            color={active ? "#020617" : "#e5e7eb"}
-          />
+          <MaterialCommunityIcons name="pokeball" size={14} color={config.color} />
         )}
-        {value === "shiny" && (
-          <MaterialCommunityIcons
-            name="star-four-points"
-            size={13}
-            color={active ? "#020617" : "#e5e7eb"}
-          />
-        )}
-        {value === "alpha" && supportsAlpha && (
-          <MaterialCommunityIcons
-            name="alpha-a"
+        {(value === "shiny" || value === "alpha") && (
+          <LocalIcon
+            source={config.icon as any}
             size={14}
-            color={active ? "#020617" : "#e5e7eb"}
+            tintColor={config.color}
+            roundedClassName="rounded-none"
+            placeholderClassName="bg-transparent border-0"
           />
         )}
+
         <Text
-          className="text-[11px] font-semibold ml-1"
-          style={{ color: active ? "#020617" : "#e5e7eb" }}
+          className={`text-[12px] font-medium ${value !== 'all' ? 'ml-1.5' : ''}`}
+          style={{ color: active ? "#fff" : "rgba(255,255,255,0.6)" }}
         >
           {label}
         </Text>
+
+        {active && (
+          <View
+            className="w-1 h-1 rounded-full ml-1.5"
+            style={{ backgroundColor: config.color }}
+          />
+        )}
       </Pressable>
     );
   };
@@ -392,13 +387,7 @@ export default function GameDexScreen() {
         </Text>
       </View>
       <View className="h-1.5 rounded-full bg-slate-900 overflow-hidden">
-        <View
-          style={{
-            width: `${pct}%`,
-            backgroundColor: barColor,
-          }}
-          className="h-1.5 rounded-full"
-        />
+        <View style={{ width: `${pct}%`, backgroundColor: barColor }} className="h-1.5 rounded-full" />
       </View>
     </View>
   );
@@ -415,32 +404,22 @@ export default function GameDexScreen() {
       title={game.title}
       subtitle={game.subtitle}
       leftActions={
-        <Text
-          className="text-xs font-semibold uppercase tracking-[0.2em]"
-          style={{ color: game.accentColor[0] }}
-        >
+        <Text className="text-xs font-semibold uppercase tracking-[0.2em]" style={{ color: game.accentColor[0] }}>
           Generation {game.generationId}
         </Text>
       }
     >
       <View className="flex-1">
-        {/* Hero / header card */}
         <View className="mt-3 rounded-3xl bg-slate-950/90 border border-slate-800 overflow-hidden">
           <View className="flex-row p-3">
             {game.coverImageUrl ? (
-              <View
-                className="mr-3 rounded-2xl border border-slate-800 bg-slate-900 overflow-hidden"
-                style={[
-                  {
-                    alignSelf: "center",
-                  },
-                  coverStyle,
-                ]}
-              >
-                <Image
+              <View className="mr-3 rounded-2xl overflow-hidden" style={[{ alignSelf: "center" }, coverStyle]}>
+                <ExpoImage
                   source={{ uri: game.coverImageUrl }}
                   style={{ width: "100%", height: "100%" }}
-                  resizeMode="contain"
+                  contentFit="contain"
+                  transition={120}
+                  cachePolicy="disk"
                 />
               </View>
             ) : null}
@@ -448,36 +427,25 @@ export default function GameDexScreen() {
             <View className="flex-1 justify-between">
               <View>
                 <View className="flex-row flex-wrap mb-1">
-                  <View
-                    className="px-2 py-0.5 rounded-full mr-1 mb-1"
-                    style={{ backgroundColor: `${game.accentColor[0]}22` }}
-                  >
-                    <Text
-                      className="text-[10px] font-semibold tracking-wide"
-                      style={{ color: game.accentColor[0] }}
-                    >
+                  <View className="px-2 py-0.5 rounded-full mr-1 mb-1" style={{ backgroundColor: `${game.accentColor[0]}22` }}>
+                    <Text className="text-[10px] font-semibold tracking-wide" style={{ color: game.accentColor[0] }}>
                       GEN {game.generationId}
                     </Text>
                   </View>
 
                   {game.releaseYear && (
                     <View className="px-2 py-0.5 rounded-full mr-1 mb-1 bg-slate-900 border border-slate-700">
-                      <Text className="text-[10px] text-slate-300">
-                        {game.releaseYear}
-                      </Text>
+                      <Text className="text-[10px] text-slate-300">{game.releaseYear}</Text>
                     </View>
                   )}
 
                   {typeof game.speciesCount === "number" && (
                     <View className="px-2 py-0.5 rounded-full mr-1 mb-1 bg-slate-900 border border-slate-700">
-                      <Text className="text-[10px] text-slate-300">
-                        {game.speciesCount} species
-                      </Text>
+                      <Text className="text-[10px] text-slate-300">{game.speciesCount} species</Text>
                     </View>
                   )}
                 </View>
 
-                {/* Platform chips */}
                 {game.platforms?.length ? (
                   <View className="flex-row flex-wrap mb-1">
                     {game.platforms.map((platform) => (
@@ -485,9 +453,7 @@ export default function GameDexScreen() {
                         key={platform}
                         className="px-2 py-0.5 rounded-full mr-1 mb-1 bg-slate-900/80 border border-slate-700/80"
                       >
-                        <Text className="text-[10px] text-slate-300">
-                          {platform}
-                        </Text>
+                        <Text className="text-[10px] text-slate-300">{platform}</Text>
                       </View>
                     ))}
                   </View>
@@ -499,46 +465,22 @@ export default function GameDexScreen() {
               </View>
 
               <View className="mt-2">
-                <Text className="text-[11px] font-semibold text-slate-300 mb-1">
-                  Completion
-                </Text>
-                <StatBar
-                  label="Caught"
-                  value={completion.caught}
-                  total={totalMon}
-                  pct={completion.caughtPct}
-                  barColor={game.accentColor[0]}
-                />
-                <StatBar
-                  label="Shiny"
-                  value={completion.shiny}
-                  total={totalMon}
-                  pct={completion.shinyPct}
-                  barColor="#facc15"
-                />
-                {supportsAlpha && (
-                  <StatBar
-                    label="Alpha"
-                    value={completion.alpha}
-                    total={totalMon}
-                    pct={completion.alphaPct}
-                    barColor="#38bdf8"
-                  />
-                )}
+                <Text className="text-[11px] font-semibold text-slate-300 mb-1">Completion</Text>
+                <StatBar label="Caught" value={completion.caught} total={totalMon} pct={completion.caughtPct} barColor={game.accentColor[0]} />
+                <StatBar label="Shiny" value={completion.shiny} total={totalMon} pct={completion.shinyPct} barColor="#facc15" />
+                {supportsAlpha && <StatBar label="Alpha" value={completion.alpha} total={totalMon} pct={completion.alphaPct} barColor="#38bdf8" />}
               </View>
             </View>
           </View>
         </View>
 
-        {/* Status filter chips */}
-        <View className="mt-3 flex-row flex-wrap">
+        <View className="mt-3 flex-row flex-wrap justify-center items-center">
           <StatusChip label="All" value="all" />
           <StatusChip label="Caught" value="caught" />
           <StatusChip label="Shiny" value="shiny" />
           {supportsAlpha && <StatusChip label="Alpha" value="alpha" />}
         </View>
 
-        {/* Dex list */}
         <FlatList
           data={filteredItems}
           keyExtractor={(i) => String(i.id)}
@@ -546,9 +488,7 @@ export default function GameDexScreen() {
           numColumns={2}
           ListEmptyComponent={
             <View className="mt-10 items-center">
-              <Text className="text-sm text-slate-400">
-                No Pokémon match this filter yet.
-              </Text>
+              <Text className="text-sm text-slate-400">No Pokémon match this filter yet.</Text>
             </View>
           }
           contentContainerStyle={{

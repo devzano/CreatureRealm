@@ -59,8 +59,8 @@ export type MerchantRow = {
 export type KeyValueRow = {
   key: string;
   valueText: string | null;
-  keyItem: { slug: string; name: string; iconUrl: string | null } | null;
-  valueItem: { slug: string; name: string; iconUrl: string | null } | null;
+  keyItem: { slug: string; name: string; iconUrl: string | null; } | null;
+  valueItem: { slug: string; name: string; iconUrl: string | null; } | null;
   keyIconUrl?: string | null;
 };
 
@@ -139,18 +139,38 @@ export function parseTreantTreeFromPage(src: string): TreantNode | null {
     return Number.isFinite(n) ? n : null;
   }
 
+  function slugToDisplayName(slug: string | null): string | null {
+    const s = String(slug ?? "").trim();
+    if (!s) return null;
+
+    const last = s.split("/").filter(Boolean).slice(-1)[0] ?? s;
+    const base = last.replace(/[#?].*$/, "");
+
+    const decoded = (() => {
+      try {
+        return decodeURIComponent(base);
+      } catch {
+        return base;
+      }
+    })();
+
+    const name = decoded.replace(/_/g, " ").replace(/\s+/g, " ").trim();
+    return name ? name : null;
+  }
+
   function walk(n: any): TreantNode {
     const linkHref =
       n?.link?.href != null ? String(n.link.href) : n?.link?.url != null ? String(n.link.url) : null;
 
     const image = n?.image != null ? String(n.image) : null;
 
-    // PalDB Treant often stores quantity in text.name (odd, but matches your existing logic)
     const qty = asQty(n?.text?.name);
 
+    const slug = linkHref ? cleanKey(linkHref) : null;
+
     return {
-      slug: linkHref ? cleanKey(linkHref) : null,
-      name: null,
+      slug,
+      name: slugToDisplayName(slug),
       iconUrl: image ? absUrl(image) : null,
       qty,
       children: Array.isArray(n?.children) ? n.children.map(walk) : [],
@@ -499,7 +519,7 @@ function parseSingleCellItem(tdHtml: string): DetailIngredient | null {
   };
 }
 
-function parseQtyText(qtyText: string | null | undefined): { qty: number | null; raw: string | null } {
+function parseQtyText(qtyText: string | null | undefined): { qty: number | null; raw: string | null; } {
   const raw = qtyText != null ? cleanKey(String(qtyText)) : null;
   if (!raw) return { qty: null, raw: null };
 
@@ -508,6 +528,37 @@ function parseQtyText(qtyText: string | null | undefined): { qty: number | null;
 
   const n = Number(String(m[1]).replace(/,/g, ""));
   return Number.isFinite(n) ? { qty: n, raw } : { qty: null, raw };
+}
+
+// -----------------------------
+// Shared: filter out "Work" pseudo-ingredient from recipe rows
+// -----------------------------
+
+export function isWorkIngredient(m: any) {
+  const slug = String(m?.slug ?? "");
+  if (slug === "__work__") return true;
+
+  const icon = String(m?.iconUrl ?? "");
+  return icon.includes("T_icon_status_05");
+}
+
+/**
+ * Removes the special PalDB "Work" ingredient rows from recipe materials.
+ * - Keeps row if it still has materials OR has a product OR has schematicText
+ * - Works across different DetailRecipeRow shapes (Armor/Accessory/etc.)
+ */
+export function filterOutWorkFromRecipeRows<
+  T extends { materials?: any[]; product?: any; schematicText?: any }
+>(rows: T[]): T[] {
+  const arr = Array.isArray(rows) ? rows : [];
+
+  return arr
+    .map((row) => {
+      const mats = Array.isArray(row?.materials) ? row.materials : [];
+      const filtered = mats.filter((m) => !isWorkIngredient(m));
+      return { ...row, materials: filtered };
+    })
+    .filter((row) => (row.materials?.length ?? 0) > 0 || row.product != null || !!row.schematicText);
 }
 
 // -----------------------------
@@ -542,39 +593,22 @@ export function parseDroppedByTable(tableHtml: string): DroppedByRow[] {
   return out;
 }
 
-// -----------------------------
-// Treasure Box table
-// -----------------------------
-
 function normalizeLooseText(v: string | null | undefined): string | null {
-  // We purposely *do not* keep ndash content.
-  // htmlToText may decode "&ndash;" into "–" (en dash), so remove both.
   const s0 = String(v ?? "");
+  if (!s0) return null;
 
-  // Strip literal entity (in case something bypassed htmlToText)
-  const noEntity = s0.replace(/&ndash;|&#8211;|&#x2013;/gi, " ");
+  const withDash = s0.replace(/&ndash;|&#8211;|&#x2013;/gi, " – ");
 
-  // Strip actual en-dash char
-  const noDash = noEntity.replace(/\u2013/g, " ");
+  const noUnderscore = withDash.replace(/_/g, " ");
 
-  // Replace underscores with spaces
-  const noUnderscore = noDash.replace(/_/g, " ");
-
-  // Collapse whitespace and cleanKey (your standard normalizer)
   const s = cleanKey(noUnderscore).replace(/\s+/g, " ").trim();
 
   return s ? s : null;
 }
 
-// If you want a slightly different behavior later (e.g. preserve hyphens),
-// keep this wrapper so call sites stay consistent.
 function normalizedCellText(html: string): string | null {
   return normalizeLooseText(htmlToText(String(html ?? "")));
 }
-
-// -----------------------------
-// Treasure Box table (UPDATED)
-// -----------------------------
 
 export function parseTreasureBoxTable(tableHtml: string): TreasureBoxRow[] {
   const src = String(tableHtml ?? "");
@@ -786,7 +820,7 @@ function parseSoulUpgradeTable(tableHtml: string): SoulUpgradeRow[] {
   return out;
 }
 
-function parseInlineXQty(text: string | null | undefined): { qty: number | null; qtyText: string | null } {
+function parseInlineXQty(text: string | null | undefined): { qty: number | null; qtyText: string | null; } {
   const s = cleanKey(String(text ?? ""));
   if (!s) return { qty: null, qtyText: null };
 

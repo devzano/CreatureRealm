@@ -1,63 +1,39 @@
 // components/palworld/AmmoGrid.tsx
 import React, { useMemo, useEffect, useState, useCallback, useRef } from "react";
 import { View, Text, Pressable, ScrollView, ActivityIndicator } from "react-native";
-import { router } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
 
 import { type AmmoIndexItem, type AmmoDetail, fetchAmmoDetail } from "@/lib/palworld/items/paldbAmmo";
-import RemoteIcon, { prefetchRemoteIcons } from "@/components/RemoteIcon";
+import RemoteIcon, { prefetchRemoteIcons } from "@/components/Palworld/RemoteIcon";
 import BottomSheetModal from "@/components/ui/BottomSheetModal";
+import { filterOutWorkFromRecipeRows } from "@/lib/palworld/paldbDetailKit";
+
+import {
+  nonZeroNum,
+  slugToKind,
+  prettyRarity,
+  rarityRing,
+  SheetSectionLabel,
+  KeyValueRows,
+  ProducedAtSection,
+  RecipeSection,
+  DroppedBySection,
+  TreasureBoxSection,
+  WanderingMerchantSection,
+  TreantSection,
+  EffectsSection,
+  QuickRecipeSection,
+} from "@/components/Palworld/PalDetailSections";
+import { clamp } from "../Construction/palGridKit";
 
 type AmmoGridProps = {
   items: AmmoIndexItem[];
   onPressItem?: (item: AmmoIndexItem) => void;
-
   emptyText?: string;
-  showUnavailable?: boolean; // default false
-  numColumns?: number; // default 3
-
-  prefetchIcons?: boolean; // default true
+  showUnavailable?: boolean;
+  numColumns?: number;
+  prefetchIcons?: boolean;
 };
-
-function clamp(n: number, lo: number, hi: number) {
-  return Math.max(lo, Math.min(hi, n));
-}
-
-function rarityRing(rarityRaw?: string | null) {
-  const r = (rarityRaw ?? "").toLowerCase();
-  if (r.includes("legend")) return "border-amber-400/70";
-  if (r.includes("epic")) return "border-fuchsia-400/70";
-  if (r.includes("rare")) return "border-sky-400/70";
-  if (r.includes("uncommon")) return "border-emerald-400/70";
-  return "border-white/10";
-}
-
-function prettyRarity(r?: string | null) {
-  const s = (r ?? "").trim();
-  return s || "Common";
-}
-
-function safeNum(v: any): number | null {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : null;
-}
-
-function slugToKind(slug: string) {
-  const s = (slug ?? "").trim();
-  if (!s) return "Unknown";
-
-  const last = s.split("/").filter(Boolean).slice(-1)[0] ?? s;
-  const base = last.replace(/[#?].*$/, "");
-
-  const decoded = (() => {
-    try {
-      return decodeURIComponent(base);
-    } catch {
-      return base;
-    }
-  })();
-
-  return decoded.replace(/_/g, " ").replace(/\s+/g, " ").trim();
-}
 
 function stripTrailingAmmo(name: string) {
   const s = String(name ?? "").replace(/\s+/g, " ").trim();
@@ -70,6 +46,12 @@ function buildTwoLineTitle(nameRaw: string) {
   const line1 = base || "Ammo";
   const line2 = "Ammo";
   return { line1, line2 };
+}
+
+function variantKey(it: Pick<AmmoIndexItem, "slug" | "rarity">) {
+  const s = String(it?.slug ?? "").trim();
+  const r = String((it as any)?.rarity ?? "").trim();
+  return `${s}::${r}`;
 }
 
 export default function AmmoGrid({
@@ -95,18 +77,23 @@ export default function AmmoGrid({
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
 
+  const [treantView, setTreantView] = useState<"tree" | "list">("tree");
+
   const openSheet = useCallback(
     async (it: AmmoIndexItem) => {
       onPressItem?.(it);
 
       setSelected(it);
+      setTreantView("tree");
       setSheetVisible(true);
       setDetailError(null);
 
-      const key = String(it.slug ?? "").trim();
-      if (!key) return;
+      const slug = String(it.slug ?? "").trim();
+      if (!slug) return;
 
-      const cached = detailCache.current.get(key);
+      const vKey = variantKey(it);
+
+      const cached = detailCache.current.get(vKey);
       if (cached) {
         setDetail(cached);
         return;
@@ -115,8 +102,8 @@ export default function AmmoGrid({
       setDetail(null);
       setDetailLoading(true);
       try {
-        const d = await fetchAmmoDetail(key);
-        detailCache.current.set(key, d);
+        const d = await fetchAmmoDetail(slug);
+        detailCache.current.set(vKey, d);
         setDetail(d);
       } catch (e: any) {
         setDetailError(e?.message ? String(e.message) : "Failed to load details.");
@@ -143,28 +130,33 @@ export default function AmmoGrid({
   }
 
   const sheetKind = selected ? slugToKind(selected.slug) : "—";
-  const sheetRarity = selected ? prettyRarity(selected.rarity) : "—";
-  const sheetTech = selected ? safeNum(selected.technology) : null;
+  const sheetRarity = selected ? prettyRarity((selected as any).rarity) : "—";
+  const sheetTech = selected ? nonZeroNum((selected as any).technology) : null;
 
   const TILE_H = 154;
 
-  // ---- sections (ONLY render if non-empty) ----
-  const description = (detail?.description ?? selected?.description ?? "").trim();
+  // ---- detail sections (weapon-like) ----
+  const descriptionRaw = (detail as any)?.description ?? (selected as any)?.description ?? "";
+  const description = String(descriptionRaw ?? "").trim();
+  const hasDesc = !!description;
+
   const effects = (detail as any)?.effects ?? [];
-  const hasEffects = Array.isArray(effects) && effects.length > 0;
 
-  const producedAt = (detail as any)?.producedAt ?? [];
-  const hasProducedAt = Array.isArray(producedAt) && producedAt.length > 0;
-
-  const quickRecipe = selected?.recipes ?? [];
-  const hasQuickRecipe = Array.isArray(quickRecipe) && quickRecipe.length > 0;
-
-  // optional: if ammo detail exposes stats/others, show them too (without empty sections)
   const stats = (detail as any)?.stats ?? [];
-  const hasStats = Array.isArray(stats) && stats.length > 0;
+  const producedAt = (detail as any)?.producedAt ?? [];
+  const treant = (detail as any)?.treant ?? null;
 
+  const production = useMemo(() => filterOutWorkFromRecipeRows((detail as any)?.production ?? []), [detail]);
+  const craftingMaterials = useMemo(
+    () => filterOutWorkFromRecipeRows((detail as any)?.craftingMaterials ?? []),
+    [detail]
+  );
+
+  const droppedBy = (detail as any)?.droppedBy ?? [];
+  const treasureBox = (detail as any)?.treasureBox ?? [];
+  const wanderingMerchant = (detail as any)?.wanderingMerchant ?? [];
   const others = (detail as any)?.others ?? [];
-  const hasOthers = Array.isArray(others) && others.length > 0;
+  const quickRecipe = (detail as any)?.recipes ?? (selected as any)?.recipes ?? [];
 
   return (
     <>
@@ -172,13 +164,14 @@ export default function AmmoGrid({
         <View className="flex-row flex-wrap -mx-2">
           {filtered.map((it) => {
             const disabled = !it.isAvailable;
-            const ring = rarityRing(it.rarity);
+            const ring = rarityRing((it as any).rarity);
 
-            const tech = safeNum(it.technology);
+            const tech = nonZeroNum((it as any).technology);
             const title = buildTwoLineTitle(it.name);
+            const key = variantKey(it);
 
             return (
-              <View key={it.slug} className="px-2 mb-4" style={{ width: `${100 / cols}%` as any }}>
+              <View key={key} className="px-2 mb-4" style={{ width: `${100 / cols}%` as any }}>
                 <Pressable
                   onPress={() => openSheet(it)}
                   disabled={disabled}
@@ -253,31 +246,19 @@ export default function AmmoGrid({
                 </Text>
 
                 <Text className="text-white/60 text-[12px] mt-0.5" numberOfLines={1}>
-                  Tech {sheetTech ?? "—"}
+                  Tech {sheetTech != null ? sheetTech : "—"}
                 </Text>
               </View>
             </View>
 
-            {selected ? (
-              <Pressable
-                onPress={() => {
-                  const slug = String(selected.slug ?? "").trim();
-                  if (!slug) return;
-                  closeSheet();
-                  router.push({ pathname: "/ammo/[id]", params: { id: slug } });
-                }}
-                className="rounded-2xl border border-white/10 bg-white/[0.06] px-3 py-2"
-                style={{ minWidth: 92 }}
-              >
-                <Text className="text-white text-[12px] font-semibold text-center">Details</Text>
-                <Text className="text-white/45 text-[10px] text-center mt-0.5" numberOfLines={1}>
-                  {selected?.name ?? ""}
-                </Text>
-              </Pressable>
-            ) : null}
+            <Pressable
+              onPress={closeSheet}
+              className="h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/[0.06]"
+            >
+              <Ionicons name="close" size={20} color="white" />
+            </Pressable>
           </View>
 
-          {/* Pills */}
           <View className="mt-4 flex-row flex-wrap gap-2">
             <View className="px-3 py-2 rounded-full border border-white/10 bg-white/5">
               <Text className="text-white/80 text-[12px]">
@@ -297,8 +278,6 @@ export default function AmmoGrid({
               </View>
             ) : null}
           </View>
-
-          {/* Detail loading/error */}
           {detailLoading ? (
             <View className="mt-5 items-center">
               <ActivityIndicator />
@@ -309,144 +288,39 @@ export default function AmmoGrid({
               <Text className="text-red-200 text-[12px]">{detailError}</Text>
             </View>
           ) : null}
-
-          {/* About (only if has text) */}
-          {!!description && (
+          {hasDesc ? (
             <View className="mt-5">
-              <Text className="text-white/80 text-[12px] mb-2">About</Text>
+              <SheetSectionLabel>About</SheetSectionLabel>
               <View className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
                 <Text className="text-white/80 text-[13px] leading-5">{description}</Text>
               </View>
             </View>
-          )}
-
-          {/* Effects (only if any) */}
-          {hasEffects && (
-            <View className="mt-4">
-              <Text className="text-white/80 text-[12px] mb-2">Effects</Text>
-              <View className="rounded-2xl border border-white/10 bg-white/[0.03] overflow-hidden">
-                {effects.map((e: string, idx: number) => (
-                  <View
-                    key={`${e}:${idx}`}
-                    className={["px-3 py-2", idx !== effects.length - 1 ? "border-b border-white/5" : ""].join(" ")}
-                  >
-                    <Text className="text-white/85 text-[13px] leading-5">{e}</Text>
-                  </View>
-                ))}
-              </View>
-            </View>
-          )}
-
-          {/* Stats (only if present in detail) */}
-          {hasStats && (
+          ) : null}
+          <EffectsSection effects={effects as any[]} />
+          <QuickRecipeSection rows={quickRecipe as any} />
+          {!!stats?.length ? (
             <View className="mt-5">
-              <Text className="text-white/80 text-[12px] mb-2">Stats</Text>
-
-              <View className="rounded-2xl border border-white/10 bg-white/[0.03] overflow-hidden">
-                {(stats as any[]).map((row, idx) => (
-                  <View
-                    key={`${String(row?.key ?? "k")}:${idx}`}
-                    className={[
-                      "flex-row items-center justify-between py-3 px-3",
-                      idx !== (stats as any[]).length - 1 ? "border-b border-white/5" : "",
-                    ].join(" ")}
-                  >
-                    <Text className="text-white/70 text-[12px] flex-1 pr-3" numberOfLines={1}>
-                      {row?.key ?? "—"}
-                    </Text>
-                    <Text className="text-white/85 text-[12px]" numberOfLines={1}>
-                      {row?.valueText ?? row?.valueItem?.name ?? "—"}
-                    </Text>
-                  </View>
-                ))}
-              </View>
+              <SheetSectionLabel>Stats</SheetSectionLabel>
+              <KeyValueRows rows={stats as any} />
             </View>
-          )}
-
-          {/* Produced At (only if any) */}
-          {hasProducedAt && (
+          ) : null}
+          {!!treant ? (
             <View className="mt-5">
-              <Text className="text-white/80 text-[12px] mb-2">Produced At</Text>
-
-              <View className="flex-row flex-wrap gap-2">
-                {(producedAt as any[]).map((p) => (
-                  <View
-                    key={String(p.slug ?? p.name ?? "")}
-                    className="flex-row items-center px-3 py-2 rounded-full border border-white/10 bg-white/5"
-                  >
-                    <RemoteIcon
-                      uri={p.iconUrl ?? null}
-                      size={18}
-                      roundedClassName="rounded-md"
-                      placeholderClassName="bg-white/5 border border-white/10"
-                      contentFit="contain"
-                    />
-                    <Text className="ml-2 text-white/85 text-[12px]" numberOfLines={1}>
-                      {p.name ?? "—"}
-                    </Text>
-                  </View>
-                ))}
-              </View>
+              <TreantSection treant={treant as any} view={treantView} onViewChange={setTreantView} />
             </View>
-          )}
-
-          {/* Quick Recipe (only if any) */}
-          {hasQuickRecipe && (
+          ) : null}
+          <ProducedAtSection rows={producedAt as any} />
+          <RecipeSection title="Production" rows={production as any} />
+          <RecipeSection title="Crafting Materials" rows={craftingMaterials as any} />
+          <DroppedBySection rows={droppedBy as any} />
+          <TreasureBoxSection rows={treasureBox as any} />
+          <WanderingMerchantSection rows={wanderingMerchant as any} />
+          {!!others?.length ? (
             <View className="mt-5">
-              <Text className="text-white/80 text-[12px] mb-2">Quick Recipe</Text>
-
-              <View className="rounded-2xl border border-white/10 bg-white/[0.03] overflow-hidden">
-                {quickRecipe.map((r, idx) => (
-                  <View
-                    key={`${r.slug}:${idx}`}
-                    className={[
-                      "flex-row items-center justify-between py-2 px-3",
-                      idx !== quickRecipe.length - 1 ? "border-b border-white/5" : "",
-                    ].join(" ")}
-                  >
-                    <View className="flex-row items-center flex-1">
-                      <RemoteIcon
-                        uri={r.iconUrl}
-                        size={28}
-                        roundedClassName="rounded-lg"
-                        placeholderClassName="bg-white/5 border border-white/10"
-                      />
-                      <Text className="ml-3 text-white/90 text-[13px]" numberOfLines={1}>
-                        {r.name}
-                      </Text>
-                    </View>
-                    <Text className="text-white/70 text-[13px] ml-3">x{r.qty}</Text>
-                  </View>
-                ))}
-              </View>
+              <SheetSectionLabel>Others</SheetSectionLabel>
+              <KeyValueRows rows={others as any} />
             </View>
-          )}
-
-          {/* Others (only if present in detail) */}
-          {hasOthers && (
-            <View className="mt-5">
-              <Text className="text-white/80 text-[12px] mb-2">Others</Text>
-
-              <View className="rounded-2xl border border-white/10 bg-white/[0.03] overflow-hidden">
-                {(others as any[]).map((row, idx) => (
-                  <View
-                    key={`${String(row?.key ?? "k")}:${idx}`}
-                    className={[
-                      "flex-row items-center justify-between py-3 px-3",
-                      idx !== (others as any[]).length - 1 ? "border-b border-white/5" : "",
-                    ].join(" ")}
-                  >
-                    <Text className="text-white/70 text-[12px] flex-1 pr-3" numberOfLines={1}>
-                      {row?.key ?? "—"}
-                    </Text>
-                    <Text className="text-white/85 text-[12px]" numberOfLines={1}>
-                      {row?.valueText ?? row?.valueItem?.name ?? "—"}
-                    </Text>
-                  </View>
-                ))}
-              </View>
-            </View>
-          )}
+          ) : null}
         </ScrollView>
       </BottomSheetModal>
     </>

@@ -95,13 +95,40 @@ export type EvolutionChain = {
   baby_trigger_item?: NamedAPIResource | null;
 };
 
+function normalizeSpeciesIdentifier(idOrNameOrUrl: string | number): string {
+  // If it's already a number, keep it.
+  if (typeof idOrNameOrUrl === "number") return String(idOrNameOrUrl);
+
+  const raw = String(idOrNameOrUrl ?? "").trim();
+  if (!raw) return raw;
+
+  // If it's a full URL, pass it through directly.
+  if (raw.startsWith("http://") || raw.startsWith("https://")) return raw;
+
+  // If it's a NamedAPIResource-ish input accidentally passed as stringified url, handle above.
+  // Otherwise it's a name or id string ("pikachu" or "25").
+  return raw;
+}
+
 /**
  * Species details (for evolution chain, forms, etc.)
+ *
+ * Accepts:
+ * - number: 25
+ * - name: "pikachu"
+ * - url: "https://pokeapi.co/api/v2/pokemon-species/25/"
  */
 export async function getPokemonSpecies(
-  idOrName: string | number
+  idOrNameOrUrl: string | number
 ): Promise<PokemonSpecies> {
-  return fetchJson<PokemonSpecies>(`/pokemon-species/${idOrName}`);
+  const normalized = normalizeSpeciesIdentifier(idOrNameOrUrl);
+
+  // If normalized is a full URL, fetchJson will handle it.
+  if (normalized.startsWith("http://") || normalized.startsWith("https://")) {
+    return fetchJson<PokemonSpecies>(normalized);
+  }
+
+  return fetchJson<PokemonSpecies>(`/pokemon-species/${normalized}`);
 }
 
 /**

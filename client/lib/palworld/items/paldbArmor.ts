@@ -5,14 +5,11 @@
 // Detail: https://paldb.cc/en/<slug>
 //
 // Uses shared detail parsing kit: lib/palworld/paldbDetailKit.ts
-// (same contract style as your Material/Sphere/Ammo detail screens)
 //
 // IMPORTANT UPDATE (variants):
 // PalDB often lists multiple “varieties” of the same base item (same href/slug) with different rarity/tech/etc.
-// Your previous code deduped by slug, collapsing variants into a single entry.
-// This update:
-//  - Keeps ALL variants in the index by deduping with a VARIANT KEY (slug + rarity + technology + iconUrl)
-//  - Keeps detail cache keyed by VARIANT KEY while still fetching detail by slug URL
+// This keeps ALL variants in the index by deduping with a VARIANT KEY (slug + rarity + technology + iconUrl)
+// and keeps detail cache keyed by VARIANT KEY while still fetching detail by slug URL.
 //
 
 import {
@@ -71,10 +68,14 @@ export type ArmorIndexItem = {
   rarity: string | null;
   technology: number | null;
 
+  // Mini-stats from list cards (if present)
+  shield: number | null;
+  defense: number | null;
+  health: number | null;
+
   description: string | null;
   isAvailable: boolean;
 
-  // list-page snippet recipes
   recipes: ArmorRecipeIngredient[];
 };
 
@@ -87,6 +88,12 @@ export type ArmorDetail = {
   iconUrl: string | null;
   rarity: string | null;
   technology: number | null;
+
+  // Mini-stats from detail page (if present); merged from index fallback
+  shield: number | null;
+  defense: number | null;
+  health: number | null;
+
   description: string | null;
   effects: string[];
   isAvailable: boolean;
@@ -177,6 +184,44 @@ async function fetchHtml(url: string): Promise<string> {
 }
 
 // -----------------------------
+// Mini stats parsing helpers
+// -----------------------------
+
+function extractMiniStatsBlock(html: string): string | null {
+  return (
+    firstMatch(html, /<div\b[^>]*class="d-flex flex-column small"[^>]*>\s*([\s\S]*?)\s*<\/div>/i) ??
+    firstMatch(html, /<div\b[^>]*class='d-flex flex-column small'[^>]*>\s*([\s\S]*?)\s*<\/div>/i) ??
+    null
+  );
+}
+
+function extractLabeledNumber(miniStatsHtml: string, label: string): string | null {
+  const safe = String(miniStatsHtml ?? "");
+  const lbl = String(label ?? "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+  // Works for both:
+  // <span ...>Defense</span><span class="border ...">250</span>
+  // and nested label variants (Technology)
+  return (
+    firstMatch(
+      safe,
+      new RegExp(
+        `${lbl}\\s*<\\/span>[\\s\\S]*?<span\\b[^>]*class="[^"]*\\bborder\\b[^"]*"[^>]*>\\s*([0-9]+)\\s*<\\/span>`,
+        "i"
+      )
+    ) ??
+    firstMatch(
+      safe,
+      new RegExp(
+        `${lbl}\\s*<\\/span>[\\s\\S]*?<span\\b[^>]*class='[^']*\\bborder\\b[^']*'[^>]*>\\s*([0-9]+)\\s*<\\/span>`,
+        "i"
+      )
+    ) ??
+    null
+  );
+}
+
+// -----------------------------
 // Variants helpers
 // -----------------------------
 
@@ -187,7 +232,9 @@ function safePart(v: any) {
 
 // Variant key for dedupe + caching.
 // Keep it stable and “specific enough” to separate varieties.
-export function armorVariantKeyFromIndex(it: Pick<ArmorIndexItem, "slug" | "rarity" | "technology" | "iconUrl">): ArmorVariantKey {
+export function armorVariantKeyFromIndex(
+  it: Pick<ArmorIndexItem, "slug" | "rarity" | "technology" | "iconUrl">
+): ArmorVariantKey {
   const slug = cleanKey(it.slug);
   const rarity = cleanKey(it.rarity ?? "");
   const tech = it.technology != null && Number.isFinite(it.technology as any) ? String(it.technology) : "";
@@ -202,13 +249,11 @@ function splitVariantKey(input: string): { slugPart: string; variantKey: string 
   const s = String(input ?? "").trim();
   if (!s) return { slugPart: "", variantKey: "" };
 
-  // If it looks like our variantKey, use left side as slug.
   if (s.includes("::")) {
     const slugPart = s.split("::")[0] ?? s;
     return { slugPart, variantKey: cleanKey(s) };
   }
 
-  // Otherwise cache under a minimal variantKey (slug only)
   const slugPart = s;
   const variantKey = armorVariantKeyFromIndex({
     slug: slugPart,
@@ -218,6 +263,10 @@ function splitVariantKey(input: string): { slugPart: string; variantKey: string 
   });
   return { slugPart, variantKey };
 }
+
+// -----------------------------
+// Index parsing (/en/Armor)
+// -----------------------------
 
 export function parseArmorIndexHtml(html: string): ArmorIndexItem[] {
   const src = String(html ?? "");
@@ -245,17 +294,17 @@ export function parseArmorIndexHtml(html: string): ArmorIndexItem[] {
 
     const iconUrl = extractSize128ImgUrl(chunk) ?? extractAnyInventoryIconUrl(chunk) ?? null;
 
-    const techStr =
-      firstMatch(
-        chunk,
-        /Technology<\/span>\s*<\/span>\s*<span\b[^>]*class="[^"]*\bborder\b[^"]*"[^>]*>\s*([0-9]+)\s*<\/span>/i
-      ) ??
-      firstMatch(
-        chunk,
-        /Technology<\/span>\s*<\/span>\s*<span\b[^>]*class='[^']*\bborder\b[^']*'[^>]*>\s*([0-9]+)\s*<\/span>/i
-      );
+    // Mini stats (Shield/Defense/Health/Technology)
+    const mini = extractMiniStatsBlock(chunk);
+    const techStr = mini ? extractLabeledNumber(mini, "Technology") : null;
+    const shieldStr = mini ? extractLabeledNumber(mini, "Shield") : null;
+    const defStr = mini ? extractLabeledNumber(mini, "Defense") : null;
+    const hpStr = mini ? extractLabeledNumber(mini, "Health") : null;
 
-    const technology = techStr ? Number(techStr) : null;
+    const technology = techStr != null ? Number(techStr) : NaN;
+    const shield = shieldStr != null ? Number(shieldStr) : NaN;
+    const defense = defStr != null ? Number(defStr) : NaN;
+    const health = hpStr != null ? Number(hpStr) : NaN;
 
     const descHtml =
       firstMatch(chunk, /<div\b[^>]*class="card-body[^"]*"[^>]*>\s*<div>([\s\S]*?)<\/div>\s*<\/div>/i) ??
@@ -276,15 +325,17 @@ export function parseArmorIndexHtml(html: string): ArmorIndexItem[] {
       name: cleanKey(name ?? href),
       iconUrl: iconUrl ? absUrl(iconUrl) : null,
       rarity: rarity ? cleanKey(rarity) : null,
-      technology: Number.isFinite(technology as any) ? technology : null,
+      technology: Number.isFinite(technology) ? technology : null,
+      shield: Number.isFinite(shield) ? shield : null,
+      defense: Number.isFinite(defense) ? defense : null,
+      health: Number.isFinite(health) ? health : null,
       description: description || null,
       isAvailable,
       recipes,
     });
   }
 
-  // IMPORTANT: do NOT dedupe by slug; keep variants.
-  // Dedup by a stronger key so exact duplicates collapse, but varieties remain.
+  // Keep variants; only collapse exact duplicates (same variant key).
   const byVariant = new Map<string, ArmorIndexItem>();
   for (const it of items) {
     const k = armorVariantKeyFromIndex(it);
@@ -297,7 +348,6 @@ function parseRecipes(recipesHtml: string): ArmorRecipeIngredient[] {
   const html = String(recipesHtml ?? "");
   if (!html) return [];
 
-  // Capture each "border-top" row in a tolerant way (class order can vary)
   const rowRe =
     /<div\b[^>]*class=(?:"[^"]*\bborder-top\b[^"]*"|'[^']*\bborder-top\b[^']*')[^>]*>[\s\S]*?(?=<div\b[^>]*class=(?:"[^"]*\bborder-top\b[^"]*"|'[^']*\bborder-top\b[^']*')[^>]*>|$)/gi;
 
@@ -310,21 +360,12 @@ function parseRecipes(recipesHtml: string): ArmorRecipeIngredient[] {
   };
 
   for (const row of rows.length ? rows : [html]) {
-    // Ingredient link
-    const slug =
-      firstMatch(row, /\bhref="([^"]+)"/i) ??
-      firstMatch(row, /\bhref='([^']+)'/i) ??
-      null;
-
+    const slug = firstMatch(row, /\bhref="([^"]+)"/i) ?? firstMatch(row, /\bhref='([^']+)'/i) ?? null;
     if (!slug) continue;
 
-    // Icon
     const icon =
-      firstMatch(row, /<img\b[^>]*\bsrc="([^"]+)"/i) ??
-      firstMatch(row, /<img\b[^>]*\bsrc='([^']+)'/i) ??
-      null;
+      firstMatch(row, /<img\b[^>]*\bsrc="([^"]+)"/i) ?? firstMatch(row, /<img\b[^>]*\bsrc='([^']+)'/i) ?? null;
 
-    // Name (prefer anchor text without the img)
     const anchorInner =
       firstMatch(row, /<a\b[^>]*>\s*([\s\S]*?)\s*<\/a>/i) ??
       firstMatch(row, /<a\b[^>]*class="[^"]*\bitemname\b[^"]*"[^>]*>\s*([\s\S]*?)\s*<\/a>/i) ??
@@ -333,14 +374,12 @@ function parseRecipes(recipesHtml: string): ArmorRecipeIngredient[] {
 
     const name = cleanKey(htmlToText(String(anchorInner).replace(/<img[\s\S]*?>/gi, " ").trim()));
 
-    // Qty (prefer itemQuantity; fall back to last numeric cell)
     const qtyText =
       firstMatch(row, /<small\b[^>]*class="itemQuantity"[^>]*>\s*([^<]+?)\s*<\/small>/i) ??
       firstMatch(row, /<small\b[^>]*class='itemQuantity'[^>]*>\s*([^<]+?)\s*<\/small>/i) ??
       null;
 
-    const qtyStr = qtyText ? cleanKey(qtyText) : (lastNumberInRow(row) ? String(lastNumberInRow(row)) : null);
-
+    const qtyStr = qtyText ? cleanKey(qtyText) : lastNumberInRow(row);
     const qtyNum = qtyStr ? Number(String(qtyStr).replace(/,/g, "").match(/[0-9]+/)?.[0] ?? "") : NaN;
     const qty = Number.isFinite(qtyNum) ? qtyNum : 0;
 
@@ -352,17 +391,12 @@ function parseRecipes(recipesHtml: string): ArmorRecipeIngredient[] {
     });
   }
 
-  // dedupe by slug but KEEP the highest qty (some rows may repeat)
   const map = new Map<string, ArmorRecipeIngredient>();
   for (const r of out) {
     const prev = map.get(r.slug);
-    if (!prev) {
-      map.set(r.slug, r);
-      continue;
-    }
-    if ((r.qty ?? 0) > (prev.qty ?? 0)) map.set(r.slug, r);
+    if (!prev) map.set(r.slug, r);
+    else if ((r.qty ?? 0) > (prev.qty ?? 0)) map.set(r.slug, r);
   }
-
   return Array.from(map.values());
 }
 
@@ -378,7 +412,6 @@ function stripItemSkillBarsFromDescHtml(descHtml: string): string {
   const s = String(descHtml ?? "");
   if (!s) return s;
 
-  // Remove the entire item_skill_bar blocks from the “about” HTML
   return s.replace(
     /<div\b[^>]*class=(?:"[^"]*\bitem_skill_bar\b[^"]*"|'[^']*\bitem_skill_bar\b[^']*')[^>]*>[\s\S]*?<\/div>/gi,
     " "
@@ -400,13 +433,18 @@ function extractItemSkillBarsTextFromSrc(src: string): string[] {
     if (txt) out.push(txt);
   }
 
-  // dedup while preserving order
   const seen = new Set<string>();
   return out.filter((x) => (seen.has(x) ? false : (seen.add(x), true)));
 }
 
 export function parseArmorDetailHtml(html: string, slugKey: string): ArmorDetail {
   const src = String(html ?? "");
+
+  const mini = extractMiniStatsBlock(src);
+  const techStr = mini ? extractLabeledNumber(mini, "Technology") : null;
+  const shieldStr = mini ? extractLabeledNumber(mini, "Shield") : null;
+  const defStr = mini ? extractLabeledNumber(mini, "Defense") : null;
+  const hpStr = mini ? extractLabeledNumber(mini, "Health") : null;
 
   const base: ArmorDetail = {
     slug: cleanKey(slugKey),
@@ -426,18 +464,21 @@ export function parseArmorDetailHtml(html: string, slugKey: string): ArmorDetail
           firstMatch(src, /<span\b[^>]*class='[^']*\bhover_text_rarity\d+\b[^']*'[^>]*>\s*([^<]+?)\s*<\/span>/i) ??
           ""
       ) || null,
+
     technology: (() => {
-      const techStr =
-        firstMatch(
-          src,
-          /Technology<\/span>\s*<\/span>\s*<span\b[^>]*class="[^"]*\bborder\b[^"]*"[^>]*>\s*([0-9]+)\s*<\/span>/i
-        ) ??
-        firstMatch(
-          src,
-          /Technology<\/span>\s*<\/span>\s*<span\b[^>]*class='[^']*\bborder\b[^']*'[^>]*>\s*([0-9]+)\s*<\/span>/i
-        ) ??
-        null;
       const n = techStr != null ? Number(techStr) : NaN;
+      return Number.isFinite(n) ? n : null;
+    })(),
+    shield: (() => {
+      const n = shieldStr != null ? Number(shieldStr) : NaN;
+      return Number.isFinite(n) ? n : null;
+    })(),
+    defense: (() => {
+      const n = defStr != null ? Number(defStr) : NaN;
+      return Number.isFinite(n) ? n : null;
+    })(),
+    health: (() => {
+      const n = hpStr != null ? Number(hpStr) : NaN;
       return Number.isFinite(n) ? n : null;
     })(),
 
@@ -450,9 +491,7 @@ export function parseArmorDetailHtml(html: string, slugKey: string): ArmorDetail
       return txt || null;
     })(),
 
-    effects: (() => {
-      return extractItemSkillBarsTextFromSrc(src);
-    })(),
+    effects: (() => extractItemSkillBarsTextFromSrc(src))(),
 
     isAvailable: !/fa-sack-xmark|Not available/i.test(src),
     recipes: [],
@@ -538,12 +577,7 @@ export function parseArmorDetailHtml(html: string, slugKey: string): ArmorDetail
 }
 
 function mergeWithIndexFallback(detail: ArmorDetail, variantKey: string): ArmorDetail {
-  // Prefer matching by exact variantKey when possible.
-  const indexExact =
-    _indexCache?.find((x) => armorVariantKeyFromIndex(x) === variantKey) ??
-    null;
-
-  // Fallback: match by slug only
+  const indexExact = _indexCache?.find((x) => armorVariantKeyFromIndex(x) === variantKey) ?? null;
   const indexBySlug = _indexCache?.find((x) => cleanKey(x.slug) === cleanKey(detail.slug)) ?? null;
 
   const index = indexExact ?? indexBySlug;
@@ -555,6 +589,9 @@ function mergeWithIndexFallback(detail: ArmorDetail, variantKey: string): ArmorD
     iconUrl: detail.iconUrl || index.iconUrl,
     rarity: detail.rarity || index.rarity,
     technology: detail.technology ?? index.technology ?? null,
+    shield: detail.shield ?? index.shield ?? null,
+    defense: detail.defense ?? index.defense ?? null,
+    health: detail.health ?? index.health ?? null,
     description: detail.description || index.description,
     isAvailable: detail.isAvailable ?? index.isAvailable,
     recipes: detail.recipes?.length ? detail.recipes : index.recipes,

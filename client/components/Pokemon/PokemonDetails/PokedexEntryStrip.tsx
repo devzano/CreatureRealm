@@ -5,6 +5,8 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 
 import { games, type CreatureRealmGame } from "@/lib/pokemon/gameFilters";
 import { usePokemonCollectionStore } from "@/store/pokemonCollectionStore";
+import Section from "@/components/Section";
+import AppImages from "@/constants/images";
 
 type OwnershipEntry = {
   caught?: boolean;
@@ -12,31 +14,20 @@ type OwnershipEntry = {
   alpha?: boolean;
 };
 
-// Stable default to avoid new object each subscription
 const EMPTY_ENTRY: OwnershipEntry = Object.freeze({
   caught: false,
   shiny: false,
   alpha: false,
 });
 
-// Only these games support Alpha Pokémon
 const ALPHA_GAMES = new Set<string>(["legends-arceus", "legends-za"]);
 
 type PokedexEntryStripProps = {
   speciesId: number;
-  /**
-   * Explicit list of game IDs to show.
-   * - undefined / null  → show NOTHING
-   * - [] (empty array)  → show NOTHING
-   */
   gameFilterIds?: string[] | null;
 };
 
-const PokedexEntryStrip: React.FC<PokedexEntryStripProps> = ({
-  speciesId,
-  gameFilterIds,
-}) => {
-  // Subscribe to actions only
+const PokedexEntryStrip: React.FC<PokedexEntryStripProps> = ({ speciesId, gameFilterIds }) => {
   const toggleCaught = usePokemonCollectionStore((s) => s.toggleCaught);
   const toggleShiny = usePokemonCollectionStore((s) => s.toggleShiny);
   const toggleAlpha = usePokemonCollectionStore((s) => s.toggleAlpha);
@@ -47,8 +38,6 @@ const PokedexEntryStrip: React.FC<PokedexEntryStripProps> = ({
     return games.filter((g) => allowed.has(g.id));
   }, [gameFilterIds]);
 
-  if (visibleGames.length === 0) return null;
-
   const columns = useMemo(() => {
     const cols: CreatureRealmGame[][] = [];
     for (let i = 0; i < visibleGames.length; i += 2) {
@@ -57,56 +46,47 @@ const PokedexEntryStrip: React.FC<PokedexEntryStripProps> = ({
     return cols;
   }, [visibleGames]);
 
-  return (
-    <View className="mt-3 mb-3 rounded-3xl bg-slate-950/90 border border-slate-800 px-3 py-3">
-      <View className="flex-row items-center justify-between mb-2">
-        <View className="flex-row items-center">
-          <MaterialCommunityIcons
-            name="clipboard-list-outline"
-            size={14}
-            color="#9ca3af"
-          />
-          <Text className="ml-1.5 text-xs font-semibold text-slate-200">
-            Pokédex Entries
-          </Text>
-        </View>
-        <Text className="text-[10px] text-slate-500">
-          Tap to update • Swipe to view
-        </Text>
-      </View>
+  if (visibleGames.length === 0) return null;
 
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={{ paddingRight: 8, paddingVertical: 2 }}
-      >
-        {columns.map((column, columnIndex) => (
-          <View
-            key={`pokedexentry-col-${columnIndex}`}
-            className="mr-3"
-            style={{ width: 150 }}
-          >
-            {column[0] && (
-              <OwnershipGameCard
-                game={column[0]}
-                speciesId={speciesId}
-                onToggleCaught={toggleCaught}
-                onToggleShiny={toggleShiny}
-                onToggleAlpha={toggleAlpha}
-              />
-            )}
-            {column[1] && (
-              <OwnershipGameCard
-                game={column[1]}
-                speciesId={speciesId}
-                onToggleCaught={toggleCaught}
-                onToggleShiny={toggleShiny}
-                onToggleAlpha={toggleAlpha}
-              />
-            )}
+  return (
+    <View className="mb-3">
+      <Section
+        title={
+          <View className="flex-row items-center">
+            <MaterialCommunityIcons name="clipboard-check-outline" size={14} color="#9ca3af" />
+            <Text className="ml-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+              Pokédeck Entries
+            </Text>
           </View>
-        ))}
-      </ScrollView>
+        }
+        rightText="swipe for more games"
+      >
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ paddingRight: 4, paddingVertical: 1 }}
+        >
+          {columns.map((column, columnIndex) => (
+            <View
+              key={`pokedexentry-col-${columnIndex}`}
+              className="mr-2"
+              style={{ width: 142 }}
+            >
+              {column.map((game) => (
+                <View key={game.id} className="mb-1.5">
+                  <OwnershipGameCard
+                    game={game}
+                    speciesId={speciesId}
+                    onToggleCaught={toggleCaught}
+                    onToggleShiny={toggleShiny}
+                    onToggleAlpha={toggleAlpha}
+                  />
+                </View>
+              ))}
+            </View>
+          ))}
+        </ScrollView>
+      </Section>
     </View>
   );
 };
@@ -126,145 +106,191 @@ const OwnershipGameCard: React.FC<OwnershipGameCardProps> = ({
   onToggleShiny,
   onToggleAlpha,
 }) => {
-  // Subscribe to just this game+species entry
   const entry = usePokemonCollectionStore((s) => {
     const key = `${game.id}:${speciesId}`;
-    // NOTE: we return the SAME EMPTY_ENTRY reference when missing
     return (s.entries[key] as OwnershipEntry | undefined) ?? EMPTY_ENTRY;
   });
 
   const caught = !!entry.caught;
   const shiny = !!entry.shiny;
-
   const supportsAlpha = ALPHA_GAMES.has(game.id);
   const alpha = supportsAlpha && !!entry.alpha;
-
   const hasAny = caught || shiny || alpha;
+
+  const accent = game.accentColor?.[0] ?? "#38bdf8";
+
+  const CAUGHT_COLOR = accent;
+  const SHINY_COLOR = "#facc15";
+  const ALPHA_COLOR = "#ef4444";
+
+  const buttons: Array<{
+    key: string;
+    active: boolean;
+    activeColor: string;
+    icon: string;
+    imageSource?: any;
+    onPress: () => void;
+  }> = [
+      {
+        key: "caught",
+        active: caught,
+        activeColor: CAUGHT_COLOR,
+        icon: "pokeball",
+        onPress: () => onToggleCaught(game.id, speciesId),
+      },
+      {
+        key: "shiny",
+        active: shiny,
+        activeColor: SHINY_COLOR,
+        icon: "star-four-points",
+        imageSource: AppImages.shinyPokemonIcon,
+        onPress: () => onToggleShiny(game.id, speciesId),
+      },
+    ];
+
+  if (supportsAlpha) {
+    buttons.push({
+      key: "alpha",
+      active: alpha,
+      activeColor: ALPHA_COLOR,
+      icon: "alpha-a-circle",
+      imageSource: AppImages.alphaPokemonIcon,
+      onPress: () => onToggleAlpha(game.id, speciesId),
+    });
+  }
+
+  const CARD_W = 136;
+  const ICON_W = 46;
 
   return (
     <View
-      className="rounded-2xl px-2.5 py-2 mb-2 border bg-slate-950"
+      className="rounded-2xl border overflow-hidden"
       style={{
-        borderColor: hasAny ? game.accentColor[0] : "#1f2937",
-        backgroundColor: hasAny ? `${game.accentColor[0]}22` : "#020617",
+        width: CARD_W,
+        borderColor: hasAny ? accent : "#1f2937",
+        backgroundColor: hasAny ? `${accent}22` : "#020617",
       }}
     >
-      {/* Header: cover art + game code + status icon */}
-      <View className="flex-row items-center justify-between mb-1.5">
-        <View className="flex-row items-center flex-1 mr-2">
-          {game.coverImageUrl && (
-            <Image
-              source={{ uri: game.coverImageUrl }}
-              style={{
-                width: 28,
-                height: 28,
-                borderRadius: 6,
-                marginRight: 6,
-              }}
-              resizeMode="cover"
-            />
-          )}
-
-          <View className="flex-1">
-            <Text
-              className="text-[11px] font-semibold"
-              style={{ color: game.accentColor[0] }}
-              numberOfLines={1}
-            >
-              {game.shortCode}
-            </Text>
-            {game.releaseYear && (
-              <Text className="text-[9px] text-slate-400" numberOfLines={1}>
-                {game.releaseYear}
-              </Text>
-            )}
-          </View>
-        </View>
-
+      <View className="absolute top-2 right-2">
         <MaterialCommunityIcons
           name={hasAny ? "check-circle" : "circle-outline"}
           size={14}
-          color={hasAny ? game.accentColor[0] : "#4b5563"}
+          color={hasAny ? accent : "rgba(75,85,99,0.9)"}
         />
       </View>
 
-      {/* Divider */}
-      <View className="h-px bg-slate-800/80 mb-1.5" />
-
-      {/* Status pills */}
-      <View className="flex-row flex-wrap">
-        {/* Caught */}
-        <StatusPill
-          icon="pokeball"
-          label="Caught"
-          active={caught}
-          activeColor="#f97316"
-          onPress={() => onToggleCaught(game.id, speciesId)}
-        />
-
-        {/* Shiny */}
-        <StatusPill
-          icon={shiny ? "star-four-points" : "star-four-points-outline"}
-          label="Shiny"
-          active={shiny}
-          activeColor="#facc15"
-          onPress={() => onToggleShiny(game.id, speciesId)}
-        />
-
-        {/* Alpha – only for supported games */}
-        {supportsAlpha && (
-          <StatusPill
-            icon={alpha ? "alpha-a-circle" : "alpha-a-circle-outline"}
-            label="Alpha"
-            active={alpha}
-            activeColor="#38bdf8"
-            onPress={() => onToggleAlpha(game.id, speciesId)}
+      <View className="flex-row items-center px-2.5 pt-2.5">
+        {game.coverImageUrl ? (
+          <Image
+            source={{ uri: game.coverImageUrl }}
+            style={{
+              width: ICON_W,
+              height: ICON_W,
+              borderRadius: 12,
+              borderWidth: 1,
+              borderColor: "rgba(255,255,255,0.10)",
+              backgroundColor: "rgba(255,255,255,0.03)",
+              marginRight: 8,
+            }}
+            resizeMode="cover"
           />
+        ) : (
+          <View
+            style={{
+              width: ICON_W,
+              height: ICON_W,
+              borderRadius: 12,
+              borderWidth: 1,
+              borderColor: "rgba(255,255,255,0.10)",
+              backgroundColor: "rgba(255,255,255,0.03)",
+              marginRight: 8,
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <MaterialCommunityIcons name="image-off-outline" size={18} color="rgba(148,163,184,0.7)" />
+          </View>
         )}
+
+        <View className="flex-1 pr-4">
+          <Text className="text-[12px] font-bold" style={{ color: accent }} numberOfLines={2}>
+            {game.title}
+          </Text>
+
+          {game.releaseYear ? (
+            <Text className="text-[10px] text-slate-500 mt-0.5" numberOfLines={1}>
+              {game.releaseYear}
+            </Text>
+          ) : null}
+        </View>
+      </View>
+
+      <View className="px-2.5 pb-2.5 pt-2">
+        <View className="flex-row items-center justify-center">
+          {buttons.map((b) => (
+            <View key={b.key} style={{ marginHorizontal: buttons.length === 3 ? 6 : 8 }}>
+              <IconToggle
+                active={b.active}
+                activeColor={b.activeColor}
+                icon={b.icon}
+                imageSource={b.imageSource}
+                onPress={b.onPress}
+                size={26}
+                iconSize={13}
+              />
+            </View>
+          ))}
+        </View>
       </View>
     </View>
   );
 };
 
-type StatusPillProps = {
-  icon: string;
-  label: string;
+type IconToggleProps = {
   active: boolean;
   activeColor: string;
-  onPress?: () => void;
+  icon: string;
+  imageSource?: any;
+  onPress: () => void;
+  size?: number;
+  iconSize?: number;
 };
 
-const StatusPill: React.FC<StatusPillProps> = ({
-  icon,
-  label,
+const IconToggle: React.FC<IconToggleProps> = ({
   active,
   activeColor,
+  icon,
+  imageSource,
   onPress,
+  size = 28,
+  iconSize = 14,
 }) => {
-  const content = (
-    <View
-      className="flex-row items-center mr-1.5 mb-1 px-1.5 py-0.5 rounded-full border"
-      style={{
-        borderColor: active ? activeColor : "rgba(55,65,81,0.9)",
-        backgroundColor: active ? `${activeColor}22` : "rgba(15,23,42,0.9)",
-      }}
-    >
-      <MaterialCommunityIcons
-        name={icon as any}
-        size={12}
-        color={active ? activeColor : "#6b7280"}
-      />
-      <Text className="ml-1 text-[9px] text-slate-300" numberOfLines={1}>
-        {label}
-      </Text>
-    </View>
-  );
-
-  if (!onPress) return content;
-
   return (
-    <Pressable onPress={onPress} hitSlop={6}>
-      {content}
+    <Pressable onPress={onPress} hitSlop={10}>
+      <View
+        className="rounded-full border items-center justify-center"
+        style={{
+          width: size,
+          height: size,
+          borderColor: active ? `${activeColor}99` : "rgba(55,65,81,0.8)",
+          backgroundColor: active ? `${activeColor}22` : "rgba(15,23,42,0.40)",
+        }}
+      >
+        {imageSource ? (
+          <Image
+            source={imageSource}
+            style={{
+              width: iconSize,
+              height: iconSize,
+              tintColor: active ? activeColor : "#9ca3af",
+              opacity: active ? 1 : 0.9,
+            }}
+            resizeMode="contain"
+          />
+        ) : (
+          <MaterialCommunityIcons name={icon as any} size={iconSize} color={active ? activeColor : "#9ca3af"} />
+        )}
+      </View>
     </Pressable>
   );
 };

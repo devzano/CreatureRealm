@@ -1,20 +1,35 @@
 // components/Palworld/PalworldUpgradesGrid.tsx
-import React, { useMemo, useState, useCallback } from "react";
-import { View, Text, ScrollView, Pressable } from "react-native";
+import React, { useMemo } from "react";
+import { View, Text } from "react-native";
 
-import type { PassiveSkillRow } from "@/lib/palworld/paldbPassiveSkills";
-import type { TechnologyItem } from "@/lib/palworld/paldbTechnologies";
-import type { JournalIndexItem } from "@/lib/palworld/paldbJournal";
-import type { MissionIndexItem } from "@/lib/palworld/paldbMissions";
-import type { BaseIndex } from "@/lib/palworld/paldbBase";
-import type { MerchantOfferRow } from "@/lib/palworld/paldbMerchants";
+import PalworldDashboardGrid, { type DashboardCategory } from "@/components/Palworld/PalworldDashboardGrid";
+import { usePalworldDashboardOrderStore } from "@/store/palworldDashboardOrderStore";
 
-import PassiveSkillGrid from "@/components/Palworld/PalworldDetails/PalPassiveSkillGrid";
-import TechnologyGrid from "@/components/Palworld/PalTechnologyGrid";
-import PalJournalGrid from "@/components/Palworld/PalJournalGrid";
-import PalMissionGrid from "@/components/Palworld/PalMissionGrid";
-import PalBaseGrid from "@/components/Palworld/PalBaseGrid";
-import PalMerchantsGrid from "@/components/Palworld/PalMerchantsGrid";
+import type { PassiveSkillRow } from "@/lib/palworld/upgrades/paldbPassiveSkills";
+import PassiveSkillGrid from "@/components/Palworld/Upgrades/PassiveSkillGrid";
+import type { TechnologyItem } from "@/lib/palworld/upgrades/paldbTechnologies";
+import TechnologyGrid from "@/components/Palworld/Upgrades/TechnologyGrid";
+import type { JournalIndexItem } from "@/lib/palworld/upgrades/paldbJournal";
+import PalJournalGrid from "@/components/Palworld/Upgrades/JournalGrid";
+import type { MissionIndexItem } from "@/lib/palworld/upgrades/paldbMissions";
+import PalMissionGrid from "@/components/Palworld/Upgrades/MissionGrid";
+import type { BaseIndex } from "@/lib/palworld/upgrades/paldbBase";
+import PalBaseGrid from "@/components/Palworld/Upgrades/BaseGrid";
+import type { MerchantOfferRow } from "@/lib/palworld/upgrades/paldbMerchants";
+import PalMerchantsGrid from "@/components/Palworld/Upgrades/MerchantsGrid";
+import type { TowerBossRow } from "@/lib/palworld/upgrades/paldbTowerBosses";
+import TowerBossGrid from "@/components/Palworld/Upgrades/TowerBossGrid";
+import type { SummoningAltarBoss, RaidEvent } from "@/lib/palworld/upgrades/paldbSummonsRaid";
+import SummonsGrid from "@/components/Palworld/Upgrades/SummonsGrid";
+import RaidsGrid from "@/components/Palworld/Upgrades/RaidsGrid";
+import type { DungeonWithPals } from "@/lib/palworld/upgrades/paldbDungeonsPals";
+import PalDungeonsGrid from "@/components/Palworld/Upgrades/PalDungeonsGrid";
+import type { EggRow } from "@/lib/palworld/upgrades/paldbEggPals";
+import PalEggsGrid from "@/components/Palworld/Upgrades/EggsGrid";
+import type { WorkSuitabilityItem } from "@/lib/palworld/upgrades/paldbWorkSuitability";
+import WorkSuitabilityGrid from "@/components/Palworld/Upgrades/WorkSuitabilityGrid";
+import type { SkillFruitOrchardRow } from "@/lib/palworld/upgrades/paldbSkillFruits";
+import SkillfruitOrchardGrid from "@/components/Palworld/Upgrades/SkillfruitOrchardGrid";
 
 type PalworldUpgradesGridProps = {
   passiveSkills: PassiveSkillRow[];
@@ -24,11 +39,46 @@ type PalworldUpgradesGridProps = {
   missionsSub: MissionIndexItem[];
   base: BaseIndex | null;
   merchantOffers: MerchantOfferRow[];
-
+  towerBosses: TowerBossRow[];
+  summons: SummoningAltarBoss[];
+  raids: RaidEvent[];
+  dungeonPals: DungeonWithPals[];
+  eggs: EggRow[];
+  workSuitability: WorkSuitabilityItem[];
+  skillfruits: SkillFruitOrchardRow[];
   search: string;
 };
 
-type CategoryKey = "all" | "passiveSkills" | "technologies" | "journals" | "missions" | "base" | "merchants";
+type PreviewItem = { name: string; };
+
+type CategoryKey =
+  | "towers"
+  | "raids"
+  | "dungeons"
+  | "merchants"
+  | "base"
+  | "missions"
+  | "journals"
+  | "technologies"
+  | "passiveSkills"
+  | "workSuitability"
+  | "eggs"
+  | "skillfruits";
+
+const DEFAULT_CATEGORY_ORDER: CategoryKey[] = [
+  "towers",
+  "raids",
+  "dungeons",
+  "merchants",
+  "base",
+  "missions",
+  "journals",
+  "technologies",
+  "passiveSkills",
+  "eggs",
+  "workSuitability",
+  "skillfruits",
+];
 
 function buildHaystack(parts: Array<any>) {
   return parts
@@ -44,41 +94,6 @@ function filterList<T>(items: T[] | undefined, search: string, build: (it: T) =>
   const s = (search ?? "").trim().toLowerCase();
   if (!s) return arr;
   return arr.filter((it) => build(it).includes(s));
-}
-
-function safeName(x: any): string {
-  if (x == null) return "Unknown";
-
-  // Base rows (common shape: { level, rawText, tasks, rewards })
-  const level = x?.level;
-  if (level != null && (x?.rawText || x?.tasks || x?.rewards)) {
-    const lvl = String(level).trim();
-    return `Base Level ${lvl || "—"}`;
-  }
-
-  // Missions / Journals / generic rows
-  const name =
-    String(x?.name ?? "").trim() ||
-    String(x?.title ?? "").trim() ||
-    String(x?.label ?? "").trim() ||
-    String(x?.missionTitle ?? "").trim() ||
-    String(x?.questTitle ?? "").trim();
-
-  if (name) return name;
-
-  // Merchant offer rows
-  if (x?.shopId && (x?.itemName || x?.itemSlug)) {
-    const item = String(x?.itemName ?? "").trim() || String(x?.itemSlug ?? "").trim() || "Item";
-    return `${prettyShopId(x.shopId)} • ${item}`;
-  }
-
-  if (x?.shopId) return prettyShopId(x.shopId);
-
-  // Fallback to id/key/slug
-  const idLike = String(x?.id ?? "").trim() || String(x?.key ?? "").trim() || String(x?.slug ?? "").trim();
-  if (idLike) return idLike.replace(/_/g, " ").trim();
-
-  return "Unknown";
 }
 
 function titleizeShopId(id: string) {
@@ -103,11 +118,89 @@ function prettyShopId(id: any): string {
   return s ? titleizeShopId(s) : "Shop";
 }
 
-function fmtNum(v: any): string | null {
-  if (v == null) return null;
-  const n = Number(v);
-  if (!Number.isFinite(n)) return null;
-  return n.toLocaleString();
+function countDungeonPals(list: DungeonWithPals[] | undefined | null): number {
+  const arr = Array.isArray(list) ? list : [];
+  let n = 0;
+  for (const d of arr) n += Array.isArray(d?.pals) ? d.pals.length : 0;
+  return n;
+}
+
+function previewDungeonPals(list: DungeonWithPals[] | undefined | null, max = 6): PreviewItem[] {
+  const arr = Array.isArray(list) ? list : [];
+  const out: PreviewItem[] = [];
+
+  for (const d of arr) {
+    const dn = String(d?.name ?? "").trim() || String(d?.slug ?? "").trim() || "Dungeon";
+    const pals = Array.isArray(d?.pals) ? d.pals : [];
+    for (const p of pals) {
+      const pn = String(p?.palName ?? "").trim() || String(p?.palSlug ?? "").trim() || "Pal";
+      out.push({ name: `${dn} • ${pn}` });
+      if (out.length >= max) return out;
+    }
+  }
+
+  return out;
+}
+
+function safeName(x: any): string {
+  if (x == null) return "Unknown";
+
+  const level = x?.level;
+  if (level != null && (x?.rawText || x?.tasks || x?.rewards)) {
+    const lvl = String(level).trim();
+    return `Base Level ${lvl || "—"}`;
+  }
+
+  if (x?.boss?.name || x?.slab?.name) {
+    const bossName = String(x?.boss?.name ?? "").trim() || "Boss";
+    const slabName = String(x?.slab?.name ?? "").trim() || "Slab";
+    return `${bossName} • ${slabName}`;
+  }
+
+  if (x?.title && Array.isArray(x?.members)) {
+    const t = String(x?.title ?? "").trim();
+    const g = String(x?.gradeText ?? "").trim();
+    return g ? `${t} • Grade ${g}` : t || "Raid";
+  }
+
+  if (x?.slug && x?.name && Array.isArray(x?.pals)) {
+    const dn = String(x?.name ?? "").trim() || String(x?.slug ?? "").trim() || "Dungeon";
+    const count = Array.isArray(x?.pals) ? x.pals.length : 0;
+    return `${dn} • ${count} pal${count === 1 ? "" : "s"}`;
+  }
+
+  const name =
+    String(x?.name ?? "").trim() ||
+    String(x?.title ?? "").trim() ||
+    String(x?.label ?? "").trim() ||
+    String(x?.missionTitle ?? "").trim() ||
+    String(x?.questTitle ?? "").trim();
+
+  if (name) return name;
+
+  if (x?.shopId && (x?.itemName || x?.itemSlug)) {
+    const item = String(x?.itemName ?? "").trim() || String(x?.itemSlug ?? "").trim() || "Item";
+    return `${prettyShopId(x.shopId)} • ${item}`;
+  }
+
+  if (x?.shopId) return prettyShopId(x.shopId);
+
+  const idLike = String(x?.id ?? "").trim() || String(x?.key ?? "").trim() || String(x?.slug ?? "").trim();
+  if (idLike) return idLike.replace(/_/g, " ").trim();
+
+  return "Unknown";
+}
+
+function toPreviewItems(list: any[], max = 6): PreviewItem[] {
+  const arr = Array.isArray(list) ? list : [];
+  const out: PreviewItem[] = [];
+  for (const it of arr) {
+    const n = safeName(it);
+    if (!n) continue;
+    out.push({ name: n });
+    if (out.length >= max) break;
+  }
+  return out;
 }
 
 const PalworldUpgradesGrid: React.FC<PalworldUpgradesGridProps> = ({
@@ -118,6 +211,13 @@ const PalworldUpgradesGrid: React.FC<PalworldUpgradesGridProps> = ({
   missionsSub,
   base,
   merchantOffers,
+  towerBosses,
+  summons,
+  raids,
+  dungeonPals,
+  eggs,
+  workSuitability,
+  skillfruits,
   search,
 }) => {
   const normalizedSearch = (search ?? "").trim().toLowerCase();
@@ -174,60 +274,237 @@ const PalworldUpgradesGrid: React.FC<PalworldUpgradesGridProps> = ({
   const filteredMerchantOffers = useMemo(
     () =>
       filterList(merchantOffers, normalizedSearch, (o) =>
-        buildHaystack([
-          o.shopId,
-          o.merchantName,
-          o.merchantCount,
-          o.itemName,
-          o.itemSlug,
-          o.price,
-          o.stock,
-          o.quantity,
-        ])
+        buildHaystack([o.shopId, o.merchantName, o.merchantCount, o.itemName, o.itemSlug, o.price, o.stock, o.quantity])
       ),
     [merchantOffers, normalizedSearch]
   );
 
+  const filteredTowerBosses = useMemo(
+    () =>
+      filterList(towerBosses, normalizedSearch, (b) =>
+        buildHaystack([b.name, b.slug, b.towerText, b.difficultyText, b.level, b.hp, (b.elements ?? []).join(" ")])
+      ),
+    [towerBosses, normalizedSearch]
+  );
+
+  const filteredSummons = useMemo(
+    () =>
+      filterList(summons, normalizedSearch, (s) =>
+        buildHaystack([
+          s?.boss?.name,
+          s?.boss?.slug,
+          s?.slab?.name,
+          s?.slab?.slug,
+          s?.level,
+          s?.hp,
+          s?.damageReductionPct,
+          s?.attackDamagePct,
+          (s?.elements ?? []).join(" "),
+        ])
+      ),
+    [summons, normalizedSearch]
+  );
+
+  const filteredRaids = useMemo(
+    () =>
+      filterList(raids, normalizedSearch, (r) =>
+        buildHaystack([
+          r?.title,
+          r?.gradeText,
+          r?.weight,
+          (r?.members ?? [])
+            .map(
+              (m: any) =>
+                `${m?.unit?.name ?? ""} ${m?.unit?.slug ?? ""} ${m?.levelMin ?? ""}-${m?.levelMax ?? ""} x${m?.count ?? ""}`
+            )
+            .join(" "),
+        ])
+      ),
+    [raids, normalizedSearch]
+  );
+
+  const filteredDungeonPals = useMemo(() => {
+    const arr = Array.isArray(dungeonPals) ? dungeonPals : [];
+    if (!normalizedSearch) return arr;
+
+    return arr.filter((d) => {
+      const dHay = buildHaystack([d.slug, d.name, d.level, d.levelText]);
+      if (dHay.includes(normalizedSearch)) return true;
+
+      for (const p of d.pals ?? []) {
+        const pHay = buildHaystack([p.palName, p.palSlug, p.levelText]);
+        if (pHay.includes(normalizedSearch)) return true;
+      }
+      return false;
+    });
+  }, [dungeonPals, normalizedSearch]);
+
+  const filteredEggs = useMemo(
+    () =>
+      filterList(eggs, normalizedSearch, (e) =>
+        buildHaystack([
+          e?.egg?.name,
+          e?.egg?.slug,
+          e?.egg?.tier,
+          (e?.pals ?? []).map((p: any) => `${p?.name ?? ""} ${p?.slug ?? ""}`).join(" "),
+        ])
+      ),
+    [eggs, normalizedSearch]
+  );
+
+  const filteredWorkSuitability = useMemo(
+    () =>
+      filterList(workSuitability, normalizedSearch, (w) =>
+        buildHaystack([w.name, w.slug, w.code, w.iconId])
+      ),
+    [workSuitability, normalizedSearch]
+  );
+
+  const filteredSkillfruits = useMemo(
+    () =>
+      filterList(skillfruits, normalizedSearch, (s) =>
+        buildHaystack([s.name, s.slug, s.sameElementPct, s.sameElementText])
+      ),
+    [skillfruits, normalizedSearch]
+  );
+
   const totalShown =
+    filteredTowerBosses.length +
+    filteredSummons.length +
+    filteredRaids.length +
+    countDungeonPals(filteredDungeonPals) +
     filteredMerchantOffers.length +
     filteredPassiveSkills.length +
     filteredTechnologies.length +
     filteredJournals.length +
     filteredMissionsMain.length +
     filteredMissionsSub.length +
-    filteredBase.length;
+    filteredBase.length +
+    filteredEggs.length +
+    filteredWorkSuitability.length +
+    filteredSkillfruits.length;
 
   const totalAll =
+    (towerBosses?.length ?? 0) +
+    (summons?.length ?? 0) +
+    (raids?.length ?? 0) +
+    countDungeonPals(dungeonPals) +
     (merchantOffers?.length ?? 0) +
     (passiveSkills?.length ?? 0) +
     (technologies?.length ?? 0) +
     (journals?.length ?? 0) +
     (missionsMain?.length ?? 0) +
     (missionsSub?.length ?? 0) +
-    (base?.items?.length ?? 0);
+    (base?.items?.length ?? 0) +
+    (eggs?.length ?? 0) +
+    (workSuitability?.length ?? 0) +
+    (skillfruits?.length ?? 0);
 
-  const [selected, setSelected] = useState<CategoryKey>("all");
+  const categories: DashboardCategory<CategoryKey>[] = useMemo(() => {
+    const missionPreview = [...filteredMissionsMain.slice(0, 3), ...filteredMissionsSub.slice(0, 3)];
 
-  const categories = useMemo(() => {
     return [
       {
-        key: "merchants" as const,
+        key: "towers",
+        title: "Towers",
+        subtitle: "Tower Bosses",
+        shown: filteredTowerBosses.length,
+        total: towerBosses?.length ?? 0,
+        items: filteredTowerBosses as any[],
+        previewItems: toPreviewItems(filteredTowerBosses, 6),
+        render: () => (
+          <TowerBossGrid
+            items={filteredTowerBosses}
+            numColumns={2}
+            emptyText={normalizedSearch ? "No tower bosses match this search." : "No tower bosses found."}
+          />
+        ),
+      },
+
+      {
+        key: "raids",
+        title: "Raids",
+        subtitle: "Summons + Raids",
+        shown: filteredSummons.length + filteredRaids.length,
+        total: (summons?.length ?? 0) + (raids?.length ?? 0),
+        items: [] as any[],
+        previewItems: [
+          ...toPreviewItems(filteredSummons, 3).map((x) => ({ name: `Summon • ${x.name}` })),
+          ...toPreviewItems(filteredRaids, 3).map((x) => ({ name: `Raid • ${x.name}` })),
+        ],
+        render: () => (
+          <View>
+            <View className="px-4 mt-2 mb-2">
+              <Text className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/60">Summons</Text>
+              <Text className="text-[11px] text-white/35 mt-0.5">
+                {filteredSummons.length} / {summons?.length ?? 0}
+              </Text>
+            </View>
+
+            <SummonsGrid
+              items={filteredSummons}
+              numColumns={2}
+              emptyText={normalizedSearch ? "No summons match this search." : "No summons found."}
+            />
+
+            <View className="px-4 mt-6 mb-2">
+              <Text className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/60">Raids</Text>
+              <Text className="text-[11px] text-white/35 mt-0.5">
+                {filteredRaids.length} / {raids?.length ?? 0}
+              </Text>
+            </View>
+
+            <RaidsGrid
+              items={filteredRaids}
+              numColumns={2}
+              emptyText={normalizedSearch ? "No raids match this search." : "No raids found."}
+            />
+          </View>
+        ),
+      },
+
+      {
+        key: "dungeons",
+        title: "Dungeons",
+        subtitle: "Dungeon Pals",
+        shown: countDungeonPals(filteredDungeonPals),
+        total: countDungeonPals(dungeonPals),
+        items: filteredDungeonPals as any[],
+        previewItems: previewDungeonPals(filteredDungeonPals, 6),
+        render: (items, ctx) => (
+          <PalDungeonsGrid
+            items={items as any}
+            numColumns={2}
+            emptyText={normalizedSearch ? "No dungeon pals match this search." : "No dungeon pals found."}
+            query={ctx.getLocalSearch("dungeons")}
+            onQueryChange={(q) => ctx.setLocalSearch("dungeons", q)}
+            hideSearchBar
+          />
+        ),
+      },
+
+      {
+        key: "merchants",
         title: "Merchants",
         subtitle: "Shop Inventories",
         shown: filteredMerchantOffers.length,
         total: merchantOffers?.length ?? 0,
         items: filteredMerchantOffers as any[],
-
-        render: () => (
+        previewItems: toPreviewItems(filteredMerchantOffers, 6),
+        render: (items, ctx) => (
           <PalMerchantsGrid
-            items={filteredMerchantOffers}
+            items={items as any}
             numColumns={2}
             emptyText={normalizedSearch ? "No merchant offers match this search." : "No merchant items found."}
+            query={ctx.getLocalSearch("merchants")}
+            onQueryChange={(q) => ctx.setLocalSearch("merchants", q)}
+            hideSearchBar
           />
         ),
       },
+
       {
-        key: "base" as const,
+        key: "base",
         title: "Base",
         subtitle: "Base Leveling",
         shown: filteredBase.length,
@@ -238,14 +515,15 @@ const PalworldUpgradesGrid: React.FC<PalworldUpgradesGridProps> = ({
         })),
         render: () => <PalBaseGrid index={base} numColumns={2} emptyText="No base levels found. Try a different search." />,
       },
+
       {
-        key: "missions" as const,
+        key: "missions",
         title: "Missions",
         subtitle: "Main • Sub",
         shown: filteredMissionsMain.length + filteredMissionsSub.length,
         total: (missionsMain?.length ?? 0) + (missionsSub?.length ?? 0),
         items: [] as any[],
-        previewItems: [...filteredMissionsMain.slice(0, 3), ...filteredMissionsSub.slice(0, 3)],
+        previewItems: missionPreview.map((x: any) => ({ name: safeName(x) })),
         render: () => (
           <PalMissionGrid
             main={filteredMissionsMain}
@@ -256,254 +534,154 @@ const PalworldUpgradesGrid: React.FC<PalworldUpgradesGridProps> = ({
           />
         ),
       },
+
       {
-        key: "journals" as const,
+        key: "journals",
         title: "Journals",
         subtitle: "Memo Entries",
         shown: filteredJournals.length,
         total: journals?.length ?? 0,
         items: filteredJournals as any[],
-        render: (items: JournalIndexItem[]) => (
-          <PalJournalGrid items={items} numColumns={3} emptyText="No journals found. Try a different search." />
+        previewItems: toPreviewItems(filteredJournals, 6),
+        render: (items) => (
+          <PalJournalGrid items={items as any} numColumns={2} emptyText="No journals found. Try a different search." />
         ),
       },
+
       {
-        key: "technologies" as const,
+        key: "technologies",
         title: "Technologies",
         subtitle: "Tech Tree",
         shown: filteredTechnologies.length,
         total: technologies?.length ?? 0,
         items: filteredTechnologies as any[],
-        render: (items: TechnologyItem[]) => (
-          <TechnologyGrid items={items} numColumns={3} emptyText="No technologies found. Try a different search." />
-        ),
+        previewItems: toPreviewItems(filteredTechnologies, 6),
+        render: (items) => <TechnologyGrid items={items as any} numColumns={3} emptyText="No technologies found. Try a different search." />,
       },
+
       {
-        key: "passiveSkills" as const,
+        key: "passiveSkills",
         title: "Passive Skills",
         subtitle: "Traits + Ranks",
         shown: filteredPassiveSkills.length,
         total: passiveSkills?.length ?? 0,
         items: filteredPassiveSkills as any[],
-        render: (items: PassiveSkillRow[]) => (
-          <PassiveSkillGrid items={items} numColumns={3} emptyText="No passive skills found. Try a different search." />
+        previewItems: toPreviewItems(filteredPassiveSkills, 6),
+        render: (items) => <PassiveSkillGrid items={items as any} numColumns={3} emptyText="No passive skills found. Try a different search." />,
+      },
+
+      {
+        key: "eggs",
+        title: "Eggs",
+        subtitle: "Hatch Pals",
+        shown: filteredEggs.length,
+        total: eggs?.length ?? 0,
+        items: filteredEggs as any[],
+        previewItems: toPreviewItems(
+          filteredEggs.map((e: any) => ({
+            name: `${String(e?.egg?.name ?? "").trim() || String(e?.egg?.slug ?? "").trim() || "Egg"} • ${Array.isArray(e?.pals) ? e.pals.length : 0
+              } pal${(Array.isArray(e?.pals) ? e.pals.length : 0) === 1 ? "" : "s"}`,
+          })),
+          6
+        ),
+        render: (items) => (
+          <PalEggsGrid
+            items={items as any}
+            numColumns={2}
+            emptyText={normalizedSearch ? "No eggs match this search." : "No eggs found."}
+          />
         ),
       },
-    ] as const;
+
+      {
+        key: "workSuitability",
+        title: "Work Suitability",
+        subtitle: "Pal Work Roles",
+        shown: filteredWorkSuitability.length,
+        total: (workSuitability?.length ?? 0),
+        items: filteredWorkSuitability as any[],
+        previewItems: toPreviewItems(filteredWorkSuitability, 6),
+        render: (items) => (
+          <WorkSuitabilityGrid
+            items={items as any}
+            numColumns={3}
+            emptyText={
+              normalizedSearch
+                ? "No work suitability entries match this search."
+                : "No work suitability entries found."
+            }
+          />
+        ),
+      },
+
+      {
+        key: "skillfruits",
+        title: "Skillfruits",
+        subtitle: "Skillfruit Orchard",
+        shown: filteredSkillfruits.length,
+        total: skillfruits?.length ?? 0,
+        items: filteredSkillfruits as any[],
+        previewItems: toPreviewItems(filteredSkillfruits, 6),
+        render: (items) => (
+          <SkillfruitOrchardGrid
+            items={items as any}
+            numColumns={3}
+            emptyText={normalizedSearch ? "No skillfruits match this search." : "No skillfruits found."}
+          />
+        ),
+      },
+    ];
   }, [
+    normalizedSearch,
+    filteredTowerBosses,
+    towerBosses,
+    filteredSummons,
+    summons,
+    filteredRaids,
+    raids,
+    filteredDungeonPals,
+    dungeonPals,
     filteredMerchantOffers,
     merchantOffers,
-    normalizedSearch,
-    filteredPassiveSkills,
-    filteredTechnologies,
-    filteredJournals,
-    filteredMissionsMain,
-    filteredMissionsSub,
     filteredBase,
-    passiveSkills,
-    technologies,
-    journals,
-    missionsMain,
-    missionsSub,
     base,
+    filteredMissionsMain,
+    missionsMain,
+    filteredMissionsSub,
+    missionsSub,
+    filteredJournals,
+    journals,
+    filteredTechnologies,
+    technologies,
+    filteredPassiveSkills,
+    passiveSkills,
+    filteredEggs,
+    eggs,
+    filteredWorkSuitability,
+    workSuitability,
+    filteredSkillfruits,
+    skillfruits,
   ]);
 
-  const visibleCards = useMemo(() => {
-    if (!normalizedSearch) return categories;
-    return categories.filter((c) => c.shown > 0);
-  }, [categories, normalizedSearch]);
-
-  const renderCategoryHeader = useCallback(
-    (title: string, subtitle: string, shown: number, total: number) => (
-      <View className="px-4 mt-4 mb-2">
-        <View className="flex-row items-center">
-          <View className="w-1.5 h-5 rounded-full mr-2 bg-white/10" />
-          <View className="flex-1">
-            <Text className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/70">{title}</Text>
-            <Text className="text-[11px] text-white/45 mt-0.5">
-              {subtitle} • {shown} / {total}
-            </Text>
-          </View>
-
-          <Pressable
-            onPress={() => setSelected("all")}
-            className="ml-2 px-2 py-1 rounded-full border border-white/10 bg-white/[0.04] active:opacity-90"
-          >
-            <Text className="text-[10px] text-white/60">Back</Text>
-          </Pressable>
-        </View>
-      </View>
-    ),
-    []
-  );
-
-  const renderSingleCategory = useCallback(() => {
-    const cat = categories.find((c) => c.key === selected);
-    if (!cat) return null;
-
-    const isEmpty = cat.shown === 0;
-
-    return (
-      <View>
-        {renderCategoryHeader(cat.title, cat.subtitle, cat.shown, cat.total)}
-
-        {isEmpty ? (
-          <View className="px-4">
-            <EmptyState
-              title={`No ${cat.title.toLowerCase()} found`}
-              subtitle={normalizedSearch ? "Try a different search." : "Nothing in this category yet."}
-            />
-          </View>
-        ) : (
-          (cat.render as any)(cat.items as any)
-        )}
-
-        <View className="h-10" />
-      </View>
-    );
-  }, [categories, selected, normalizedSearch, renderCategoryHeader]);
+  const orderKey = "palworld.upgrades" as const;
+  const storedOrder = usePalworldDashboardOrderStore((s) => s.orders[orderKey]) as CategoryKey[] | undefined;
+  const saveOrder = usePalworldDashboardOrderStore((s) => s.setOrder);
+  const reorderEnabled = !normalizedSearch;
+  const effectiveOrder = (storedOrder?.length ? storedOrder : DEFAULT_CATEGORY_ORDER) as CategoryKey[];
 
   return (
-    <View style={{ flex: 1, position: "relative" }}>
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 44 }}
-        keyboardShouldPersistTaps="handled"
-        stickyHeaderIndices={[0]}
-      >
-        <View className="px-4 pt-2 pb-3 bg-black/60 border-b border-white/10">
-          <View className="rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-2">
-            <Text className="text-[11px] text-white/60">
-              Showing <Text className="text-white/85 font-semibold">{totalShown}</Text> /{" "}
-              <Text className="text-white/75">{totalAll}</Text> items
-            </Text>
-
-            {!!normalizedSearch && (
-              <Text className="text-[11px] text-white/40 mt-0.5" numberOfLines={1}>
-                Search: “{(search ?? "").trim()}”
-              </Text>
-            )}
-
-            <View className="mt-2">
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-                <Pill label="Dashboard" count={totalShown} active={selected === "all"} onPress={() => setSelected("all")} />
-
-                {categories.map((c) => (
-                  <Pill
-                    key={c.key}
-                    label={c.title}
-                    count={c.shown}
-                    active={selected === (c.key as any)}
-                    onPress={() => setSelected(c.key as any)}
-                  />
-                ))}
-              </ScrollView>
-            </View>
-          </View>
-        </View>
-
-        {selected !== "all" ? (
-          <View>{renderSingleCategory()}</View>
-        ) : (
-          <View className="px-4 pt-4">
-            {visibleCards.length === 0 ? (
-              <EmptyState
-                title="No results"
-                subtitle={normalizedSearch ? "Try a different search." : "No upgrades available."}
-              />
-            ) : (
-              <>
-                <View className="flex-row flex-wrap" style={{ gap: 12 }}>
-                  {visibleCards.map((c) => {
-                    const source = (c as any).previewItems ?? (c as any).items ?? [];
-                    const topNames = source.slice(0, 3).map(safeName);
-                    const hasMore = c.shown > 3;
-
-                    return (
-                      <Pressable
-                        key={c.key}
-                        onPress={() => setSelected(c.key as any)}
-                        className="rounded-3xl border border-white/10 bg-white/[0.03] active:opacity-90"
-                        style={{ width: "48%" }}
-                      >
-                        <View className="p-3">
-                          <View className="flex-row items-center justify-between">
-                            <Text className="text-[12px] text-white/85 font-semibold">{c.title}</Text>
-                            <View className="px-2 py-1 rounded-full border border-white/10 bg-white/[0.04]">
-                              <Text className="text-[10px] text-white/60">{c.shown}</Text>
-                            </View>
-                          </View>
-
-                          <Text className="text-[11px] text-white/45 mt-0.5" numberOfLines={1}>
-                            {c.subtitle}
-                          </Text>
-
-                          <View className="mt-3">
-                            {topNames.length === 0 ? (
-                              <Text className="text-[11px] text-white/35">Nothing here yet</Text>
-                            ) : (
-                              <View style={{ gap: 4 }}>
-                                {topNames.map((n: string, idx: number) => (
-                                  <Text key={`${c.key}-n-${idx}`} className="text-[11px] text-white/60" numberOfLines={1}>
-                                    • {n}
-                                  </Text>
-                                ))}
-                                {hasMore && (
-                                  <Text className="text-[11px] text-white/35" numberOfLines={1}>
-                                    + {c.shown - 3} more
-                                  </Text>
-                                )}
-                              </View>
-                            )}
-                          </View>
-
-                          <View className="mt-3">
-                            <View className="rounded-2xl border border-white/10 bg-white/[0.04] px-2.5 py-2">
-                              <Text className="text-[11px] text-white/70">Open {c.title}</Text>
-                            </View>
-                          </View>
-                        </View>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-
-                <View className="h-10" />
-              </>
-            )}
-          </View>
-        )}
-      </ScrollView>
-    </View>
+    <PalworldDashboardGrid<CategoryKey>
+      search={search}
+      totalShown={totalShown}
+      totalAll={totalAll}
+      categories={categories}
+      reorderEnabled={reorderEnabled}
+      defaultOrder={DEFAULT_CATEGORY_ORDER}
+      order={effectiveOrder}
+      onOrderChange={(next) => saveOrder(orderKey, next as string[])}
+      previewMax={3}
+    />
   );
 };
 
 export default PalworldUpgradesGrid;
-
-function Pill(props: { label: string; count: number; active: boolean; onPress: () => void; }) {
-  const { label, count, active, onPress } = props;
-
-  return (
-    <Pressable
-      onPress={onPress}
-      className={[
-        "px-3 py-1.5 rounded-full border",
-        active ? "border-white/25 bg-white/[0.08]" : "border-white/10 bg-white/[0.04]",
-      ].join(" ")}
-    >
-      <Text className={["text-[11px]", active ? "text-white/85 font-semibold" : "text-white/60"].join(" ")}>
-        {label} <Text className="text-white/35">({count})</Text>
-      </Text>
-    </Pressable>
-  );
-}
-
-function EmptyState(props: { title: string; subtitle?: string; }) {
-  const { title, subtitle } = props;
-  return (
-    <View className="rounded-3xl border border-white/10 bg-white/[0.03] px-4 py-4">
-      <Text className="text-[12px] text-white/80 font-semibold">{title}</Text>
-      {!!subtitle && <Text className="text-[11px] text-white/45 mt-1">{subtitle}</Text>}
-    </View>
-  );
-}

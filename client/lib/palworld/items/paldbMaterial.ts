@@ -46,6 +46,7 @@ import {
   type TreasureBoxRow,
   type MerchantRow,
   type KeyValueRow,
+  extractItemSkillBarsTextFromHtml,
 } from "@/lib/palworld/paldbDetailKit";
 
 // (Optional) re-export kit types for consumers that import from paldbMaterial.ts
@@ -91,7 +92,7 @@ export type MaterialIndexItem = {
 
 export type MaterialListItem = MaterialIndexItem;
 
-export async function fetchMaterialList(opts?: { force?: boolean }): Promise<MaterialIndexItem[]> {
+export async function fetchMaterialList(opts?: { force?: boolean; }): Promise<MaterialIndexItem[]> {
   return fetchMaterialIndex(opts);
 }
 
@@ -112,7 +113,7 @@ export function isEggMaterial(it: Pick<MaterialIndexItem, "name" | "slug">): boo
   return name.includes("egg") || slug.includes("egg");
 }
 
-export async function fetchEggMaterialList(opts?: { force?: boolean }): Promise<MaterialIndexItem[]> {
+export async function fetchEggMaterialList(opts?: { force?: boolean; }): Promise<MaterialIndexItem[]> {
   const all = await fetchMaterialIndex(opts);
   return all.filter(isEggMaterial);
 }
@@ -138,20 +139,16 @@ export type MaterialDetail = {
   description: string | null;
   isAvailable: boolean;
   recipes: MaterialRecipeIngredient[];
-
-  // Full detail sections (Sphere parity)
+  effects: string[];
   stats: KeyValueRow[];
   others: KeyValueRow[];
-
   producedAt: DetailItemRef[];
   production: DetailRecipeRow[];
   craftingMaterials: DetailRecipeRow[];
-
   treant: TreantNode | null;
   droppedBy: DroppedByRow[];
   treasureBox: TreasureBoxRow[];
   wanderingMerchant: MerchantRow[];
-
   soulUpgrade: SoulUpgradeRow[];
 };
 
@@ -161,7 +158,7 @@ export type MaterialDetail = {
 
 let _indexCache: MaterialIndexItem[] | null = null;
 let _indexCacheAt = 0;
-const _detailCache = new Map<string, { at: number; data: MaterialDetail }>();
+const _detailCache = new Map<string, { at: number; data: MaterialDetail; }>();
 
 const INDEX_TTL = 10 * 60 * 1000;
 const DETAIL_TTL = 10 * 60 * 1000;
@@ -178,7 +175,7 @@ export async function warmMaterialIndex(): Promise<void> {
   }
 }
 
-export async function fetchMaterialIndex(opts?: { force?: boolean }): Promise<MaterialIndexItem[]> {
+export async function fetchMaterialIndex(opts?: { force?: boolean; }): Promise<MaterialIndexItem[]> {
   const force = !!opts?.force;
   const now = Date.now();
 
@@ -197,7 +194,7 @@ export async function fetchMaterialIndex(opts?: { force?: boolean }): Promise<Ma
   return items;
 }
 
-export async function fetchMaterialDetail(slugOrHref: string, opts?: { force?: boolean }): Promise<MaterialDetail> {
+export async function fetchMaterialDetail(slugOrHref: string, opts?: { force?: boolean; }): Promise<MaterialDetail> {
   const idRaw = String(slugOrHref ?? "").trim();
   if (!idRaw) throw new Error("fetchMaterialDetail: missing slug/href");
 
@@ -450,7 +447,7 @@ function parseMaterialDetailHtml(html: string, slugKey: string): MaterialDetail 
     slug: cleanKey(slugKey),
     name: cleanKey(
       firstMatch(src, /<h2\b[^>]*>\s*([^<]+?)\s*<\/h2>/i) ??
-        (firstMatch(src, /<title>\s*([^<]+?)\s*<\/title>/i) ?? slugKey)
+      (firstMatch(src, /<title>\s*([^<]+?)\s*<\/title>/i) ?? slugKey)
     ),
     iconUrl: (() => {
       const icon =
@@ -464,8 +461,8 @@ function parseMaterialDetailHtml(html: string, slugKey: string): MaterialDetail 
     rarity:
       cleanKey(
         firstMatch(src, /<span\b[^>]*class="[^"]*\bhover_text_rarity\d+\b[^"]*"[^>]*>\s*([^<]+?)\s*<\/span>/i) ??
-          firstMatch(src, /<span\b[^>]*class='[^']*\bhover_text_rarity\d+\b[^']*'[^>]*>\s*([^<]+?)\s*<\/span>/i) ??
-          ""
+        firstMatch(src, /<span\b[^>]*class='[^']*\bhover_text_rarity\d+\b[^']*'[^>]*>\s*([^<]+?)\s*<\/span>/i) ??
+        ""
       ) || null,
     technology: (() => {
       const techStr =
@@ -490,7 +487,9 @@ function parseMaterialDetailHtml(html: string, slugKey: string): MaterialDetail 
     })(),
     isAvailable: !/fa-sack-xmark|Not available/i.test(src),
     recipes: [],
-
+    effects: (() => {
+      return extractItemSkillBarsTextFromHtml(src);
+    })(),
     stats: [],
     others: [],
     producedAt: [],
@@ -583,6 +582,7 @@ function mergeWithIndexFallback(detail: MaterialDetail): MaterialDetail {
     rarity: detail.rarity || index.rarity,
     technology: detail.technology ?? index.technology ?? null,
     description: detail.description || index.description,
+    effects: Array.isArray(detail.effects) ? detail.effects : [],
     isAvailable: detail.isAvailable ?? index.isAvailable,
     recipes: detail.recipes?.length ? detail.recipes : index.recipes,
   };

@@ -1,8 +1,9 @@
 // app/animalCrossing/villager/[id].tsx
-import React, { useEffect, useMemo, useState } from "react";
-import { View, Text, ScrollView, ActivityIndicator, Image, Pressable } from "react-native";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { View, Text, ScrollView, ActivityIndicator, Pressable } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { useLocalSearchParams } from "expo-router";
+import { Image as ExpoImage } from "expo-image";
 
 import PageWrapper from "@/components/PageWrapper";
 import { fetchVillagerByName, type NookipediaVillager } from "@/lib/animalCrossing/nookipediaVillagers";
@@ -44,24 +45,77 @@ function buildHeroCandidates(item?: NookipediaVillager | null): string[] {
   ]);
 }
 
-function StatRow({ label, value }: { label: string; value?: any }) {
-  const v = value == null ? null : String(value).trim();
-  if (!v) return null;
-
+function Badge({ icon, text }: { icon?: React.ReactNode; text: string; }) {
   return (
-    <View className="flex-row items-start justify-between py-1">
-      <Text className="text-[11px] text-slate-400">{label}</Text>
-      <Text className="text-[11px] text-slate-200 text-right ml-3 flex-1">{v}</Text>
+    <View className="flex-row items-center mr-2 mb-2 px-3 py-2 rounded-full bg-emerald-900/20 border border-emerald-500/25">
+      {icon ? <View className="mr-2">{icon}</View> : null}
+      <Text className="text-[11px] font-semibold text-emerald-100">{text}</Text>
     </View>
   );
 }
 
-function SectionTitle({ children }: { children: React.ReactNode }) {
-  return <Text className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">{children}</Text>;
+function LeafChip({ label, value }: { label: string; value?: any; }) {
+  const v = value == null ? "" : String(value).trim();
+  if (!v) return null;
+
+  return (
+    <View className="flex-row items-start justify-between py-2">
+      <View className="flex-row items-center">
+        <View className="w-5 items-center">
+          <Text className="text-[12px] text-emerald-200">•</Text>
+        </View>
+        <Text className="text-[11px] text-emerald-100/90">{label}</Text>
+      </View>
+      <Text className="text-[11px] text-emerald-50 text-right ml-3 flex-1">{v}</Text>
+    </View>
+  );
 }
 
-function Card({ children }: { children: React.ReactNode }) {
-  return <View className="rounded-3xl bg-slate-900/80 border border-slate-700 p-4">{children}</View>;
+function SectionLabel({ children }: { children: React.ReactNode; }) {
+  return (
+    <View className="flex-row items-center mt-4 mb-2 px-1">
+      <View className="w-2 h-2 rounded-full bg-emerald-300/80 mr-2" />
+      <Text className="text-[11px] font-extrabold tracking-[0.16em] uppercase text-emerald-100/90">
+        {children}
+      </Text>
+    </View>
+  );
+}
+
+function PaperCard({ children }: { children: React.ReactNode; }) {
+  return (
+    <View className="rounded-[28px] bg-emerald-950/35 border border-emerald-500/20 p-4 overflow-hidden">
+      <View className="absolute -top-10 -right-10 w-44 h-44 rounded-full bg-emerald-400/10" />
+      <View className="absolute -bottom-12 -left-12 w-52 h-52 rounded-full bg-lime-300/10" />
+      {children}
+    </View>
+  );
+}
+
+function WoodTitle({ title, subtitle }: { title: string; subtitle?: string | null; }) {
+  return (
+    <View className="items-center">
+      <View className="px-4 py-2 rounded-2xl bg-amber-900/35 border border-amber-200/20">
+        <Text className="text-[16px] font-extrabold text-amber-50 text-center">{title}</Text>
+      </View>
+      {subtitle ? <Text className="mt-2 text-[11px] text-emerald-100/80 text-center">{subtitle}</Text> : null}
+    </View>
+  );
+}
+
+function SpeechBubble({ label, value }: { label: string; value?: string | null; }) {
+  const v = String(value ?? "").trim();
+  if (!v) return null;
+
+  return (
+    <View className="mt-3">
+      <View className="rounded-[22px] bg-emerald-900/20 border border-emerald-500/20 px-4 py-3">
+        <Text className="text-[10px] font-bold tracking-[0.14em] uppercase text-emerald-100/70">{label}</Text>
+        <Text className="mt-1 text-[12px] text-emerald-50 leading-5">{v}</Text>
+      </View>
+      <View className="ml-6 w-0 h-0 border-l-[10px] border-r-[10px] border-t-[12px] border-l-transparent border-r-transparent border-t-emerald-500/20" />
+    </View>
+  );
 }
 
 export default function VillagerDetailPage() {
@@ -79,7 +133,8 @@ export default function VillagerDetailPage() {
   const [item, setItem] = useState<NookipediaVillager | null>(null);
   const [thumbUsed, setThumbUsed] = useState<number>(THUMB_PRIMARY);
 
-  const [heroFailedOnce, setHeroFailedOnce] = useState(false);
+  const [heroCandidateIndex, setHeroCandidateIndex] = useState(0);
+  const [heroLoading, setHeroLoading] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -90,7 +145,7 @@ export default function VillagerDetailPage() {
         setLoading(true);
 
         setItem(null);
-        setHeroFailedOnce(false);
+        setHeroCandidateIndex(0);
 
         try {
           const x = await fetchVillagerByName(villagerName, { thumbsize: THUMB_PRIMARY });
@@ -120,7 +175,22 @@ export default function VillagerDetailPage() {
   const nh = (item as any)?.nh_details ?? null;
 
   const heroCandidates = useMemo(() => buildHeroCandidates(item), [item]);
-  const heroUri = !heroFailedOnce ? (heroCandidates[0] ?? null) : (heroCandidates[1] ?? heroCandidates[0] ?? null);
+  const heroUri = heroCandidates[heroCandidateIndex] ?? null;
+
+  useEffect(() => {
+    setHeroCandidateIndex(0);
+  }, [heroCandidates.length]);
+
+  useEffect(() => {
+    if (heroUri) ExpoImage.prefetch(heroUri).catch(() => { });
+  }, [heroUri]);
+
+  const onHeroError = useCallback(() => {
+    setHeroLoading(false);
+    if (heroCandidateIndex + 1 < heroCandidates.length) {
+      setHeroCandidateIndex((i) => i + 1);
+    }
+  }, [heroCandidateIndex, heroCandidates.length]);
 
   const species = asNonEmptyString((item as any)?.species);
   const personality = asNonEmptyString((item as any)?.personality);
@@ -148,153 +218,211 @@ export default function VillagerDetailPage() {
 
   const appearances = Array.isArray((item as any)?.appearances) ? (item as any).appearances.join(", ") : null;
 
+  useEffect(() => {
+    const urls = uniqStrings([houseExterior, houseInterior].filter(Boolean));
+    if (!urls.length) return;
+    ExpoImage.prefetch(urls).catch(() => { });
+  }, [houseExterior, houseInterior]);
+
+  const subtitleLine = useMemo(() => {
+    const parts: string[] = [];
+    if (species) parts.push(species);
+    if (personality) parts.push(personality);
+    if (gender) parts.push(gender);
+    return parts.join(" • ");
+  }, [species, personality, gender]);
+
   return (
     <PageWrapper scroll={false} title={displayName} subtitle="Villager" headerLayout="inline">
       {loading ? (
         <View className="flex-1 items-center justify-center mt-6">
           <ActivityIndicator />
-          <Text className="mt-2 text-sm text-slate-300">Loading…</Text>
+          <Text className="mt-2 text-sm text-emerald-100/80">Loading…</Text>
         </View>
       ) : error ? (
         <View className="flex-1 items-center justify-center mt-6 px-5">
-          <Text className="text-sm text-rose-300 text-center">{error}</Text>
+          <View className="rounded-[26px] bg-rose-950/30 border border-rose-500/25 px-4 py-3">
+            <Text className="text-sm text-rose-200 text-center">{error}</Text>
+          </View>
         </View>
       ) : (
-        <ScrollView contentContainerStyle={{ paddingBottom: 28 }}>
-          {/* HERO */}
+        <ScrollView contentContainerStyle={{ paddingBottom: 28 }} className="px-3">
           <View className="mt-4">
-            <Card>
-              <View className="items-center">
-                <View style={{ width: 180, height: 180, alignItems: "center", justifyContent: "center" }}>
-                  {heroUri ? (
-                    <Image
-                      source={{ uri: heroUri }}
-                      style={{ width: 180, height: 180 }}
-                      resizeMode="contain"
-                      onError={() => {
-                        if (!heroFailedOnce) setHeroFailedOnce(true);
-                      }}
-                    />
-                  ) : (
-                    <View className="w-[180px] h-[180px] rounded-3xl bg-slate-950/60 border border-slate-700 items-center justify-center">
-                      <Feather name="image" size={20} color="#64748b" />
-                      <Text className="text-slate-500 text-[11px] mt-2">No image</Text>
-                    </View>
-                  )}
+            <PaperCard>
+              <View className="flex-row items-center justify-between mb-3">
+                <View className="flex-row items-center">
+                  <View className="w-8 h-8 rounded-2xl bg-emerald-500/15 border border-emerald-500/25 items-center justify-center">
+                    <Feather name="feather" size={16} color="#a7f3d0" />
+                  </View>
+                  <Text className="ml-2 text-[11px] font-bold tracking-[0.14em] text-emerald-100/75 uppercase">
+                    Nook Passport
+                  </Text>
                 </View>
 
-                {/* Collected toggle only */}
-                <View className="flex-row items-center mt-3">
-                  <Pressable onPress={() => toggleCollected("villager", villagerName)}>
-                    <Text
-                      className={`px-3 py-2 rounded-2xl border text-[12px] font-semibold ${
-                        isCollected
-                          ? "text-emerald-200 bg-emerald-500/15 border-emerald-500/40"
-                          : "text-slate-200 bg-slate-950/40 border-slate-700"
+                <Pressable onPress={() => toggleCollected("villager", villagerName)}>
+                  <View
+                    className={`px-3 py-2 rounded-full border ${isCollected
+                        ? "bg-emerald-500/15 border-emerald-500/35"
+                        : "bg-amber-500/10 border-amber-300/25"
                       }`}
-                    >
-                      {isCollected ? "Collected" : "Collect"}
+                  >
+                    <Text className={`text-[12px] font-extrabold ${isCollected ? "text-emerald-100" : "text-amber-100"}`}>
+                      {isCollected ? "Island Resident" : "Moved Out"}
                     </Text>
-                  </Pressable>
+                  </View>
+                </Pressable>
+              </View>
+
+              <View className="flex-row">
+                <View className="w-[132px]">
+                  <View className="rounded-[26px] bg-emerald-900/20 border border-emerald-500/20 p-3 items-center justify-center">
+                    <View style={{ width: 96, height: 96, alignItems: "center", justifyContent: "center" }}>
+                      {heroUri ? (
+                        <>
+                          <ExpoImage
+                            source={{ uri: heroUri }}
+                            style={{ width: 96, height: 96 }}
+                            contentFit="contain"
+                            transition={120}
+                            cachePolicy="disk"
+                            onLoadStart={() => setHeroLoading(true)}
+                            onLoad={() => setHeroLoading(false)}
+                            onError={onHeroError}
+                          />
+                          {heroLoading ? (
+                            <View
+                              style={{
+                                position: "absolute",
+                                left: 0,
+                                top: 0,
+                                right: 0,
+                                bottom: 0,
+                                alignItems: "center",
+                                justifyContent: "center",
+                                backgroundColor: "rgba(6, 78, 59, 0.25)",
+                                borderRadius: 18,
+                              }}
+                            >
+                              <ActivityIndicator />
+                            </View>
+                          ) : null}
+                        </>
+                      ) : (
+                        <View className="w-[96px] h-[96px] rounded-[22px] bg-emerald-950/50 border border-emerald-500/20 items-center justify-center">
+                          <Feather name="image" size={18} color="#a7f3d0" />
+                          <Text className="text-emerald-100/60 text-[10px] mt-2">No image</Text>
+                        </View>
+                      )}
+                    </View>
+                  </View>
                 </View>
 
-                <Text className="mt-3 text-base font-semibold text-slate-50 text-center">{displayName}</Text>
+                <View className="flex-1 pl-3">
+                  <WoodTitle title={displayName} subtitle={subtitleLine || null} />
 
-                <Text className="mt-1 text-[11px] text-slate-500 text-center">
-                  {species ?? "Villager"}
-                  {personality ? ` • ${personality}` : ""}
-                  {gender ? ` • ${gender}` : ""}
-                </Text>
+                  <View className="mt-3 flex-row flex-wrap">
+                    {birthday ? <Badge icon={<Feather name="calendar" size={14} color="#a7f3d0" />} text={birthday} /> : null}
+                    {sign ? <Badge icon={<Feather name="star" size={14} color="#a7f3d0" />} text={sign} /> : null}
+                    {hobby ? <Badge icon={<Feather name="heart" size={14} color="#a7f3d0" />} text={hobby} /> : null}
+                  </View>
+                </View>
               </View>
-            </Card>
+
+              {/* QUOTE + CATCHPHRASE SIDE-BY-SIDE UNDER TOP DATA */}
+              {(quote || catchphrase) ? (
+                <View className="mt-3 flex-row">
+                  <View className="w-1/2 pr-1">
+                    <SpeechBubble label="Quote" value={quote} />
+                  </View>
+                  <View className="w-1/2 pl-1">
+                    <SpeechBubble label="Catchphrase" value={catchphrase} />
+                  </View>
+                </View>
+              ) : null}
+            </PaperCard>
           </View>
 
-          {/* BASICS */}
-          <View className="mt-3 px-1">
-            <SectionTitle>Basics</SectionTitle>
-            <View className="mt-2">
-              <Card>
-                <StatRow label="Species" value={species} />
-                <StatRow label="Personality" value={personality} />
-                <StatRow label="Gender" value={gender} />
-                <StatRow label="Birthday" value={birthday} />
-                <StatRow label="Sign" value={sign} />
-                <StatRow label="Hobby" value={hobby} />
-                <StatRow label="Appearances" value={appearances} />
-              </Card>
-            </View>
-          </View>
+          <SectionLabel>Basics</SectionLabel>
+          <PaperCard>
+            <LeafChip label="Species" value={species} />
+            <LeafChip label="Personality" value={personality} />
+            <LeafChip label="Gender" value={gender} />
+            <LeafChip label="Birthday" value={birthday} />
+            <LeafChip label="Sign" value={sign} />
+            <LeafChip label="Hobby" value={hobby} />
+            <LeafChip label="Appearances" value={appearances} />
+          </PaperCard>
 
-          {/* QUOTE */}
-          {quote || catchphrase ? (
-            <View className="mt-3 px-1">
-              <SectionTitle>Quote</SectionTitle>
-              <View className="mt-2">
-                <Card>
-                  <StatRow label="Quote" value={quote} />
-                  <StatRow label="Catchphrase" value={catchphrase} />
-                </Card>
-              </View>
-            </View>
-          ) : null}
-
-          {/* FAVORITES */}
           {favStyles || favColors ? (
-            <View className="mt-3 px-1">
-              <SectionTitle>Favorites</SectionTitle>
-              <View className="mt-2">
-                <Card>
-                  <StatRow label="Styles" value={favStyles} />
-                  <StatRow label="Colors" value={favColors} />
-                </Card>
-              </View>
-            </View>
+            <>
+              <SectionLabel>Favorites</SectionLabel>
+              <PaperCard>
+                <LeafChip label="Styles" value={favStyles} />
+                <LeafChip label="Colors" value={favColors} />
+              </PaperCard>
+            </>
           ) : null}
 
-          {/* HOUSE */}
           {houseInterior || houseExterior || wallpaper || flooring || music || umbrella ? (
-            <View className="mt-3 px-1">
-              <SectionTitle>House</SectionTitle>
-              <View className="mt-2">
-                <Card>
-                  <StatRow label="Wallpaper" value={wallpaper} />
-                  <StatRow label="Flooring" value={flooring} />
-                  <StatRow label="Music" value={music} />
-                  <StatRow label="Umbrella" value={umbrella} />
+            <>
+              <SectionLabel>House</SectionLabel>
+              <PaperCard>
+                <LeafChip label="Wallpaper" value={wallpaper} />
+                <LeafChip label="Flooring" value={flooring} />
+                <LeafChip label="Music" value={music} />
+                <LeafChip label="Umbrella" value={umbrella} />
 
-                  {houseExterior || houseInterior ? (
-                    <View className="mt-3">
-                      <Text className="text-[11px] text-slate-400 mb-2">Images</Text>
+                {houseExterior || houseInterior ? (
+                  <View className="mt-4">
+                    <View className="flex-row items-center mb-2">
+                      <Feather name="home" size={14} color="#a7f3d0" />
+                      <Text className="ml-2 text-[11px] font-bold tracking-[0.14em] uppercase text-emerald-100/75">
+                        House Images
+                      </Text>
+                    </View>
 
-                      <View className="flex-row">
-                        <View className="w-1/2 pr-1">
-                          <View className="rounded-3xl border border-slate-700 bg-slate-900/70 p-3 items-center">
-                            <Text className="text-[11px] text-slate-400 mb-2">Exterior</Text>
-                            {houseExterior ? (
-                              <Image source={{ uri: houseExterior }} style={{ width: 120, height: 120 }} resizeMode="contain" />
-                            ) : (
-                              <Feather name="image" size={18} color="#64748b" />
-                            )}
-                          </View>
+                    <View className="flex-row">
+                      <View className="w-1/2 pr-1">
+                        <View className="rounded-[26px] border border-emerald-500/20 bg-emerald-900/15 p-3 items-center">
+                          <Text className="text-[11px] text-emerald-100/70 mb-2">Exterior</Text>
+                          {houseExterior ? (
+                            <ExpoImage
+                              source={{ uri: houseExterior }}
+                              style={{ width: 120, height: 120 }}
+                              contentFit="contain"
+                              transition={120}
+                              cachePolicy="disk"
+                            />
+                          ) : (
+                            <Feather name="image" size={18} color="#a7f3d0" />
+                          )}
                         </View>
+                      </View>
 
-                        <View className="w-1/2 pl-1">
-                          <View className="rounded-3xl border border-slate-700 bg-slate-900/70 p-3 items-center">
-                            <Text className="text-[11px] text-slate-400 mb-2">Interior</Text>
-                            {houseInterior ? (
-                              <Image source={{ uri: houseInterior }} style={{ width: 120, height: 120 }} resizeMode="contain" />
-                            ) : (
-                              <Feather name="image" size={18} color="#64748b" />
-                            )}
-                          </View>
+                      <View className="w-1/2 pl-1">
+                        <View className="rounded-[26px] border border-emerald-500/20 bg-emerald-900/15 p-3 items-center">
+                          <Text className="text-[11px] text-emerald-100/70 mb-2">Interior</Text>
+                          {houseInterior ? (
+                            <ExpoImage
+                              source={{ uri: houseInterior }}
+                              style={{ width: 120, height: 120 }}
+                              contentFit="contain"
+                              transition={120}
+                              cachePolicy="disk"
+                            />
+                          ) : (
+                            <Feather name="image" size={18} color="#a7f3d0" />
+                          )}
                         </View>
                       </View>
                     </View>
-                  ) : null}
-                </Card>
-              </View>
-            </View>
+                  </View>
+                ) : null}
+              </PaperCard>
+            </>
           ) : null}
+
+          <View className="h-6" />
         </ScrollView>
       )}
     </PageWrapper>

@@ -96,6 +96,13 @@ export type PokemonMoveSlot = {
 export type Pokemon = {
   id: number;
   name: string;
+
+  // ✅ MISSING IN YOUR TYPE (but present in PokéAPI response)
+  species: NamedAPIResource;
+
+  // (Optional but real field in PokéAPI; useful for forms/variants UI)
+  forms?: NamedAPIResource[];
+
   types: PokemonTypeSlot[];
   sprites: PokemonSpriteSet;
   stats: PokemonStat[];

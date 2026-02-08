@@ -3,27 +3,23 @@ import React, { useMemo, useEffect, useState, useCallback } from "react";
 import { View, Text, Pressable, ScrollView } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
-import RemoteIcon, { prefetchRemoteIcons } from "@/components/RemoteIcon";
+import RemoteIcon, { prefetchRemoteIcons } from "@/components/Palworld/RemoteIcon";
 import BottomSheetModal from "@/components/ui/BottomSheetModal";
 import { GliderIndexItem } from "@/lib/palworld/items/paldbGlider";
+
+import { SheetSectionLabel } from "@/components/Palworld/PalDetailSections";
+import { safeNum, safeName, clamp } from "../Construction/palGridKit";
 
 type GliderGridProps = {
   items: GliderIndexItem[];
   onPressItem?: (item: GliderIndexItem) => void;
-
   emptyText?: string;
-  showUnavailable?: boolean; // default false: hide “not available” items
-  numColumns?: number; // default 3
-
-  prefetchIcons?: boolean; // default true
+  showUnavailable?: boolean;
+  numColumns?: number;
+  prefetchIcons?: boolean;
 };
 
-function clamp(n: number, lo: number, hi: number) {
-  return Math.max(lo, Math.min(hi, n));
-}
-
 function rarityRingFromNumber(r?: number | null) {
-  // paldb: banner_rarity0..3 (common..epic)
   if (r === 3) return "border-fuchsia-400/70"; // epic
   if (r === 2) return "border-sky-400/70"; // rare
   if (r === 1) return "border-emerald-400/70"; // uncommon
@@ -37,16 +33,6 @@ function prettyRarity(rText?: string | null, rNum?: number | null) {
   if (rNum === 2) return "Rare";
   if (rNum === 1) return "Uncommon";
   return "Common";
-}
-
-function safeNum(v: any): number | null {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : null;
-}
-
-function safeName(x: any): string {
-  const s = String(x?.name ?? "").trim();
-  return s || "Unknown";
 }
 
 function stripTrailingGlider(name: string) {
@@ -77,19 +63,13 @@ function formatPillNumber(v: any): string {
   return `${txt.replace(/\.0$/, "")}k`;
 }
 
-/** ---------------- Sheet helpers (NO EMPTY SECTIONS) ---------------- */
-
-function SheetLabel({ children }: { children: React.ReactNode }) {
-  return <Text className="text-white/80 text-[12px] mb-2">{children}</Text>;
-}
-
 function DescriptionSection({ text }: { text: string | null | undefined }) {
   const s = String(text ?? "").trim();
   if (!s) return null;
 
   return (
     <View className="mt-5">
-      <SheetLabel>Description</SheetLabel>
+      <SheetSectionLabel>Description</SheetSectionLabel>
       <View className="rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-3">
         <Text className="text-white/80 text-[12px] leading-5">{s}</Text>
       </View>
@@ -108,7 +88,7 @@ function PartnerLevelsSection({
 
   return (
     <View className="mt-5">
-      <SheetLabel>Partner Levels</SheetLabel>
+      <SheetSectionLabel>Partner Levels</SheetSectionLabel>
 
       <View className="rounded-2xl border border-white/10 bg-white/[0.03] overflow-hidden">
         {levels.map((lv, idx) => (
@@ -144,7 +124,7 @@ function RecipeSection({
 
   return (
     <View className="mt-5">
-      <SheetLabel>Recipe</SheetLabel>
+      <SheetSectionLabel>Recipe</SheetSectionLabel>
 
       <View className="rounded-2xl border border-white/10 bg-white/[0.03] overflow-hidden">
         {rows.map((r, idx) => (
@@ -174,8 +154,6 @@ function RecipeSection({
     </View>
   );
 }
-
-/** ---------------- Component ---------------- */
 
 export default function GliderGrid({
   items,
@@ -362,14 +340,12 @@ export default function GliderGrid({
         </View>
       </View>
 
-      {/* Bottom sheet */}
       <BottomSheetModal
         visible={sheetVisible}
         onRequestClose={closeSheet}
         sheetStyle={{ maxHeight: "92%", minHeight: 420, paddingBottom: 10 }}
       >
         <ScrollView showsVerticalScrollIndicator={false} bounces contentContainerStyle={{ paddingBottom: 26 }}>
-          {/* Header (schematic-style: close button) */}
           <View className="flex-row items-center justify-between">
             <View className="flex-row items-center flex-1">
               <RemoteIcon
@@ -400,7 +376,6 @@ export default function GliderGrid({
             </Pressable>
           </View>
 
-          {/* Pills */}
           <View className="mt-4 flex-row flex-wrap gap-2">
             <View className="px-3 py-2 rounded-full border border-white/10 bg-white/5">
               <Text className="text-white/80 text-[12px]">
@@ -421,7 +396,6 @@ export default function GliderGrid({
             ) : null}
           </View>
 
-          {/* Sections (NO EMPTY) */}
           <DescriptionSection text={sel?.description ?? null} />
           <PartnerLevelsSection levels={selLevels as any} slug={String(sel?.slug ?? "glider")} />
           <RecipeSection rows={selRecipes as any} />

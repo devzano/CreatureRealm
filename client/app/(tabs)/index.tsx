@@ -9,6 +9,7 @@ import PalworldHomeContent from "@/components/Palworld/PalworldHomeContent";
 import AnimalCrossingHomeContent from "@/components/AnimalCrossing/AnimalCrossingHomeContent";
 import LiquidGlass from "@/components/ui/LiquidGlass";
 import RequestUniverseModal, { type UniverseRequestPayload } from "@/components/RequestUniverseModal";
+import GlassBadge from "@/components/ui/helpers/GlassBadge";
 
 type SeriesId = "pokemon" | "palworld" | "animal_crossing";
 type RequestStatus = "idle" | "success" | "error";
@@ -25,27 +26,6 @@ async function fetchWithTimeout(input: RequestInfo, init: RequestInit, timeoutMs
   } finally {
     clearTimeout(id);
   }
-}
-
-function GlassBadge({ label, tintColor }: { label: string; tintColor: string }) {
-  return (
-    <LiquidGlass
-      glassEffectStyle="clear"
-      interactive={false}
-      tinted
-      tintColor={tintColor}
-      showFallbackBackground
-      style={{
-        borderRadius: 999,
-        borderWidth: 1,
-        borderColor: "rgba(148,163,184,0.16)",
-      }}
-    >
-      <View style={{ paddingHorizontal: 10, paddingVertical: 5 }}>
-        <Text className="text-[10px] font-semibold text-slate-100">{label}</Text>
-      </View>
-    </LiquidGlass>
-  );
 }
 
 function GlassIconTile({
@@ -172,7 +152,7 @@ export default function GamesScreen() {
       <PageWrapper
         hideBackButton
         title="Your Universes"
-        subtitle="Select a collection to manage your progress, squads, and discoveries."
+        subtitle="Select a collection to manage your progress, squads & discoveries."
         leftActions={
           <LiquidGlass
             glassEffectStyle="clear"
@@ -187,9 +167,7 @@ export default function GamesScreen() {
             }}
           >
             <View style={{ paddingHorizontal: 10, paddingVertical: 6 }}>
-              <Text className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-300">
-                CreatureRealm
-              </Text>
+              <Text className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-300">CreatureRealm</Text>
             </View>
           </LiquidGlass>
         }
@@ -197,15 +175,81 @@ export default function GamesScreen() {
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingTop: 16, paddingBottom: 28 }}>
           {/* Pokémon Card */}
           <Pressable onPress={() => setActiveSeries("pokemon")} className="mb-3">
-            <GlassCardShell tintColor="rgba(56,189,248,0.07)">
+            <GlassCardShell tintColor="rgba(239,68,68,0.07)">
               <View className="px-4 py-4">
                 <View className="flex-row items-center mb-3">
-                  <GlassIconTile icon="pokeball" iconColor="#38bdf8" tintColor="rgba(56,189,248,0.12)" />
+                  <GlassIconTile icon="pokeball" iconColor="#ef4444" tintColor="rgba(239,68,68,0.12)" />
 
                   <View className="flex-1 ml-3">
                     <Text className="text-[15px] font-semibold text-slate-50">Pokémon</Text>
                     <Text className="text-[12px] text-slate-400 mt-0.5">
                       Track your progress across every mainline generation.
+                    </Text>
+                  </View>
+
+                  <View className="items-end">
+                    <GlassBadge label="COLLECTION" tintColor="rgba(239,68,68,0.10)" />
+                    <View className="mt-1">
+                      <MaterialCommunityIcons name="chevron-right" size={20} color="#94a3b8" />
+                    </View>
+                  </View>
+                </View>
+
+                <LiquidGlass
+                  glassEffectStyle="clear"
+                  interactive={false}
+                  tinted
+                  tintColor="rgba(239,68,68,0.10)"
+                  showFallbackBackground
+                  style={{
+                    borderRadius: 16,
+                    borderWidth: 1,
+                    borderColor: "rgba(148,163,184,0.14)",
+                  }}
+                >
+                  <View className="px-3 py-3">
+                    <View className="flex-row justify-between mb-2">
+                      <View className="flex-1 mr-2">
+                        <Text className="text-[11px] text-slate-400">Games & Regions</Text>
+                        <Text className="text-[11px] font-semibold text-slate-100 mt-0.5">
+                          Generations 1–9 • Kanto → Paldea
+                        </Text>
+                      </View>
+                      <View className="flex-1 ml-2">
+                        <Text className="text-[11px] text-slate-400">What You Can Track</Text>
+                        <Text className="text-[11px] font-semibold text-slate-100 mt-0.5">
+                         Games • Caught • Shiny • Alpha
+                        </Text>
+                      </View>
+                    </View>
+
+                    <View className="flex-row justify-between items-center mt-1">
+                      <View className="flex-row items-center">
+                        <MaterialCommunityIcons name="map" size={14} color="#e5e7eb" />
+                        <Text className="ml-1.5 text-[11px] text-slate-300">Interactive Map</Text>
+                      </View>
+                      <View className="flex-row items-center">
+                        <MaterialCommunityIcons name="sword-cross" size={14} color="#e5e7eb" />
+                        <Text className="ml-1.5 text-[11px] text-slate-300">Full Move & Ability</Text>
+                      </View>
+                    </View>
+                  </View>
+                </LiquidGlass>
+              </View>
+            </GlassCardShell>
+          </Pressable>
+
+          {/* Palworld Card */}
+          <Pressable onPress={() => setActiveSeries("palworld")} className="mb-3">
+            <GlassCardShell tintColor="rgba(56,189,248,0.07)">
+              <View className="px-4 py-4">
+                <View className="flex-row items-center mb-3">
+                  <GlassIconTile icon="sword-cross" iconColor="#38bdf8" tintColor="rgba(56,189,248,0.12)" />
+
+                  <View className="flex-1 ml-3">
+                    <Text className="text-[15px] font-semibold text-slate-50">Palworld</Text>
+                    <Text className="text-[12px] text-slate-400 mt-0.5">
+                      Complete your Paldeck, progression & prepare squads.
                     </Text>
                   </View>
 
@@ -232,81 +276,15 @@ export default function GamesScreen() {
                   <View className="px-3 py-3">
                     <View className="flex-row justify-between mb-2">
                       <View className="flex-1 mr-2">
-                        <Text className="text-[11px] text-slate-400">Games & regions</Text>
+                        <Text className="text-[11px] text-slate-400">World</Text>
                         <Text className="text-[11px] font-semibold text-slate-100 mt-0.5">
-                          Generations 1–9 • Kanto → Paldea
+                          Palpagos
                         </Text>
                       </View>
                       <View className="flex-1 ml-2">
-                        <Text className="text-[11px] text-slate-400">What you can track</Text>
+                        <Text className="text-[11px] text-slate-400">What You Can Track</Text>
                         <Text className="text-[11px] font-semibold text-slate-100 mt-0.5">
-                          Caught, shiny, alpha, teams, notes
-                        </Text>
-                      </View>
-                    </View>
-
-                    <View className="flex-row justify-between items-center mt-1">
-                      <View className="flex-row items-center">
-                        <MaterialCommunityIcons name="sword-cross" size={14} color="#e5e7eb" />
-                        <Text className="ml-1.5 text-[11px] text-slate-300">Full move & ability breakdowns</Text>
-                      </View>
-                      <View className="flex-row items-center">
-                        <MaterialCommunityIcons name="star-four-points-outline" size={14} color="#facc15" />
-                        <Text className="ml-1.5 text-[11px] text-slate-300">Shiny hunt helpers</Text>
-                      </View>
-                    </View>
-                  </View>
-                </LiquidGlass>
-              </View>
-            </GlassCardShell>
-          </Pressable>
-
-          {/* Palworld Card */}
-          <Pressable onPress={() => setActiveSeries("palworld")} className="mb-3">
-            <GlassCardShell tintColor="rgba(249,115,22,0.07)">
-              <View className="px-4 py-4">
-                <View className="flex-row items-center mb-3">
-                  <GlassIconTile icon="sword-cross" iconColor="#f97316" tintColor="rgba(249,115,22,0.12)" />
-
-                  <View className="flex-1 ml-3">
-                    <Text className="text-[15px] font-semibold text-slate-50">Palworld</Text>
-                    <Text className="text-[12px] text-slate-400 mt-0.5">
-                      Build your Paldeck, squads, and progression routes.
-                    </Text>
-                  </View>
-
-                  <View className="items-end">
-                    <GlassBadge label="COLLECTION" tintColor="rgba(249,115,22,0.10)" />
-                    <View className="mt-1">
-                      <MaterialCommunityIcons name="chevron-right" size={20} color="#94a3b8" />
-                    </View>
-                  </View>
-                </View>
-
-                <LiquidGlass
-                  glassEffectStyle="clear"
-                  interactive={false}
-                  tinted
-                  tintColor="rgba(249,115,22,0.10)"
-                  showFallbackBackground
-                  style={{
-                    borderRadius: 16,
-                    borderWidth: 1,
-                    borderColor: "rgba(148,163,184,0.14)",
-                  }}
-                >
-                  <View className="px-3 py-3">
-                    <View className="flex-row justify-between mb-2">
-                      <View className="flex-1 mr-2">
-                        <Text className="text-[11px] text-slate-400">World & routes</Text>
-                        <Text className="text-[11px] font-semibold text-slate-100 mt-0.5">
-                          Palpagos • dungeons • boss towers
-                        </Text>
-                      </View>
-                      <View className="flex-1 ml-2">
-                        <Text className="text-[11px] text-slate-400">What you can track</Text>
-                        <Text className="text-[11px] font-semibold text-slate-100 mt-0.5">
-                          Paldeck, squads, notes, bosses
+                          Paldeck • Squads • Journals
                         </Text>
                       </View>
                     </View>
@@ -314,11 +292,11 @@ export default function GamesScreen() {
                     <View className="flex-row justify-between items-center mt-1">
                       <View className="flex-row items-center">
                         <MaterialCommunityIcons name="map" size={14} color="#e5e7eb" />
-                        <Text className="ml-1.5 text-[11px] text-slate-300">Interactive map routing</Text>
+                        <Text className="ml-1.5 text-[11px] text-slate-300">Interactive Map</Text>
                       </View>
                       <View className="flex-row items-center">
                         <MaterialCommunityIcons name="home-group" size={14} color="#e5e7eb" />
-                        <Text className="ml-1.5 text-[11px] text-slate-300">Base & squad planning</Text>
+                        <Text className="ml-1.5 text-[11px] text-slate-300">Base & Character Upgrades</Text>
                       </View>
                     </View>
                   </View>
@@ -337,7 +315,7 @@ export default function GamesScreen() {
                   <View className="flex-1 ml-3">
                     <Text className="text-[15px] font-semibold text-slate-50">Animal Crossing</Text>
                     <Text className="text-[12px] text-slate-400 mt-0.5">
-                      Track your island life — villagers, critters, and checklists.
+                      Track your island life — villagers & critters.
                     </Text>
                   </View>
 
@@ -364,15 +342,15 @@ export default function GamesScreen() {
                   <View className="px-3 py-3">
                     <View className="flex-row justify-between mb-2">
                       <View className="flex-1 mr-2">
-                        <Text className="text-[11px] text-slate-400">Games & islands</Text>
+                        <Text className="text-[11px] text-slate-400">Islands</Text>
                         <Text className="text-[11px] font-semibold text-slate-100 mt-0.5">
-                          New Horizons • island planning
+                          New Horizons
                         </Text>
                       </View>
                       <View className="flex-1 ml-2">
-                        <Text className="text-[11px] text-slate-400">What you can track</Text>
+                        <Text className="text-[11px] text-slate-400">What You Can Track</Text>
                         <Text className="text-[11px] font-semibold text-slate-100 mt-0.5">
-                          Villagers, critters, museum, notes
+                          Villagers • Critters • Museum
                         </Text>
                       </View>
                     </View>
@@ -380,11 +358,11 @@ export default function GamesScreen() {
                     <View className="flex-row justify-between items-center mt-1">
                       <View className="flex-row items-center">
                         <MaterialCommunityIcons name="account-group" size={14} color="#e5e7eb" />
-                        <Text className="ml-1.5 text-[11px] text-slate-300">Villager tracking</Text>
+                        <Text className="ml-1.5 text-[11px] text-slate-300">Villager Tracking</Text>
                       </View>
                       <View className="flex-row items-center">
                         <MaterialCommunityIcons name="bug-outline" size={14} color="#e5e7eb" />
-                        <Text className="ml-1.5 text-[11px] text-slate-300">Critterpedia checklists</Text>
+                        <Text className="ml-1.5 text-[11px] text-slate-300">Critterpedia Checklists</Text>
                       </View>
                     </View>
                   </View>
@@ -393,7 +371,7 @@ export default function GamesScreen() {
             </GlassCardShell>
           </Pressable>
 
-          {/* More soon */}
+          {/* More Soon */}
           <LiquidGlass
             glassEffectStyle="clear"
             interactive={false}
@@ -430,11 +408,9 @@ export default function GamesScreen() {
                 </LiquidGlass>
 
                 <View className="flex-1">
-                  <Text className="text-[13px] font-semibold text-slate-200">
-                    More CreatureRealm universes coming soon
-                  </Text>
+                  <Text className="text-[13px] font-semibold text-slate-200">More CreatureRealm universes coming soon</Text>
                   <Text className="text-[12px] text-slate-500 mt-0.5">
-                    Separate collections for other creature games will live here with their own tracking and layouts.
+                    Separate collections for other creature games will live here with their own tracking & layouts.
                   </Text>
                 </View>
               </View>

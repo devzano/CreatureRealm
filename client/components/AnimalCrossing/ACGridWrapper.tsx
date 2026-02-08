@@ -58,7 +58,7 @@ export default function ACGridWrapper<T>(props: ACGridWrapperProps<T>) {
 
     footerMode,
     footerLoadingText = "Loading more…",
-    footerEndText = "End of list",
+    footerEndText = "",
 
     refreshing = false,
     onRefresh,

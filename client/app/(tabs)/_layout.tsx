@@ -1,4 +1,4 @@
-// app/(tabs)/_layout.tsx  (or wherever your Tabs layout lives)
+// app/(tabs)/_layout.tsx
 import { Tabs } from "expo-router";
 import { MaterialIcons, MaterialCommunityIcons } from "@expo/vector-icons";
 import FloatingTabBar from "@/components/Tabbar/FloatingTabBar";
@@ -6,11 +6,12 @@ import FloatingTabBar from "@/components/Tabbar/FloatingTabBar";
 export default function TabsLayout() {
   return (
     <Tabs
-      tabBar={(props) => <FloatingTabBar {...props} />}
+      // tabBar={(props) => <FloatingTabBar {...props} />} //
       screenOptions={{
         tabBarActiveTintColor: "#0cd3f1",
         tabBarInactiveTintColor: "#9CA3AF",
         headerShown: false,
+        tabBarStyle: { display: 'none' },
       }}
     >
       <Tabs.Screen
@@ -22,6 +23,20 @@ export default function TabsLayout() {
           ),
         }}
       />
+
+      {/* <Tabs.Screen
+        name="collection"
+        options={{
+          title: "Collection",
+          tabBarIcon: ({ color, size }) => (
+            <MaterialCommunityIcons
+              name="account-group"
+              color={color}
+              size={size}
+            />
+          ),
+        }}
+      /> */}
     </Tabs>
   );
 }

@@ -4,17 +4,10 @@ import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View, ScrollView
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { WebView } from "react-native-webview";
-import type {
-  WebView as WebViewType,
-  WebViewMessageEvent,
-} from "react-native-webview";
+import type { WebView as WebViewType, WebViewMessageEvent } from "react-native-webview";
 import * as WebBrowser from "expo-web-browser";
 import { useUiOverlayStore } from "@/store/uiOverlayStore";
-import {
-  FULLSCREEN_HACK_JS,
-  MAP_CONTROL_HELPERS_JS,
-  buildCRMapScript,
-} from "../../../lib/maps/mapScripts";
+import { FULLSCREEN_HACK_JS, MAP_CONTROL_HELPERS_JS, buildCRMapScript } from "@/lib/maps/mapScripts";
 
 type MapToggleKind = "parent" | "sub" | "item";
 

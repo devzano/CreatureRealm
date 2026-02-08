@@ -1,8 +1,9 @@
 // components/AnimalCrossing/ACFossilGrid.tsx
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { View, Text, ActivityIndicator, Image, Pressable } from "react-native";
+import { View, Text, ActivityIndicator, Pressable } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import { Image as ExpoImage } from "expo-image";
 
 import {
   fetchFossilIndividualByName,
@@ -13,12 +14,13 @@ import {
 import ACGridWrapper from "@/components/AnimalCrossing/ACGridWrapper";
 import { useACNameDetailGrid } from "@/lib/animalCrossing/useACNameDetailGrid";
 import { useAnimalCrossingCollectionStore, acMakeKey } from "@/store/animalCrossingCollectionStore";
+import LocalIcon from "@/components/LocalIcon";
 
 const PAGE_SIZE = 45;
 const THUMB_PRIMARY = 256;
 const THUMB_FALLBACK = 128;
 
-const PREFETCH_BUFFER = 6;
+const PREFETCH_BUFFER = 12;
 const DETAIL_CONCURRENCY = 3;
 const INITIAL_PREFETCH = 9;
 
@@ -42,6 +44,8 @@ function buildFossilImageCandidates(item?: NookipediaFossilIndividualItem | null
 
 type ACFossilGridProps = {
   search: string;
+  collectedOnly?: boolean;
+  collectedIds?: string[];
 };
 
 type FossilTileProps = {
@@ -58,19 +62,11 @@ const FossilTile: React.FC<FossilTileProps> = React.memo(
 
     const key = useMemo(() => acMakeKey("fossil", name), [name]);
 
-    const entry = useAnimalCrossingCollectionStore(
-      useCallback((s: any) => s.entries?.[key], [key])
-    );
+    const entry = useAnimalCrossingCollectionStore(useCallback((s: any) => s.entries?.[key], [key]));
 
-    const toggleCollected = useAnimalCrossingCollectionStore(
-      useCallback((s: any) => s.toggleCollected, [])
-    );
-    const incrementCount = useAnimalCrossingCollectionStore(
-      useCallback((s: any) => s.incrementCount, [])
-    );
-    const decrementCount = useAnimalCrossingCollectionStore(
-      useCallback((s: any) => s.decrementCount, [])
-    );
+    const toggleCollected = useAnimalCrossingCollectionStore(useCallback((s: any) => s.toggleCollected, []));
+    const incrementCount = useAnimalCrossingCollectionStore(useCallback((s: any) => s.incrementCount, []));
+    const decrementCount = useAnimalCrossingCollectionStore(useCallback((s: any) => s.decrementCount, []));
 
     const isCollected = !!entry?.collected;
     const count = Math.max(Number(entry?.count || 0), 0);
@@ -87,7 +83,7 @@ const FossilTile: React.FC<FossilTileProps> = React.memo(
 
     useEffect(() => {
       if (!currentUri) return;
-      Image.prefetch(currentUri).catch(() => {});
+      ExpoImage.prefetch(currentUri).catch(() => {});
     }, [currentUri]);
 
     const goDetails = useCallback(() => {
@@ -124,12 +120,14 @@ const FossilTile: React.FC<FossilTileProps> = React.memo(
             <View style={{ width: 60, height: 60, alignItems: "center", justifyContent: "center" }}>
               {currentUri ? (
                 <>
-                  <Image
+                  <ExpoImage
                     source={{ uri: currentUri }}
                     style={{ width: 60, height: 60 }}
-                    resizeMode="contain"
+                    contentFit="contain"
+                    transition={120}
+                    cachePolicy="disk"
                     onLoadStart={() => setImgLoading(true)}
-                    onLoadEnd={() => setImgLoading(false)}
+                    onLoad={() => setImgLoading(false)}
                     onError={handleImageError}
                   />
 
@@ -152,13 +150,21 @@ const FossilTile: React.FC<FossilTileProps> = React.memo(
                   ) : null}
                 </>
               ) : (
-                <View className="w-[60px] h-[60px] rounded-2xl bg-slate-950/60 border border-slate-700 items-center justify-center">
-                  {showOverlaySpinner ? <ActivityIndicator /> : <Feather name="image" size={18} color="#64748b" />}
+                <View style={{ width: 60, height: 60, alignItems: "center", justifyContent: "center" }}>
+                  <LocalIcon
+                    source={null}
+                    size={60}
+                    roundedClassName="rounded-2xl"
+                    placeholderClassName="bg-slate-950/60 border border-slate-700"
+                  />
+                  <View style={{ position: "absolute" }}>
+                    {showOverlaySpinner ? <ActivityIndicator /> : <Feather name="image" size={18} color="#64748b" />}
+                  </View>
                 </View>
               )}
             </View>
 
-            <Text className="text-xs font-semibold text-slate-50 text-center mt-2" numberOfLines={2}>
+            <Text className="text-xs font-semibold text-slate-50 text-center mt-2" numberOfLines={1}>
               {name}
             </Text>
 
@@ -178,28 +184,6 @@ const FossilTile: React.FC<FossilTileProps> = React.memo(
                 {isCollected ? "Collected" : "Collect"}
               </Text>
             </Pressable>
-
-            {isCollected ? (
-              <View className="flex-row items-center ml-2">
-                <Pressable
-                  onPress={() => decrementCount("fossil", name)}
-                  className="w-6 h-6 rounded-xl bg-slate-950/60 border border-slate-700 items-center justify-center"
-                >
-                  <Text className="text-slate-100 text-[12px] font-bold">−</Text>
-                </Pressable>
-
-                <View className="px-2">
-                  <Text className="text-[11px] text-slate-200 font-semibold">{count}</Text>
-                </View>
-
-                <Pressable
-                  onPress={() => incrementCount("fossil", name)}
-                  className="w-6 h-6 rounded-xl bg-slate-950/60 border border-slate-700 items-center justify-center"
-                >
-                  <Text className="text-slate-100 text-[12px] font-bold">+</Text>
-                </Pressable>
-              </View>
-            ) : null}
           </View>
         </View>
       </View>
@@ -207,7 +191,42 @@ const FossilTile: React.FC<FossilTileProps> = React.memo(
   }
 );
 
-const ACFossilGrid: React.FC<ACFossilGridProps> = ({ search }) => {
+const ACFossilGrid: React.FC<ACFossilGridProps> = ({ search, collectedOnly = false, collectedIds }) => {
+  const entries = useAnimalCrossingCollectionStore(useCallback((s: any) => s.entries, []));
+
+  const collectedSet = useMemo(() => {
+    const set = new Set<string>();
+
+    if (Array.isArray(collectedIds)) {
+      for (const x of collectedIds) {
+        const s = String(x ?? "").trim();
+        if (s) set.add(s);
+      }
+      return set;
+    }
+
+    if (!collectedOnly) return set;
+
+    for (const [key, entry] of Object.entries(entries || {})) {
+      if (!String(key).startsWith("fossil:")) continue;
+
+      const isCollected = !!(entry as any)?.collected;
+      const count = Math.max(Number((entry as any)?.count || 0), 0);
+      if (!isCollected && count <= 0) continue;
+
+      const name = String(key).slice("fossil:".length).trim();
+      if (name) set.add(name);
+    }
+
+    return set;
+  }, [entries, collectedOnly, collectedIds]);
+
+  const extraFilter = useMemo(() => {
+    if (!collectedOnly) return undefined;
+    if (collectedSet.size <= 0) return () => false;
+    return (name: string) => collectedSet.has(String(name));
+  }, [collectedOnly, collectedSet]);
+
   const grid = useACNameDetailGrid<NookipediaFossilIndividualItem>({
     search,
     fetchNames: fetchFossilIndividualNames,
@@ -218,12 +237,14 @@ const ACFossilGrid: React.FC<ACFossilGridProps> = ({ search }) => {
     prefetchBuffer: PREFETCH_BUFFER,
     detailConcurrency: DETAIL_CONCURRENCY,
     initialPrefetchCount: INITIAL_PREFETCH,
+    extraFilter,
   });
 
   const headerLine = useMemo(() => {
+    const label = collectedOnly ? "collected fossils" : "fossils";
     const loading = Object.keys(grid.detailLoadingByName).length > 0 ? " • loading…" : "";
-    return `Showing ${grid.visibleNames.length} / ${grid.filteredNames.length} fossils${loading}`;
-  }, [grid.visibleNames.length, grid.filteredNames.length, grid.detailLoadingByName]);
+    return `Showing ${grid.visibleNames.length} / ${grid.filteredNames.length} ${label}${loading}`;
+  }, [grid.visibleNames.length, grid.filteredNames.length, grid.detailLoadingByName, collectedOnly]);
 
   const renderFossilItem = useCallback(
     ({ item }: { item: string; index: number }) => (
@@ -241,11 +262,11 @@ const ACFossilGrid: React.FC<ACFossilGridProps> = ({ search }) => {
   return (
     <ACGridWrapper<string>
       isInitialLoading={grid.namesLoading && !grid.namesLoadedOnce}
-      initialLoadingText="Loading fossil list…"
+      initialLoadingText={collectedOnly ? "Loading your collected fossils…" : "Loading fossil list…"}
       errorText={grid.namesError}
       onRetry={grid.retryReloadNames}
       isEmpty={grid.filteredNames.length === 0}
-      emptyText="No fossils match this search."
+      emptyText={collectedOnly ? "No collected fossils in this category." : "No fossils match this search."}
       headerLine={headerLine}
       data={grid.visibleNames}
       keyExtractor={(item) => item}

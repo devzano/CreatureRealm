@@ -12,6 +12,7 @@ export type UseACNameDetailGridOpts<TDetail> = {
   detailConcurrency?: number;
   initialPrefetchCount?: number;
   extraFilter?: (name: string) => boolean;
+  mergeDetail?: (prev: TDetail, next: TDetail) => TDetail;
 };
 
 export function useACNameDetailGrid<TDetail>(opts: UseACNameDetailGridOpts<TDetail>) {
@@ -21,20 +22,20 @@ export function useACNameDetailGrid<TDetail>(opts: UseACNameDetailGridOpts<TDeta
     search,
 
     pageSize = 45,
-
     thumbPrimary = 256,
     thumbFallback = 128,
-
     prefetchBuffer = 6,
     detailConcurrency = 3,
     initialPrefetchCount = 9,
 
     extraFilter,
+    mergeDetail,
   } = opts;
 
   const normalizedSearch = String(search ?? "").trim().toLowerCase();
 
-  const [namesLoading, setNamesLoading] = useState(false);
+  // NOTE: keep internal raw loading state
+  const [namesLoadingRaw, setNamesLoadingRaw] = useState(false);
   const [namesError, setNamesError] = useState<string | null>(null);
   const [namesLoadedOnce, setNamesLoadedOnce] = useState(false);
   const [names, setNames] = useState<string[]>([]);
@@ -66,7 +67,7 @@ export function useACNameDetailGrid<TDetail>(opts: UseACNameDetailGridOpts<TDeta
     (async () => {
       try {
         setNamesError(null);
-        setNamesLoading(true);
+        setNamesLoadingRaw(true);
 
         const list = await fetchNames();
         if (cancelled) return;
@@ -78,7 +79,7 @@ export function useACNameDetailGrid<TDetail>(opts: UseACNameDetailGridOpts<TDeta
         console.warn(e);
         setNamesError(e instanceof Error ? e.message : "Failed to load list.");
       } finally {
-        if (!cancelled) setNamesLoading(false);
+        if (!cancelled) setNamesLoadingRaw(false);
       }
     })();
 
@@ -86,6 +87,10 @@ export function useACNameDetailGrid<TDetail>(opts: UseACNameDetailGridOpts<TDeta
       cancelled = true;
     };
   }, [namesLoadedOnce, fetchNames]);
+
+  // ✅ KEY FIX: prevent the “empty flash” on first render.
+  // If we have never loaded once and we currently have no names, treat as loading.
+  const namesLoading = namesLoadingRaw || (!namesLoadedOnce && names.length === 0 && !namesError);
 
   const filteredNames = useMemo(() => {
     let out = names;
@@ -125,7 +130,7 @@ export function useACNameDetailGrid<TDetail>(opts: UseACNameDetailGridOpts<TDeta
   const retryReloadNames = useCallback(async () => {
     try {
       setNamesError(null);
-      setNamesLoading(true);
+      setNamesLoadingRaw(true);
 
       const list = await fetchNames();
       setNames(list);
@@ -137,9 +142,20 @@ export function useACNameDetailGrid<TDetail>(opts: UseACNameDetailGridOpts<TDeta
       console.warn(e);
       setNamesError(e instanceof Error ? e.message : "Failed to load list.");
     } finally {
-      setNamesLoading(false);
+      setNamesLoadingRaw(false);
     }
   }, [fetchNames, resetDetailsState, pageSize]);
+
+  const setDetailMerged = useCallback(
+    (name: string, next: TDetail) => {
+      setDetailsByName((prev) => {
+        const existing = prev[name];
+        const merged = existing && mergeDetail ? mergeDetail(existing, next) : next;
+        return { ...prev, [name]: merged };
+      });
+    },
+    [mergeDetail]
+  );
 
   const pumpQueue = useCallback(async () => {
     if (pumpRunningRef.current) return;
@@ -165,17 +181,17 @@ export function useACNameDetailGrid<TDetail>(opts: UseACNameDetailGridOpts<TDeta
         (async () => {
           try {
             try {
-              const item256 = await fetchDetail(next, { thumbsize: thumbPrimary });
-              setDetailsByName((prev) => ({ ...prev, [next]: item256 }));
+              const itemPrimary = await fetchDetail(next, { thumbsize: thumbPrimary });
+              setDetailMerged(next, itemPrimary);
               setDetailThumbByName((prev) => ({ ...prev, [next]: thumbPrimary }));
               return;
             } catch {
-              const item128 = await fetchDetail(next, { thumbsize: thumbFallback });
-              setDetailsByName((prev) => ({ ...prev, [next]: item128 }));
+              const itemFallback = await fetchDetail(next, { thumbsize: thumbFallback });
+              setDetailMerged(next, itemFallback);
               setDetailThumbByName((prev) => ({ ...prev, [next]: thumbFallback }));
             }
-          } catch (e2) {
-            console.warn("Failed to fetch detail:", next, e2);
+          } catch {
+            // swallow: bad names should not spam logs
           } finally {
             inFlightRef.current.delete(next);
             setDetailLoadingByName((prev) => {
@@ -189,7 +205,7 @@ export function useACNameDetailGrid<TDetail>(opts: UseACNameDetailGridOpts<TDeta
     } finally {
       pumpRunningRef.current = false;
     }
-  }, [detailConcurrency, fetchDetail, thumbPrimary, thumbFallback]);
+  }, [detailConcurrency, fetchDetail, thumbPrimary, thumbFallback, setDetailMerged]);
 
   const enqueueDetailsForNames = useCallback(
     (xs: string[]) => {
@@ -250,8 +266,8 @@ export function useACNameDetailGrid<TDetail>(opts: UseACNameDetailGridOpts<TDeta
       setDetailLoadingByName((prev) => (prev[name] ? prev : { ...prev, [name]: true }));
 
       try {
-        const item128 = await fetchDetail(name, { thumbsize: thumbFallback });
-        setDetailsByName((prev) => ({ ...prev, [name]: item128 }));
+        const itemFallback = await fetchDetail(name, { thumbsize: thumbFallback });
+        setDetailMerged(name, itemFallback);
         setDetailThumbByName((prev) => ({ ...prev, [name]: thumbFallback }));
       } finally {
         setDetailLoadingByName((prev) => {
@@ -261,7 +277,7 @@ export function useACNameDetailGrid<TDetail>(opts: UseACNameDetailGridOpts<TDeta
         });
       }
     },
-    [detailThumbByName, fetchDetail, thumbPrimary, thumbFallback]
+    [detailThumbByName, fetchDetail, thumbPrimary, thumbFallback, setDetailMerged]
   );
 
   return {

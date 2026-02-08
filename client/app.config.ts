@@ -56,14 +56,14 @@ const androidIcons = {
 //   backgroundColor: "#071826"
 // };
 
-const BUILD_NUMBER = 7;
+const BUILD_NUMBER = 9;
 
 const config: ExpoConfig = {
   name: pick(appNames),
   slug: "CreatureRealm",
   scheme: pick(schemes),
 
-  version: "1.0.0",
+  version: "1.0.1",
   orientation: "portrait",
   icon: pick(iOSIcons),
   userInterfaceStyle: "automatic",

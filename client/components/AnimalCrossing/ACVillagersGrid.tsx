@@ -1,24 +1,28 @@
 // components/AnimalCrossing/ACVillagersGrid.tsx
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { View, Text, ActivityIndicator, Image, Pressable } from "react-native";
+import { View, Text, ActivityIndicator, Pressable, ScrollView } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import { Image as ExpoImage } from "expo-image";
 
 import {
   fetchVillagerByName,
   fetchVillagerNames,
+  fetchVillagerSpecies,
+  fetchVillagerSpeciesByName,
   type NookipediaVillager,
 } from "@/lib/animalCrossing/nookipediaVillagers";
 
 import ACGridWrapper from "@/components/AnimalCrossing/ACGridWrapper";
 import { useAnimalCrossingCollectionStore } from "@/store/animalCrossingCollectionStore";
 import { useACNameDetailGrid } from "@/lib/animalCrossing/useACNameDetailGrid";
+import LocalIcon from "@/components/LocalIcon";
 
 const PAGE_SIZE = 45;
 const THUMB_PRIMARY = 256;
 const THUMB_FALLBACK = 128;
 
-const PREFETCH_BUFFER = 6;
+const PREFETCH_BUFFER = 12;
 const DETAIL_CONCURRENCY = 3;
 const INITIAL_PREFETCH = 9;
 
@@ -37,7 +41,6 @@ function uniqStrings(list: any[]) {
 
 function buildVillagerImageCandidates(item?: NookipediaVillager | null): string[] {
   if (!item) return [];
-
   const nh = (item as any)?.nh_details ?? null;
 
   return uniqStrings([
@@ -50,8 +53,33 @@ function buildVillagerImageCandidates(item?: NookipediaVillager | null): string[
   ]);
 }
 
+function mergeVillager(prev: NookipediaVillager, next: NookipediaVillager): NookipediaVillager {
+  const prevNh: any = (prev as any)?.nh_details ?? null;
+  const nextNh: any = (next as any)?.nh_details ?? null;
+
+  return {
+    ...(prev as any),
+    ...(next as any),
+    nh_details:
+      prevNh || nextNh
+        ? {
+            ...(prevNh ?? {}),
+            ...(nextNh ?? {}),
+          }
+        : undefined,
+  };
+}
+
+function speciesFromDetail(detail?: NookipediaVillager | null): string | null {
+  if (!detail) return null;
+  const s = String((detail as any)?.species ?? "").trim();
+  return s ? s : null;
+}
+
 type ACVillagersGridProps = {
   search: string;
+  collectedOnly?: boolean;
+  collectedIds?: string[];
 };
 
 type VillagerTileProps = {
@@ -85,7 +113,7 @@ const VillagerTile: React.FC<VillagerTileProps> = React.memo(
 
     useEffect(() => {
       if (!currentUri) return;
-      Image.prefetch(currentUri).catch(() => {});
+      ExpoImage.prefetch(currentUri).catch(() => {});
     }, [currentUri]);
 
     const goDetails = useCallback(() => {
@@ -125,12 +153,14 @@ const VillagerTile: React.FC<VillagerTileProps> = React.memo(
             <View style={{ width: 60, height: 60, alignItems: "center", justifyContent: "center" }}>
               {currentUri ? (
                 <>
-                  <Image
+                  <ExpoImage
                     source={{ uri: currentUri }}
                     style={{ width: 60, height: 60 }}
-                    resizeMode="contain"
+                    contentFit="contain"
+                    transition={120}
+                    cachePolicy="disk"
                     onLoadStart={() => setImgLoading(true)}
-                    onLoadEnd={() => setImgLoading(false)}
+                    onLoad={() => setImgLoading(false)}
                     onError={handleImageError}
                   />
 
@@ -153,8 +183,16 @@ const VillagerTile: React.FC<VillagerTileProps> = React.memo(
                   ) : null}
                 </>
               ) : (
-                <View className="w-[60px] h-[60px] rounded-2xl bg-slate-950/60 border border-slate-700 items-center justify-center">
-                  {showOverlaySpinner ? <ActivityIndicator /> : <Feather name="image" size={18} color="#64748b" />}
+                <View style={{ width: 60, height: 60, alignItems: "center", justifyContent: "center" }}>
+                  <LocalIcon
+                    source={null}
+                    size={60}
+                    roundedClassName="rounded-2xl"
+                    placeholderClassName="bg-slate-950/60 border border-slate-700"
+                  />
+                  <View style={{ position: "absolute" }}>
+                    {showOverlaySpinner ? <ActivityIndicator /> : <Feather name="image" size={18} color="#64748b" />}
+                  </View>
                 </View>
               )}
             </View>
@@ -176,7 +214,7 @@ const VillagerTile: React.FC<VillagerTileProps> = React.memo(
               }`}
             >
               <Text className={`text-[10px] font-semibold ${isCollected ? "text-emerald-200" : "text-slate-300"}`}>
-                {isCollected ? "Collected" : "Collect"}
+                {isCollected ? "Island Resident" : "Moved Out"}
               </Text>
             </Pressable>
           </View>
@@ -186,13 +224,96 @@ const VillagerTile: React.FC<VillagerTileProps> = React.memo(
   }
 );
 
-const ACVillagersGrid: React.FC<ACVillagersGridProps> = ({ search }) => {
+type SpeciesPillProps = {
+  label: string;
+  selected: boolean;
+  onPress: () => void;
+};
+
+const SpeciesPill: React.FC<SpeciesPillProps> = React.memo(({ label, selected, onPress }) => {
+  return (
+    <Pressable
+      onPress={onPress}
+      className={`mr-2 px-3 py-2 rounded-full border ${
+        selected ? "bg-slate-200 border-slate-200" : "bg-slate-950/30 border-slate-700"
+      }`}
+      hitSlop={6}
+    >
+      <Text className={`text-[11px] font-semibold ${selected ? "text-slate-900" : "text-slate-200"}`}>{label}</Text>
+    </Pressable>
+  );
+});
+
+const ACVillagersGrid: React.FC<ACVillagersGridProps> = ({ search, collectedOnly = false, collectedIds }) => {
+  const [speciesFilter, setSpeciesFilter] = useState<string>("All");
+
+  const [speciesOptions, setSpeciesOptions] = useState<string[]>(["All"]);
+  const [speciesByName, setSpeciesByName] = useState<Record<string, string>>({});
+
+  const entries = useAnimalCrossingCollectionStore(useCallback((s: any) => s.entries, []));
+  const collectedSet = useMemo(() => {
+    const set = new Set<string>();
+
+    if (Array.isArray(collectedIds)) {
+      for (const x of collectedIds) {
+        const s = String(x ?? "").trim();
+        if (s) set.add(s);
+      }
+      return set;
+    }
+
+    if (!collectedOnly) return set;
+
+    for (const [key, entry] of Object.entries(entries || {})) {
+      if (!key.startsWith("villager:")) continue;
+      const isCollected = !!(entry as any)?.collected;
+      const count = Math.max(Number((entry as any)?.count || 0), 0);
+      if (!isCollected && count <= 0) continue;
+
+      const name = key.slice("villager:".length).trim();
+      if (name) set.add(name);
+    }
+    return set;
+  }, [entries, collectedOnly, collectedIds]);
+
+  const extraFilter = useMemo(() => {
+    if (!collectedOnly) return undefined;
+    if (collectedSet.size <= 0) return () => false;
+    return (name: string) => collectedSet.has(String(name));
+  }, [collectedOnly, collectedSet]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const [speciesList, map] = await Promise.all([
+          fetchVillagerSpecies({ game: "nh" }),
+          fetchVillagerSpeciesByName({ game: "nh" }),
+        ]);
+
+        if (cancelled) return;
+
+        setSpeciesOptions(["All", ...speciesList]);
+        setSpeciesByName(map);
+      } catch {
+        // keep defaults
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const fetchNamesStrict = useCallback(async () => {
+    return await fetchVillagerNames({ game: "nh" } as any);
+  }, []);
+
   const fetchVillagerDetailStrict = useCallback(
     async (name: string, opts: { thumbsize: number }): Promise<NookipediaVillager> => {
-      const item = await fetchVillagerByName(name, { thumbsize: opts.thumbsize });
-      if (!item) {
-        throw new Error(`Villager not found: ${String(name ?? "").trim()}`);
-      }
+      const item = await fetchVillagerByName(name, { thumbsize: opts.thumbsize, game: "nh", nhdetails: true });
+      if (!item) throw new Error(`Villager not found: ${String(name ?? "").trim()}`);
       return item;
     },
     []
@@ -200,21 +321,77 @@ const ACVillagersGrid: React.FC<ACVillagersGridProps> = ({ search }) => {
 
   const grid = useACNameDetailGrid<NookipediaVillager>({
     search,
-    fetchNames: fetchVillagerNames,
+    fetchNames: fetchNamesStrict,
     fetchDetail: fetchVillagerDetailStrict,
+
     pageSize: PAGE_SIZE,
     thumbPrimary: THUMB_PRIMARY,
     thumbFallback: THUMB_FALLBACK,
     prefetchBuffer: PREFETCH_BUFFER,
     detailConcurrency: DETAIL_CONCURRENCY,
     initialPrefetchCount: INITIAL_PREFETCH,
+
+    mergeDetail: mergeVillager,
+    extraFilter,
   });
 
+  const visibleSpeciesOptions = useMemo(() => {
+    if (!collectedOnly) return speciesOptions;
+
+    const available = new Set<string>();
+
+    for (const name of collectedSet) {
+      const spIndex = String(speciesByName[name] ?? "").trim();
+      if (spIndex) {
+        available.add(spIndex);
+        continue;
+      }
+
+      const spDetail = speciesFromDetail(grid.detailsByName[name]);
+      if (spDetail) available.add(spDetail);
+    }
+
+    if (available.size <= 0) return ["All"];
+
+    const out: string[] = ["All"];
+    for (const sp of speciesOptions) {
+      if (sp === "All") continue;
+      if (available.has(sp)) out.push(sp);
+    }
+    return out;
+  }, [collectedOnly, speciesOptions, collectedSet, speciesByName, grid.detailsByName]);
+
+  useEffect(() => {
+    if (speciesFilter === "All") return;
+    if (visibleSpeciesOptions.includes(speciesFilter)) return;
+    setSpeciesFilter("All");
+  }, [speciesFilter, visibleSpeciesOptions]);
+
+  const speciesFilteredVisibleNames = useMemo(() => {
+    if (speciesFilter === "All") return grid.visibleNames;
+
+    return grid.visibleNames.filter((name) => {
+      const spIndex = String(speciesByName[name] ?? "").trim();
+      if (spIndex) return spIndex === speciesFilter;
+
+      const spDetail = speciesFromDetail(grid.detailsByName[name]);
+      return spDetail ? spDetail === speciesFilter : false;
+    });
+  }, [grid.visibleNames, grid.detailsByName, speciesFilter, speciesByName]);
+
   const headerLine = useMemo(() => {
-    return `Showing ${grid.visibleNames.length} / ${grid.filteredNames.length} villagers${
-      Object.keys(grid.detailLoadingByName).length > 0 ? " • loading…" : ""
-    }`;
-  }, [grid.visibleNames.length, grid.filteredNames.length, grid.detailLoadingByName]);
+    const loadingSuffix = Object.keys(grid.detailLoadingByName).length > 0 ? " • loading…" : "";
+    const shown = speciesFilter === "All" ? grid.visibleNames.length : speciesFilteredVisibleNames.length;
+    const label = collectedOnly ? "collected villagers" : "villagers";
+    return `Showing ${shown} / ${grid.filteredNames.length} ${label}${loadingSuffix}`;
+  }, [
+    grid.detailLoadingByName,
+    grid.filteredNames.length,
+    grid.visibleNames.length,
+    speciesFilter,
+    speciesFilteredVisibleNames.length,
+    collectedOnly,
+  ]);
 
   const renderVillagerItem = useCallback(
     ({ item }: { item: string; index: number }) => (
@@ -230,31 +407,43 @@ const ACVillagersGrid: React.FC<ACVillagersGridProps> = ({ search }) => {
   );
 
   return (
-    <ACGridWrapper<string>
-      isInitialLoading={grid.namesLoading && !grid.namesLoadedOnce}
-      initialLoadingText="Loading villagers list…"
-      errorText={grid.namesError}
-      onRetry={grid.retryReloadNames}
-      isEmpty={grid.filteredNames.length === 0}
-      emptyText="No villagers match this search."
-      headerLine={headerLine}
-      data={grid.visibleNames}
-      keyExtractor={(item) => item}
-      renderItem={renderVillagerItem as any}
-      footerMode={grid.visibleCount < grid.filteredNames.length ? "more" : "end"}
-      onEndReached={grid.onEndReached}
-      onEndReachedThreshold={0.65}
-      viewabilityConfig={grid.viewabilityConfigRef.current}
-      onViewableItemsChanged={grid.onViewableItemsChanged as any}
-      removeClippedSubviews
-      initialNumToRender={18}
-      maxToRenderPerBatch={18}
-      windowSize={9}
-      updateCellsBatchingPeriod={40}
-      contentContainerStyle={{ paddingHorizontal: 4, paddingBottom: 24 }}
-      keyboardShouldPersistTaps="handled"
-      numColumns={3}
-    />
+    <View className="flex-1">
+      <View className="px-3 pb-2">
+        <View className="mt-2">
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            {visibleSpeciesOptions.map((sp) => (
+              <SpeciesPill key={sp} label={sp} selected={sp === speciesFilter} onPress={() => setSpeciesFilter(sp)} />
+            ))}
+          </ScrollView>
+        </View>
+      </View>
+
+      <ACGridWrapper<string>
+        isInitialLoading={grid.namesLoading && !grid.namesLoadedOnce}
+        initialLoadingText={collectedOnly ? "Loading your collected villagers…" : "Loading villagers list…"}
+        errorText={grid.namesError}
+        onRetry={grid.retryReloadNames}
+        isEmpty={grid.filteredNames.length === 0}
+        emptyText={collectedOnly ? "No collected villagers yet." : "No villagers match this search."}
+        headerLine={headerLine}
+        data={speciesFilteredVisibleNames}
+        keyExtractor={(item) => item}
+        renderItem={renderVillagerItem as any}
+        footerMode={grid.visibleCount < grid.filteredNames.length ? "more" : "end"}
+        onEndReached={grid.onEndReached}
+        onEndReachedThreshold={0.65}
+        viewabilityConfig={grid.viewabilityConfigRef.current}
+        onViewableItemsChanged={grid.onViewableItemsChanged as any}
+        removeClippedSubviews
+        initialNumToRender={18}
+        maxToRenderPerBatch={18}
+        windowSize={9}
+        updateCellsBatchingPeriod={40}
+        contentContainerStyle={{ paddingHorizontal: 4, paddingBottom: 24 }}
+        keyboardShouldPersistTaps="handled"
+        numColumns={3}
+      />
+    </View>
   );
 };
 

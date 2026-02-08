@@ -1,9 +1,12 @@
 // components/PokemonEvolutionLine.tsx
 import React, { useCallback, useEffect, useState } from "react";
-import { View, Text, TouchableOpacity, Image, ActivityIndicator, ScrollView } from "react-native";
+import { View, Text, TouchableOpacity, ActivityIndicator, ScrollView } from "react-native";
+import { Image as ExpoImage } from "expo-image";
 import { useRouter } from "expo-router";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 
 import BottomSheetModal from "@/components/ui/BottomSheetModal";
+import Section from "@/components/Section";
 import { getPokemon, getPokemonSpecies, getType, type Pokemon } from "@/lib/pokemon/index";
 import { DEFAULT_EVOLUTION_CHIP_STYLE, type EvolutionChipStyle, getEvolutionChipStyleFromSpeciesColor, getTypeStyle } from "@/lib/pokemon/ui/typeStyles";
 import LiquidGlass from "@/components/ui/LiquidGlass";
@@ -11,11 +14,8 @@ import LiquidGlass from "@/components/ui/LiquidGlass";
 type PokemonEvolutionLineProps = {
   evolutionNames: string[];
   currentName: string;
-  /**
-   * Optional game context so we can preserve it
-   * when navigating to another Pokémon in the line.
-   */
   gameId?: string;
+  evolutionRequirementForCurrent?: string | null;
 };
 
 function capitalize(str: string) {
@@ -26,6 +26,7 @@ const PokemonEvolutionLine: React.FC<PokemonEvolutionLineProps> = ({
   evolutionNames,
   currentName,
   gameId,
+  evolutionRequirementForCurrent,
 }) => {
   const router = useRouter();
 
@@ -33,17 +34,14 @@ const PokemonEvolutionLine: React.FC<PokemonEvolutionLineProps> = ({
   const [selectedName, setSelectedName] = useState<string | null>(null);
   const [selectedMon, setSelectedMon] = useState<Pokemon | null>(null);
   const [loadingPreview, setLoadingPreview] = useState(false);
-  const [speciesColors, setSpeciesColors] = useState<
-    Record<string, EvolutionChipStyle>
-  >({});
+  const [speciesColors, setSpeciesColors] = useState<Record<string, EvolutionChipStyle>>({});
 
-  // per-preview weaknesses & strengths
   const [previewWeakTo, setPreviewWeakTo] = useState<string[]>([]);
   const [previewStrongTo, setPreviewStrongTo] = useState<string[]>([]);
 
-  if (!evolutionNames || evolutionNames.length === 0) {
-    return null;
-  }
+  const hasLine = !!evolutionNames && evolutionNames.length > 0;
+  const hasReq = !!(evolutionRequirementForCurrent && String(evolutionRequirementForCurrent).trim());
+  if (!hasLine && !hasReq) return null;
 
   const currentLower = currentName.toLowerCase();
 
@@ -53,11 +51,7 @@ const PokemonEvolutionLine: React.FC<PokemonEvolutionLineProps> = ({
 
       setSheetVisible(true);
 
-      if (
-        selectedName &&
-        normalized === selectedName.toLowerCase() &&
-        selectedMon
-      ) {
+      if (selectedName && normalized === selectedName.toLowerCase() && selectedMon) {
         setLoadingPreview(false);
         return;
       }
@@ -95,22 +89,19 @@ const PokemonEvolutionLine: React.FC<PokemonEvolutionLineProps> = ({
   }, [selectedName]);
 
   useEffect(() => {
-    if (!evolutionNames || evolutionNames.length === 0) return;
+    if (!hasLine) return;
 
     let isActive = true;
 
     (async () => {
       try {
         const results = await Promise.all(
-          evolutionNames.map((name) =>
-            getPokemonSpecies(name.toLowerCase()).catch(() => null)
-          )
+          evolutionNames.map((name) => getPokemonSpecies(name.toLowerCase()).catch(() => null))
         );
 
         if (!isActive) return;
 
         const nextMap: Record<string, EvolutionChipStyle> = {};
-
         results.forEach((species, idx) => {
           const rawName = evolutionNames[idx];
           const key = rawName.toLowerCase();
@@ -127,7 +118,7 @@ const PokemonEvolutionLine: React.FC<PokemonEvolutionLineProps> = ({
     return () => {
       isActive = false;
     };
-  }, [evolutionNames]);
+  }, [evolutionNames, hasLine]);
 
   useEffect(() => {
     if (!selectedMon || !selectedMon.types || selectedMon.types.length === 0) {
@@ -140,9 +131,7 @@ const PokemonEvolutionLine: React.FC<PokemonEvolutionLineProps> = ({
 
     (async () => {
       try {
-        const typeDetails = await Promise.all(
-          selectedMon.types.map((t) => getType(t.type.name))
-        );
+        const typeDetails = await Promise.all(selectedMon.types.map((t) => getType(t.type.name)));
 
         if (!isActive) return;
 
@@ -150,12 +139,8 @@ const PokemonEvolutionLine: React.FC<PokemonEvolutionLineProps> = ({
         const strongSet = new Set<string>();
 
         typeDetails.forEach((td) => {
-          td.damage_relations.double_damage_from.forEach((t) =>
-            weakSet.add(t.name)
-          );
-          td.damage_relations.double_damage_to.forEach((t) =>
-            strongSet.add(t.name)
-          );
+          td.damage_relations.double_damage_from.forEach((t) => weakSet.add(t.name));
+          td.damage_relations.double_damage_to.forEach((t) => strongSet.add(t.name));
         });
 
         setPreviewWeakTo(Array.from(weakSet));
@@ -200,78 +185,74 @@ const PokemonEvolutionLine: React.FC<PokemonEvolutionLineProps> = ({
 
   return (
     <>
-      <View className="mb-4">
-        <Text className="text-xs font-semibold text-slate-400 mb-1">
-          Evolution Line
-        </Text>
-        <View className="flex-row flex-wrap items-center">
-          {evolutionNames.map((name, idx) => {
-            const key = name.toLowerCase();
-            const isSelf = key === currentLower;
-            const isLast = idx === evolutionNames.length - 1;
+      <Section
+        title={
+          <View className="flex-row items-center">
+            <MaterialCommunityIcons name="transit-connection-variant" size={14} color="#9ca3af" />
+            <Text className="ml-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+              Evolution
+            </Text>
+          </View>
+        }
+      >
+        {hasReq ? (
+          <View>
+            <Text className="text-[11px] font-semibold text-primary-500 uppercase tracking-wider mb-1.5">
+              Requirement
+            </Text>
+            <Text className="mb-1.5 text-[12px] text-slate-100">{evolutionRequirementForCurrent}</Text>
+          </View>
+        ) : null}
 
-            const baseStyle =
-              speciesColors[key] ?? DEFAULT_EVOLUTION_CHIP_STYLE;
+        {hasLine ? (
+          <View className="flex-row flex-wrap justify-center items-center">
+            {evolutionNames.map((name, idx) => {
+              const key = name.toLowerCase();
+              const isSelf = key === currentLower;
+              const isLast = idx === evolutionNames.length - 1;
 
-            const tintColor = baseStyle.tint;
-            const bgClass = baseStyle.bgClass;
-            const borderClass = baseStyle.borderClass;
-            const textClass = baseStyle.textClass;
+              const baseStyle = speciesColors[key] ?? DEFAULT_EVOLUTION_CHIP_STYLE;
 
-            return (
-              <React.Fragment key={`${name}-${idx}`}>
-                <TouchableOpacity
-                  activeOpacity={0.85}
-                  disabled={isSelf}
-                  onPress={isSelf ? undefined : () => openPreview(name)}
-                  style={{
-                    marginRight: isLast ? 0 : 4,
-                    marginBottom: 8,
-                    opacity: 1,
-                  }}
-                >
-                  <LiquidGlass
-                    interactive={false}
-                    tinted
-                    tintColor={tintColor}
-                    showFallbackBackground
+              const tintColor = baseStyle.tint;
+              const bgClass = baseStyle.bgClass;
+              const textClass = baseStyle.textClass;
+
+              return (
+                <React.Fragment key={`${name}-${idx}`}>
+                  <TouchableOpacity
+                    activeOpacity={0.85}
+                    disabled={isSelf}
+                    onPress={isSelf ? undefined : () => openPreview(name)}
                     style={{
-                      borderRadius: 999,
+                      marginRight: isLast ? 0 : 4,
+                      marginBottom: 8,
+                      opacity: 1,
                     }}
                   >
-                    <View className={`px-4 py-2 rounded-full border ${bgClass} ${borderClass}`}>
-                      <Text className={`text-[12px] font-semibold ${textClass}`}>
-                        {isSelf ? `✱ ${capitalize(name)}` : capitalize(name)}
-                      </Text>
-                    </View>
-                  </LiquidGlass>
-                </TouchableOpacity>
+                    <LiquidGlass interactive={false} tinted tintColor={tintColor} showFallbackBackground style={{ borderRadius: 999 }}>
+                      <View className={`px-4 py-2 rounded-full ${bgClass}`}>
+                        <Text className={`text-[12px] font-semibold ${textClass}`}>
+                          {isSelf ? `✱ ${capitalize(name)}` : capitalize(name)}
+                        </Text>
+                      </View>
+                    </LiquidGlass>
+                  </TouchableOpacity>
 
-                {!isLast && (
-                  <Text className="text-[11px] text-slate-500 mx-1 mb-2">
-                    →
-                  </Text>
-                )}
-              </React.Fragment>
-            );
-          })}
-        </View>
-      </View>
+                  {!isLast && <Text className="text-[11px] text-slate-500 mx-1 mb-2">→</Text>}
+                </React.Fragment>
+              );
+            })}
+          </View>
+        ) : null}
+      </Section>
 
-      <BottomSheetModal
-        visible={sheetVisible}
-        onRequestClose={handleCloseSheet}
-        tintColor="#020617"
-        fixedHeight={350}
-      >
+      <BottomSheetModal visible={sheetVisible} onRequestClose={handleCloseSheet} tintColor="#020617" fixedHeight={350}>
         <View className="flex-col" style={{ minHeight: 320 }}>
           <View className="flex-1 mt-1 px-2 w-full">
             {loadingPreview && (
               <View className="items-center justify-center flex-1">
                 <ActivityIndicator />
-                <Text className="mt-2 text-xs text-slate-400">
-                  Loading evolution…
-                </Text>
+                <Text className="mt-2 text-xs text-slate-400">Loading evolution…</Text>
               </View>
             )}
 
@@ -279,19 +260,19 @@ const PokemonEvolutionLine: React.FC<PokemonEvolutionLineProps> = ({
               <>
                 <View className="flex-row items-center justify-between w-full px-6">
                   {artUrl && (
-                    <Image
+                    <ExpoImage
                       source={{ uri: artUrl }}
                       style={{ width: 140, height: 140 }}
-                      resizeMode="contain"
+                      contentFit="contain"
+                      transition={120}
+                      cachePolicy="disk"
                     />
                   )}
 
                   <View className="flex-1 items-end mr-6">
-                    <Text className="text-lg font-semibold text-slate-50">
-                      {capitalize(selectedName)}
-                    </Text>
+                    <Text className="text-lg font-semibold text-slate-50">{capitalize(selectedName)}</Text>
 
-                    <View className="mt-2 inline-flex rounded-full bg-slate-900/80 border border-slate-700/80 px-3 py-1.5">
+                    <View className="mt-2 inline-flex rounded-full bg-slate-900/80 px-3 py-1.5">
                       <Text className="text-[12px] font-semibold text-slate-200">
                         #{String(selectedMon.id).padStart(3, "0")}
                       </Text>
@@ -303,8 +284,7 @@ const PokemonEvolutionLine: React.FC<PokemonEvolutionLineProps> = ({
                           .slice()
                           .sort((a, b) => a.slot - b.slot)
                           .map((t) => {
-                            const { bg, border, text, tint } =
-                              getTypeStyle(t.type.name);
+                            const { bg, text, tint } = getTypeStyle(t.type.name);
                             return (
                               <LiquidGlass
                                 key={t.type.name}
@@ -318,14 +298,8 @@ const PokemonEvolutionLine: React.FC<PokemonEvolutionLineProps> = ({
                                   marginBottom: 6,
                                 }}
                               >
-                                <View
-                                  className={`px-3.5 py-1.5 rounded-full border ${bg} ${border}`}
-                                >
-                                  <Text
-                                    className={`text-[12px] font-semibold ${text}`}
-                                  >
-                                    {capitalize(t.type.name)}
-                                  </Text>
+                                <View className={`px-3.5 py-1.5 rounded-full ${bg}`}>
+                                  <Text className={`text-[12px] font-semibold ${text}`}>{capitalize(t.type.name)}</Text>
                                 </View>
                               </LiquidGlass>
                             );
@@ -339,17 +313,11 @@ const PokemonEvolutionLine: React.FC<PokemonEvolutionLineProps> = ({
                   <View className="mt-4 flex-row w-full px-6">
                     {previewWeakTo.length > 0 && (
                       <View className="flex-1 mr-2">
-                        <Text className="text-[11px] font-semibold text-slate-400 mb-1">
-                          Weak Towards
-                        </Text>
-                        <ScrollView
-                          style={{ maxHeight: 120 }}
-                          showsVerticalScrollIndicator={false}
-                        >
+                        <Text className="text-[11px] font-semibold text-slate-400 mb-1">Weak Towards</Text>
+                        <ScrollView style={{ maxHeight: 120 }} showsVerticalScrollIndicator={false}>
                           <View className="flex-row flex-wrap">
                             {previewWeakTo.map((typeName) => {
-                              const { bg, border, text, tint } =
-                                getTypeStyle(typeName);
+                              const { bg, text, tint } = getTypeStyle(typeName);
                               return (
                                 <LiquidGlass
                                   key={`weak-${typeName}`}
@@ -363,14 +331,8 @@ const PokemonEvolutionLine: React.FC<PokemonEvolutionLineProps> = ({
                                     marginBottom: 6,
                                   }}
                                 >
-                                  <View
-                                    className={`px-3 py-1.5 rounded-full border ${bg} ${border}`}
-                                  >
-                                    <Text
-                                      className={`text-[11px] font-semibold ${text}`}
-                                    >
-                                      {capitalize(typeName)}
-                                    </Text>
+                                  <View className={`px-3 py-1.5 rounded-full ${bg}`}>
+                                    <Text className={`text-[11px] font-semibold ${text}`}>{capitalize(typeName)}</Text>
                                   </View>
                                 </LiquidGlass>
                               );
@@ -382,17 +344,11 @@ const PokemonEvolutionLine: React.FC<PokemonEvolutionLineProps> = ({
 
                     {previewStrongTo.length > 0 && (
                       <View className="flex-1 ml-2">
-                        <Text className="text-[11px] font-semibold text-slate-400 mb-1">
-                          Super Effective Towards
-                        </Text>
-                        <ScrollView
-                          style={{ maxHeight: 120 }}
-                          showsVerticalScrollIndicator={false}
-                        >
+                        <Text className="text-[11px] font-semibold text-slate-400 mb-1">Super Effective Towards</Text>
+                        <ScrollView style={{ maxHeight: 120 }} showsVerticalScrollIndicator={false}>
                           <View className="flex-row flex-wrap">
                             {previewStrongTo.map((typeName) => {
-                              const { bg, border, text, tint } =
-                                getTypeStyle(typeName);
+                              const { bg, text, tint } = getTypeStyle(typeName);
                               return (
                                 <LiquidGlass
                                   key={`strong-${typeName}`}
@@ -406,14 +362,8 @@ const PokemonEvolutionLine: React.FC<PokemonEvolutionLineProps> = ({
                                     marginBottom: 6,
                                   }}
                                 >
-                                  <View
-                                    className={`px-3 py-1.5 rounded-full border ${bg} ${border}`}
-                                  >
-                                    <Text
-                                      className={`text-[11px] font-semibold ${text}`}
-                                    >
-                                      {capitalize(typeName)}
-                                    </Text>
+                                  <View className={`px-3 py-1.5 rounded-full ${bg}`}>
+                                    <Text className={`text-[11px] font-semibold ${text}`}>{capitalize(typeName)}</Text>
                                   </View>
                                 </LiquidGlass>
                               );
@@ -428,20 +378,14 @@ const PokemonEvolutionLine: React.FC<PokemonEvolutionLineProps> = ({
             )}
           </View>
 
-          {/* Capsule navigation button at bottom center */}
           <View className="mt-4 items-center">
             <TouchableOpacity
               activeOpacity={0.9}
               onPress={handleNavigate}
               disabled={!selectedName}
-              className={`px-6 py-2 rounded-full border ${selectedName
-                  ? "bg-sky-500/80 border-sky-300/80"
-                  : "bg-slate-700/60 border-slate-600/80 opacity-60"
-                }`}
+              className="px-6 py-2 rounded-full bg-sky-500/80 border-sky-300/80"
             >
-              <Text className="text-[13px] font-semibold text-slate-50">
-                Open Full Details
-              </Text>
+              <Text className="text-[13px] font-semibold text-slate-50">Open Full Details</Text>
             </TouchableOpacity>
           </View>
         </View>

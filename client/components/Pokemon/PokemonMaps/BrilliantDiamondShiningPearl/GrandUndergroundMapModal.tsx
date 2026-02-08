@@ -1,8 +1,6 @@
 // components/PokemonMaps/GrandUndergroundMapModal.tsx
 import React from "react";
-import PokemonMapModal, {
-  type MapCategoryToggle,
-} from "../PokemonMapModal";
+import PokemonMapModal, { type MapCategoryToggle } from "../PokemonMapModal";
 
 type GrandUndergroundMapModalProps = {
   visible: boolean;

@@ -20,7 +20,6 @@ type EventWebModalProps = {
   title: string; // e.g. "Bug-Off"
   subtitle?: string; // e.g. "Seasonal Event • Nookipedia"
   url: string; // event url
-  disclaimer?: string; // optional small strip text
 };
 
 const EventWebModal: React.FC<EventWebModalProps> = ({
@@ -29,7 +28,6 @@ const EventWebModal: React.FC<EventWebModalProps> = ({
   title,
   subtitle,
   url,
-  disclaimer,
 }) => {
   const insets = useSafeAreaInsets();
   const webViewRef = useRef<WebViewType | null>(null);
@@ -88,14 +86,6 @@ const EventWebModal: React.FC<EventWebModalProps> = ({
             <Feather name="external-link" size={16} color="#E5E7EB" />
             <Text style={styles.headerButtonText}>Safari</Text>
           </Pressable>
-        </View>
-
-        {/* Disclaimer strip */}
-        <View style={styles.metaStrip}>
-          <Text style={styles.metaText} numberOfLines={2}>
-            {disclaimer ||
-              "Viewing Nookipedia in-app. Use Safari if the page doesn’t load correctly."}
-          </Text>
         </View>
 
         {/* Web content */}

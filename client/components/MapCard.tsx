@@ -20,6 +20,9 @@ export type MapCardProps = {
   badgeBgClass: string; // e.g. "bg-sky-500/15"
   badgeBorderClass: string; // e.g. "border-sky-500/60"
   badgeTextClass: string; // e.g. "text-sky-300"
+  poweredBy?: string;     // e.g. "GamerGuides.com"
+  badgeLabel?: string;    // e.g. "WEB MAP"
+  viewMode?: string;      // e.g. "In-App • Web Browser"
 };
 
 const MapCard: React.FC<MapCardProps> = ({
@@ -39,6 +42,9 @@ const MapCard: React.FC<MapCardProps> = ({
   badgeBgClass,
   badgeBorderClass,
   badgeTextClass,
+  poweredBy = "GamerGuides.com",
+  badgeLabel = "WEB MAP",
+  viewMode = "In-App • Web Browser",
 }) => {
   const LeadingIcon = iconType == "fa5" ? FontAwesome5 : iconType == "fa6" ? FontAwesome6 : MaterialCommunityIcons;
 
@@ -78,7 +84,7 @@ const MapCard: React.FC<MapCardProps> = ({
                   View mode
                 </Text>
                 <Text className="text-[11px] font-semibold text-slate-200">
-                  In-App • Web Browser
+                  {viewMode}
                 </Text>
               </View>
             </View>
@@ -111,11 +117,11 @@ const MapCard: React.FC<MapCardProps> = ({
               className={`px-2.5 py-1 rounded-full mb-1 border ${badgeBgClass} ${badgeBorderClass}`}
             >
               <Text className={`text-[10px] font-semibold ${badgeTextClass}`}>
-                WEB MAP
+                {badgeLabel}
               </Text>
             </View>
             <Text className="text-[10px] text-slate-500">
-              Powered by GamerGuides.com
+              Powered by {poweredBy}
             </Text>
           </View>
         </View>

@@ -1,20 +1,34 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { View, Text, ActivityIndicator, TouchableOpacity } from "react-native";
+// client/app/(palworld)/pal/[id].tsx
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  View,
+  Text,
+  ActivityIndicator,
+  TouchableOpacity,
+  Image,
+  Modal,
+  Pressable,
+  ScrollView,
+} from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import AppImages from "@/constants/images";
 
 import PageWrapper from "@/components/PageWrapper";
 import { fetchPalDetail, type PalDetail } from "@/lib/palworld/pal/paldbDetails";
 import { usePalworldCollectionStore } from "@/store/palworldCollectionStore";
-import PalDetailHeaderSection from "@/components/Palworld/PalDetailHeaderSection";
-import PalworldTypeMatchups from "@/components/Palworld/PalworldDetails/PalTypeMatchups";
-import PalOverviewSection from "@/components/Palworld/PalworldDetails/PalOverviewSection";
-import PalActiveSkillsSection from "@/components/Palworld/PalworldDetails/PalActiveSkillsSection";
+
+import PalHeroGallery from "@/components/Palworld/PalworldDetails/ImageDropHero";
+import PaldeckEntryStrip from "@/components/Palworld/PalworldDetails/EntryStrip";
+import PalworldTypeMatchups from "@/components/Palworld/PalworldDetails/TypeMatchups";
+import PalOverviewSection from "@/components/Palworld/PalworldDetails/OverviewSection";
+import PalActiveSkillsSection from "@/components/Palworld/PalworldDetails/ActiveSkillsSection";
 import { elementHex, normalizeElementKey } from "@/lib/palworld/palworldDB";
-import PalOthersSection from "@/components/Palworld/PalworldDetails/PalOthersSection";
-import PalTribesSection from "@/components/Palworld/PalworldDetails/PalTribesSection";
-import PalSpawnerSection from "@/components/Palworld/PalworldDetails/PalSpawnerSection";
-import PalUniqueComboSection from "@/components/Palworld/PalworldDetails/PalUniqueComboSection";
+import PalOthersSection from "@/components/Palworld/PalworldDetails/OthersSection";
+import PalTribesSection from "@/components/Palworld/PalworldDetails/TribesSection";
+import PalSpawnerSection from "@/components/Palworld/PalworldDetails/SpawnerSection";
+import PalUniqueComboSection from "@/components/Palworld/PalworldDetails/UniqueComboSection";
+import PalMapSheet from "@/components/Palworld/PalworldDetails/PalMapSheet";
 
 function capitalize(str: string) {
   return str ? str.charAt(0).toUpperCase() + str.slice(1) : str;
@@ -82,27 +96,203 @@ function buildImportantStats(statsRows: NonNullable<PalDetail["statsRows"]>) {
 
 function resolveDexIdFromPalDetail(d: PalDetail | null): string {
   if (!d) return "";
-  // numberRaw is where variants like "5B" live (based on how you're already using it in subtitle)
   const raw = String((d as any)?.numberRaw ?? "").trim();
   if (raw) return raw;
 
   const n = (d as any)?.number;
   if (n != null && String(n).trim()) return String(n).trim();
 
-  // last resort (stable-ish)
   const id = String((d as any)?.id ?? "").trim();
   return id || "";
+}
+
+function resolvePalCodeFromDetail(d: PalDetail | null, fallbackId: string) {
+  if (!d) return fallbackId;
+
+  const direct = String((d as any)?.code ?? "").trim();
+  if (direct) return direct;
+
+  const stats = (d as any)?.stats ?? {};
+  const statsCode = String(stats?.Code ?? stats?.code ?? "").trim();
+  if (statsCode) return statsCode;
+
+  const breedingUrl = String((d as any)?.breedingParentCalcUrl ?? (d as any)?.breedingUrl ?? "").trim();
+  if (breedingUrl) {
+    try {
+      const u = new URL(breedingUrl);
+      const child = String(u.searchParams.get("child") ?? "").trim();
+      if (child) return child;
+    } catch {
+      // ignore
+    }
+  }
+
+  return fallbackId;
+}
+
+type VariantRow = {
+  slug: string;
+  name: string;
+  iconUrl: string | null;
+  tribeRole: string | null;
+};
+
+function VariantPickerModal({
+  visible,
+  onClose,
+  variants,
+  currentSlug,
+  onSelect,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  variants: VariantRow[];
+  currentSlug: string;
+  onSelect: (slug: string) => void;
+}) {
+  const cur = String(currentSlug ?? "").trim().toLowerCase();
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable
+        onPress={onClose}
+        style={{
+          flex: 1,
+          backgroundColor: "rgba(0,0,0,0.55)",
+          padding: 18,
+          justifyContent: "flex-end",
+        }}
+      >
+        <Pressable
+          onPress={() => {}}
+          style={{
+            backgroundColor: "rgba(2,6,23,0.98)", // slate-950-ish
+            borderWidth: 1,
+            borderColor: "rgba(148,163,184,0.25)",
+            borderRadius: 22,
+            overflow: "hidden",
+          }}
+        >
+          <View style={{ paddingHorizontal: 14, paddingTop: 14, paddingBottom: 10 }}>
+            <Text style={{ color: "#e5e7eb", fontSize: 14, fontWeight: "700" }}>Variants</Text>
+            <Text style={{ color: "#94a3b8", fontSize: 12, marginTop: 4 }}>
+              Choose which variant page to open.
+            </Text>
+          </View>
+
+          <View style={{ maxHeight: 360 }}>
+            <ScrollView>
+              {variants.map((v) => {
+                const isCurrent = String(v.slug ?? "").trim().toLowerCase() === cur;
+                return (
+                  <TouchableOpacity
+                    key={v.slug}
+                    onPress={() => onSelect(v.slug)}
+                    disabled={isCurrent}
+                    style={{
+                      paddingHorizontal: 14,
+                      paddingVertical: 12,
+                      opacity: isCurrent ? 0.6 : 1,
+                      borderTopWidth: 1,
+                      borderTopColor: "rgba(148,163,184,0.12)",
+                      flexDirection: "row",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                    }}
+                  >
+                    <View style={{ flexDirection: "row", alignItems: "center", flex: 1, paddingRight: 10 }}>
+                      {v.iconUrl ? (
+                        <Image
+                          source={{ uri: v.iconUrl }}
+                          style={{ width: 26, height: 26, marginRight: 10, borderRadius: 6 }}
+                          resizeMode="contain"
+                        />
+                      ) : null}
+
+                      <View style={{ flex: 1 }}>
+                        <Text
+                          numberOfLines={1}
+                          style={{ color: "#e5e7eb", fontSize: 13, fontWeight: "600" }}
+                        >
+                          {v.name}
+                        </Text>
+                        {v.tribeRole ? (
+                          <Text numberOfLines={1} style={{ color: "#94a3b8", fontSize: 11, marginTop: 2 }}>
+                            {v.tribeRole}
+                          </Text>
+                        ) : null}
+                      </View>
+                    </View>
+
+                    {isCurrent ? (
+                      <MaterialCommunityIcons name="check" size={18} color="#0cd3f1" />
+                    ) : (
+                      <MaterialCommunityIcons name="chevron-right" size={20} color="#94a3b8" />
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+
+          <View style={{ padding: 12, borderTopWidth: 1, borderTopColor: "rgba(148,163,184,0.12)" }}>
+            <TouchableOpacity
+              onPress={onClose}
+              style={{
+                backgroundColor: "rgba(30,41,59,0.55)",
+                borderWidth: 1,
+                borderColor: "rgba(148,163,184,0.22)",
+                borderRadius: 16,
+                paddingVertical: 10,
+                alignItems: "center",
+              }}
+            >
+              <Text style={{ color: "#e5e7eb", fontSize: 13, fontWeight: "700" }}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
 }
 
 export default function PalworldPalDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  void router;
 
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<PalDetail | null>(null);
 
   const [partnerLv, setPartnerLv] = useState<number>(0);
+  const [isMapSheetOpen, setIsMapSheetOpen] = useState(false);
+
+  // Variants dropdown modal
+  const [isVariantsOpen, setIsVariantsOpen] = useState(false);
+
+  useEffect(() => {
+    if (!id) return;
+
+    let mounted = true;
+
+    (async () => {
+      try {
+        setLoading(true);
+        const d = await fetchPalDetail(id);
+
+        if (!mounted) return;
+        setData(d);
+      } catch (e) {
+        console.warn("Failed to fetch Pal detail:", e);
+        if (mounted) setData(null);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, [id]);
 
   const partnerLevels = useMemo(() => {
     const set = new Set<number>();
@@ -132,8 +322,9 @@ export default function PalworldPalDetailScreen() {
   }, [data?.id, defaultPartnerLv]);
 
   const dexId = useMemo(() => resolveDexIdFromPalDetail(data), [data]);
+  const element = useMemo(() => (data?.elements?.[0] ?? null) as string | null, [data?.elements]);
+  const elements = data?.elements ?? [];
 
-  // Favorites now use dexId string keys too
   const isFavorite = usePalworldCollectionStore((s) => {
     const key = String(dexId ?? "").trim();
     if (!key) return false;
@@ -148,31 +339,6 @@ export default function PalworldPalDetailScreen() {
     toggleFavorite(key);
   }, [dexId, toggleFavorite]);
 
-  useEffect(() => {
-    if (!id) return;
-
-    let mounted = true;
-
-    (async () => {
-      try {
-        setLoading(true);
-        const d = await fetchPalDetail(id);
-
-        if (!mounted) return;
-        setData(d);
-      } catch (e) {
-        console.warn("Failed to fetch Pal detail:", e);
-        if (mounted) setData(null);
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    })();
-
-    return () => {
-      mounted = false;
-    };
-  }, [id]);
-
   const title = useMemo(() => (data ? capitalize(data.name) : "Pal Detail"), [data]);
 
   const subtitle = useMemo(() => {
@@ -182,7 +348,6 @@ export default function PalworldPalDetailScreen() {
     return `${dexLine} • Palworld`;
   }, [data]);
 
-  const elements = data?.elements ?? [];
   const accent = elementAccentColor(elements[0] ?? null);
 
   const work = data?.workSuitability ?? [];
@@ -230,6 +395,80 @@ export default function PalworldPalDetailScreen() {
     return { ...top, ...othersMap };
   }, [data?.stats, data?.others]);
 
+  const palCode = useMemo(() => resolvePalCodeFromDetail(data, String(id ?? "").trim()), [data, id]);
+
+  // -----------------------------
+  // Variant button
+  // - ONE icon: alpha symbol
+  // - 2 variants: tap toggles directly
+  // - 3+ variants: tap opens modal
+  // -----------------------------
+  const currentSlug = useMemo(() => String(id ?? "").trim(), [id]);
+
+  const variants = useMemo<VariantRow[]>(() => {
+    const rows = data?.tribes ?? [];
+    if (!rows || rows.length === 0) return [];
+
+    const out: VariantRow[] = [];
+    const seen = new Set<string>();
+
+    for (const r of rows) {
+      const slug = String((r as any)?.palSlug ?? "").trim();
+      if (!slug) continue;
+
+      const key = slug.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      out.push({
+        slug,
+        name: String((r as any)?.palName ?? slug).trim() || slug,
+        iconUrl: (r as any)?.iconUrl ?? null,
+        tribeRole: String((r as any)?.tribeRole ?? "").trim() || null,
+      });
+    }
+
+    return out;
+  }, [data?.tribes]);
+
+  const hasVariants = variants.length > 1;
+
+  const onSelectVariant = useCallback(
+    (slug: string) => {
+      const s = String(slug ?? "").trim();
+      if (!s) return;
+
+      setIsVariantsOpen(false);
+
+      router.push(
+        {
+          pathname: "/(palworld)/pal/[id]",
+          params: { id: s },
+        } as any
+      );
+    },
+    [router]
+  );
+
+  const onPressVariantButton = useCallback(() => {
+    if (!hasVariants) return;
+
+    if (variants.length === 2) {
+      const cur = currentSlug.toLowerCase();
+      const other = variants.find((v) => v.slug.toLowerCase() !== cur) ?? variants[0] ?? null;
+
+      const nextSlug = String(other?.slug ?? "").trim();
+      if (!nextSlug) return;
+      if (nextSlug.toLowerCase() === cur) return;
+
+      onSelectVariant(nextSlug);
+      return;
+    }
+
+    // 3+ variants
+    setIsVariantsOpen(true);
+  }, [hasVariants, variants, currentSlug, onSelectVariant]);
+
   if (loading) {
     return (
       <PageWrapper title="Pal Detail" scroll={false} headerLayout="inline">
@@ -259,21 +498,56 @@ export default function PalworldPalDetailScreen() {
       subtitle={subtitle}
       headerLayout="inline"
       rightActions={
-        <TouchableOpacity onPress={onToggleFavorite} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-          <MaterialCommunityIcons
-            name={isFavorite ? "heart" : "heart-outline"}
-            size={22}
-            color={isFavorite ? "#f97316" : "#e5e7eb"}
-          />
-        </TouchableOpacity>
+        <View className="flex-row items-center">
+          {hasVariants ? (
+            <TouchableOpacity
+              onPress={onPressVariantButton}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              style={{ marginRight: 10, opacity: 1 }}
+            >
+              <Image source={AppImages.alphaPalworldIcon} style={{ width: 22, height: 22 }} resizeMode="contain" />
+            </TouchableOpacity>
+          ) : null}
+
+          <TouchableOpacity
+            onPress={() => setIsMapSheetOpen(true)}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            style={{ marginRight: 12 }}
+          >
+            <MaterialCommunityIcons name="map-outline" size={22} color="#e5e7eb" />
+          </TouchableOpacity>
+
+          <TouchableOpacity onPress={onToggleFavorite} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+            <MaterialCommunityIcons
+              name={isFavorite ? "heart" : "heart-outline"}
+              size={22}
+              color={isFavorite ? "#0cd3f1" : "#e5e7eb"}
+            />
+          </TouchableOpacity>
+        </View>
       }
     >
-      <PalDetailHeaderSection data={data} dexId={dexId} subtitle={subtitle} accent={accent} />
+      <VariantPickerModal
+        visible={isVariantsOpen}
+        onClose={() => setIsVariantsOpen(false)}
+        variants={variants}
+        currentSlug={currentSlug}
+        onSelect={onSelectVariant}
+      />
+
+      <PalMapSheet visible={isMapSheetOpen} onRequestClose={() => setIsMapSheetOpen(false)} palCode={palCode} />
+
+      <View className="mb-1">
+        <PalHeroGallery data={data} subtitle={subtitle} accent={accent} />
+        {String(dexId ?? "").trim() ? <PaldeckEntryStrip dexId={String(dexId ?? "").trim()} element={element} /> : null}
+      </View>
 
       <PalworldTypeMatchups weakTo={matchups.weakTo} superEffectiveVs={matchups.superEffectiveVs} />
-
-      <PalUniqueComboSection uniqueCombo={data.uniqueCombo ?? null} />
-
+      <PalUniqueComboSection
+        uniqueCombo={data.uniqueCombo ?? null}
+        breedingUrl={data?.breedingParentCalcUrl ?? null}
+        accent={accent}
+      />
       <PalOverviewSection
         data={data}
         accent={accent}
@@ -283,7 +557,6 @@ export default function PalworldPalDetailScreen() {
         work={work}
         importantStats={importantStats}
       />
-
       <PalActiveSkillsSection activeSkills={activeSkills} />
       <PalTribesSection tribes={data.tribes ?? []} />
       <PalSpawnerSection spawner={data.spawner ?? []} />

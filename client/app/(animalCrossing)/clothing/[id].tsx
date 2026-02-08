@@ -1,17 +1,21 @@
-// app/animalCrossing/clothing/[id].tsx
-import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { View, Text, ScrollView, ActivityIndicator, Image, Pressable } from "react-native";
+// client/app/(animalCrossing)/clothing/[id].tsx
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { View, Text, ScrollView, ActivityIndicator, Pressable } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { Image as ExpoImage } from "expo-image";
 
 import PageWrapper from "@/components/PageWrapper";
 import {
   fetchClothingByName,
-  fetchClothingIndex,
   warmClothingIndex,
+  fetchRelatedClothingLiteByCategory,
+  warmClothingRelatedIndex,
   type NookipediaClothingItem,
+  type NookipediaClothingLite,
 } from "@/lib/animalCrossing/nookipediaClothing";
 import { useAnimalCrossingCollectionStore } from "@/store/animalCrossingCollectionStore";
+import LocalIcon from "@/components/LocalIcon";
 
 const THUMB_PRIMARY = 256;
 const THUMB_FALLBACK = 128;
@@ -65,28 +69,87 @@ function buildClothingImageCandidates(item?: NookipediaClothingItem | null): str
   return uniqStrings(candidates);
 }
 
-function StatRow({ label, value }: { label: string; value?: any }) {
-  const v = value == null ? null : String(value).trim();
-  if (!v) return null;
+function liteImageCandidates(x?: NookipediaClothingLite | null): string[] {
+  if (!x) return [];
+  return uniqStrings([String(x.image_url ?? ""), String(x.render_url ?? "")]);
+}
 
+/* -----------------------------
+   “Boutique” UI (clothing theme)
+------------------------------ */
+
+function BoutiqueSectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <View className="flex-row items-start justify-between py-1">
-      <Text className="text-[11px] text-slate-400">{label}</Text>
-      <Text className="text-[11px] text-slate-200 text-right ml-3 flex-1">{v}</Text>
+    <View className="flex-row items-center mt-4 mb-2 px-1">
+      <View className="w-2 h-2 rounded-full bg-fuchsia-300/80 mr-2" />
+      <Text className="text-[11px] font-extrabold tracking-[0.16em] uppercase text-fuchsia-100/90">{children}</Text>
     </View>
   );
 }
 
-function SectionTitle({ children }: { children: React.ReactNode }) {
+function BoutiqueCard({ children }: { children: React.ReactNode }) {
   return (
-    <Text className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+    <View className="rounded-[28px] bg-fuchsia-950/18 border border-fuchsia-300/16 p-4 overflow-hidden">
+      <View className="absolute -top-10 -right-10 w-44 h-44 rounded-full bg-fuchsia-300/10" />
+      <View className="absolute -bottom-12 -left-12 w-56 h-56 rounded-full bg-violet-300/10" />
+      <View className="absolute top-10 left-8 w-3 h-3 rounded-full bg-rose-200/10" />
+      <View className="absolute top-16 left-14 w-2 h-2 rounded-full bg-rose-200/10" />
+      <View className="absolute bottom-14 right-12 w-3 h-3 rounded-full bg-rose-200/10" />
       {children}
-    </Text>
+    </View>
   );
 }
 
-function Card({ children }: { children: React.ReactNode }) {
-  return <View className="rounded-3xl bg-slate-900/80 border border-slate-700 p-4">{children}</View>;
+function BoutiqueTitle({ title, subtitle }: { title: string; subtitle?: string | null }) {
+  return (
+    <View className="items-center">
+      <View className="px-4 py-2 rounded-2xl bg-violet-900/18 border border-violet-200/18">
+        <Text className="text-[16px] font-extrabold text-fuchsia-50 text-center">{title}</Text>
+      </View>
+      {subtitle ? <Text className="mt-2 text-[11px] text-fuchsia-100/75 text-center">{subtitle}</Text> : null}
+    </View>
+  );
+}
+
+function BoutiqueChip({ label, value }: { label: string; value?: any }) {
+  const v = value == null ? "" : String(value).trim();
+  if (!v) return null;
+
+  return (
+    <View className="flex-row items-start justify-between py-2">
+      <View className="flex-row items-center">
+        <View className="w-5 items-center">
+          <Text className="text-[12px] text-fuchsia-200">•</Text>
+        </View>
+        <Text className="text-[11px] text-fuchsia-100/85">{label}</Text>
+      </View>
+      <Text className="text-[11px] text-fuchsia-50 text-right ml-3 flex-1">{v}</Text>
+    </View>
+  );
+}
+
+function BoutiqueBadge({ icon, text }: { icon?: React.ReactNode; text: string }) {
+  return (
+    <View className="flex-row items-center mr-2 mb-2 px-3 py-2 rounded-full bg-fuchsia-900/16 border border-fuchsia-200/16">
+      {icon ? <View className="mr-2">{icon}</View> : null}
+      <Text className="text-[11px] font-semibold text-fuchsia-50">{text}</Text>
+    </View>
+  );
+}
+
+function StylistNote({ label, value }: { label: string; value?: string | null }) {
+  const v = String(value ?? "").trim();
+  if (!v) return null;
+
+  return (
+    <View className="mt-3">
+      <View className="rounded-[22px] bg-violet-900/16 border border-violet-200/14 px-4 py-3">
+        <Text className="text-[10px] font-bold tracking-[0.14em] uppercase text-violet-100/70">{label}</Text>
+        <Text className="mt-1 text-[12px] text-fuchsia-50 leading-5">{v}</Text>
+      </View>
+      <View className="ml-6 w-0 h-0 border-l-[10px] border-r-[10px] border-t-[12px] border-l-transparent border-r-transparent border-t-violet-200/14" />
+    </View>
+  );
 }
 
 export default function ClothingDetailPage() {
@@ -96,7 +159,7 @@ export default function ClothingDetailPage() {
   const clothingName = useMemo(() => decodeURIComponent(rawId), [rawId]);
 
   const key = useMemo(() => `clothing:${String(clothingName ?? "").trim()}`, [clothingName]);
-  const entry = useAnimalCrossingCollectionStore((s: any) => (s.entries?.[key] ?? null));
+  const entry = useAnimalCrossingCollectionStore((s: any) => s.entries?.[key] ?? null);
 
   const toggleCollected = useAnimalCrossingCollectionStore((s: any) => s.toggleCollected);
   const incrementCount = useAnimalCrossingCollectionStore((s: any) => s.incrementCount);
@@ -128,14 +191,16 @@ export default function ClothingDetailPage() {
   const [item, setItem] = useState<NookipediaClothingItem | null>(null);
   const [thumbUsed, setThumbUsed] = useState<number>(THUMB_PRIMARY);
 
-  const [heroFailed, setHeroFailed] = useState(false);
-
   const [relatedLoading, setRelatedLoading] = useState(false);
-  const [related, setRelated] = useState<NookipediaClothingItem[]>([]);
+  const [related, setRelated] = useState<NookipediaClothingLite[]>([]);
 
-  // Warm index as soon as this page mounts (helps deep-links)
+  const [heroCandidateIndex, setHeroCandidateIndex] = useState(0);
+  const [heroImgLoading, setHeroImgLoading] = useState(false);
+
+  // warm caches (safe; doesn’t block UI)
   useEffect(() => {
     void warmClothingIndex();
+    void warmClothingRelatedIndex();
   }, []);
 
   useEffect(() => {
@@ -147,12 +212,11 @@ export default function ClothingDetailPage() {
         setLoading(true);
 
         setItem(null);
-        setHeroFailed(false);
+        setHeroCandidateIndex(0);
 
         setRelated([]);
         setRelatedLoading(false);
 
-        // 1) fetch detail (with thumb fallback)
         let fetched: NookipediaClothingItem | null = null;
 
         try {
@@ -169,34 +233,20 @@ export default function ClothingDetailPage() {
           setThumbUsed(THUMB_FALLBACK);
         }
 
-        // 2) Related: same category
+        // ✅ NON-BLOCKING related (category-based, fast index)
         const myCategory = asNonEmptyString((fetched as any)?.category);
-        const myName = String((fetched as any)?.name ?? clothingName).trim().toLowerCase();
-
         if (myCategory) {
           setRelatedLoading(true);
-
           try {
-            const index = await fetchClothingIndex();
+            const xs = await fetchRelatedClothingLiteByCategory({
+              category: myCategory,
+              excludeName: String((fetched as any)?.name ?? clothingName),
+              limit: 24,
+            });
             if (cancelled) return;
-
-            const filtered = index.filter((x: any) => {
-              const n = String(x?.name ?? "").trim().toLowerCase();
-              if (!n || n === myName) return false;
-
-              const cat = asNonEmptyString(x?.category);
-              return !!cat && cat === myCategory;
-            });
-
-            filtered.sort((a: any, b: any) => {
-              const an = String(a?.name ?? "");
-              const bn = String(b?.name ?? "");
-              return an.localeCompare(bn);
-            });
-
-            setRelated(filtered.slice(0, 24));
+            setRelated(xs);
           } catch (e2) {
-            console.warn("Related clothing index failed:", e2);
+            console.warn("Related clothing lookup failed:", e2);
           } finally {
             if (!cancelled) setRelatedLoading(false);
           }
@@ -217,13 +267,44 @@ export default function ClothingDetailPage() {
   const displayName = item?.name ? String(item.name) : clothingName;
 
   const candidates = useMemo(() => buildClothingImageCandidates(item), [item]);
-  const heroUri = !heroFailed ? (candidates[0] ?? null) : (candidates[1] ?? candidates[0] ?? null);
+  const heroUri = candidates[heroCandidateIndex] ?? null;
+
+  useEffect(() => {
+    setHeroCandidateIndex(0);
+  }, [candidates.length]);
+
+  // ✅ Prefetch hero only (not in render)
+  useEffect(() => {
+    if (!heroUri) return;
+    ExpoImage.prefetch(heroUri).catch(() => {});
+  }, [heroUri]);
+
+  // ✅ Prefetch a small set of related thumbs (not in render)
+  const lastPrefetchKeyRef = useRef<string>("");
+  useEffect(() => {
+    const urls: string[] = [];
+    for (const r of related.slice(0, 10)) {
+      const c = liteImageCandidates(r);
+      if (c[0]) urls.push(c[0]);
+    }
+    const capped = uniqStrings(urls).slice(0, 12);
+    const key = capped.join("|");
+    if (!key || key === lastPrefetchKeyRef.current) return;
+    lastPrefetchKeyRef.current = key;
+
+    capped.forEach((u) => {
+      ExpoImage.prefetch(u).catch(() => {});
+    });
+  }, [related]);
+
+  const onHeroError = useCallback(() => {
+    setHeroImgLoading(false);
+    if (heroCandidateIndex + 1 < candidates.length) setHeroCandidateIndex((i) => i + 1);
+  }, [heroCandidateIndex, candidates.length]);
 
   const category = asNonEmptyString((item as any)?.category);
   const sell = formatBells((item as any)?.sell);
-
-  const variationTotal =
-    (item as any)?.variation_total != null ? String((item as any).variation_total) : null;
+  const variationTotal = (item as any)?.variation_total != null ? String((item as any).variation_total) : null;
 
   const villEquip =
     (item as any)?.vill_equip != null ? (String((item as any).vill_equip) === "true" ? "Yes" : "No") : null;
@@ -257,223 +338,272 @@ export default function ClothingDetailPage() {
 
   const notes = asNonEmptyString((item as any)?.notes);
 
+  const subtitleLine = useMemo(() => {
+    const parts: string[] = [];
+    if (category) parts.push(category);
+    if (variationTotal) parts.push(`${variationTotal} variations`);
+    if (seasonality) parts.push(seasonality);
+    return parts.join(" • ");
+  }, [category, variationTotal, seasonality]);
+
   const goRelated = useCallback(
     (name: string) => {
-      router.push({
-        pathname: "/clothing/[id]",
-        params: { id: encodeURIComponent(name) },
-      } as any);
+      router.push({ pathname: "/clothing/[id]", params: { id: encodeURIComponent(name) } } as any);
     },
     [router]
   );
 
-  const showMainSpinner = loading || (category && relatedLoading);
+  // ✅ DO NOT BLOCK PAGE ON RELATED
+  const showMainSpinner = loading;
 
   return (
     <PageWrapper scroll={false} title={displayName} subtitle="Clothing" headerLayout="inline">
       {showMainSpinner ? (
         <View className="flex-1 items-center justify-center mt-6">
           <ActivityIndicator />
-          <Text className="mt-2 text-sm text-slate-300">{loading ? "Loading…" : "Loading related…"}</Text>
+          <Text className="mt-2 text-sm text-fuchsia-100/80">Loading…</Text>
         </View>
       ) : error ? (
         <View className="flex-1 items-center justify-center mt-6 px-5">
-          <Text className="text-sm text-rose-300 text-center">{error}</Text>
+          <View className="rounded-[26px] bg-rose-950/30 border border-rose-500/25 px-4 py-3">
+            <Text className="text-sm text-rose-200 text-center">{error}</Text>
+          </View>
         </View>
       ) : (
-        <ScrollView contentContainerStyle={{ paddingBottom: 28 }}>
+        <ScrollView contentContainerStyle={{ paddingBottom: 28 }} className="px-3">
           {/* HERO */}
           <View className="mt-4">
-            <Card>
-              <View className="items-center">
-                <View style={{ width: 160, height: 160, alignItems: "center", justifyContent: "center" }}>
-                  {heroUri ? (
-                    <Image
-                      source={{ uri: heroUri }}
-                      style={{ width: 160, height: 160 }}
-                      resizeMode="contain"
-                      onError={() => {
-                        if (!heroFailed) setHeroFailed(true);
-                      }}
-                    />
-                  ) : (
-                    <View className="w-[160px] h-[160px] rounded-3xl bg-slate-950/60 border border-slate-700 items-center justify-center">
-                      <Feather name="image" size={20} color="#64748b" />
-                      <Text className="text-slate-500 text-[11px] mt-2">No image</Text>
-                    </View>
-                  )}
+            <BoutiqueCard>
+              <View className="flex-row items-center justify-between mb-3">
+                <View className="flex-row items-center">
+                  <View className="w-8 h-8 rounded-2xl bg-fuchsia-500/12 border border-fuchsia-200/18 items-center justify-center">
+                    <Feather name="shopping-bag" size={16} color="#f5d0fe" />
+                  </View>
+                  <Text className="ml-2 text-[11px] font-bold tracking-[0.14em] text-fuchsia-100/75 uppercase">
+                    Able Sisters
+                  </Text>
                 </View>
 
-                <Text className="mt-3 text-base font-semibold text-slate-50 text-center">{displayName}</Text>
-
-                <View className="mt-3 flex-row items-center">
-                  <Pressable
-                    onPress={() => {
-                      onToggleCollected();
-                      onSetToOneIfNeeded();
-                    }}
-                    className={`px-3 py-2 rounded-2xl border ${
-                      isCollected ? "bg-emerald-500/15 border-emerald-500/40" : "bg-slate-950/40 border-slate-700"
-                    }`}
-                  >
-                    <Text className={`text-[11px] font-semibold ${isCollected ? "text-emerald-200" : "text-slate-200"}`}>
-                      {isCollected ? "Collected" : "Collect"}
-                    </Text>
-                  </Pressable>
-
-                  {isCollected ? (
-                    <View className="flex-row items-center ml-3">
-                      <Pressable
-                        onPress={onDec}
-                        className="w-9 h-9 rounded-2xl bg-slate-950/60 border border-slate-700 items-center justify-center"
-                      >
-                        <Text className="text-slate-100 text-[16px] font-bold">−</Text>
-                      </Pressable>
-
-                      <View className="px-3">
-                        <Text className="text-[14px] text-slate-100 font-semibold">{count}</Text>
-                        <Text className="text-[10px] text-slate-500 text-center">owned</Text>
-                      </View>
-
-                      <Pressable
-                        onPress={onInc}
-                        className="w-9 h-9 rounded-2xl bg-slate-950/60 border border-slate-700 items-center justify-center"
-                      >
-                        <Text className="text-slate-100 text-[16px] font-bold">+</Text>
-                      </Pressable>
-                    </View>
-                  ) : null}
-                </View>
+                {category ? (
+                  <View className="px-3 py-2 rounded-full bg-violet-900/14 border border-violet-200/16">
+                    <Text className="text-[11px] font-extrabold text-fuchsia-50">{category}</Text>
+                  </View>
+                ) : null}
               </View>
-            </Card>
-          </View>
 
-          {/* OVERVIEW */}
-          <View className="mt-3 px-1">
-            <SectionTitle>Overview</SectionTitle>
-            <View className="mt-2">
-              <Card>
-                <StatRow label="Category" value={category} />
-                <StatRow label="Variations" value={variationTotal} />
-                <StatRow label="Villager Equip" value={villEquip} />
-                <StatRow label="Seasonality" value={seasonality} />
-                <StatRow label="Version Added" value={versionAdded} />
-              </Card>
-            </View>
-          </View>
-
-          {/* PRICING */}
-          <View className="mt-3 px-1">
-            <SectionTitle>Pricing</SectionTitle>
-            <View className="mt-2">
-              <Card>
-                <StatRow label="Sell" value={sell ? `${sell} Bells` : null} />
-                <StatRow label="Buy" value={buy} />
-              </Card>
-            </View>
-          </View>
-
-          {/* STYLE */}
-          {labelThemes || styles ? (
-            <View className="mt-3 px-1">
-              <SectionTitle>Style</SectionTitle>
-              <View className="mt-2">
-                <Card>
-                  <StatRow label="Label Themes" value={labelThemes} />
-                  <StatRow label="Styles" value={styles} />
-                </Card>
-              </View>
-            </View>
-          ) : null}
-
-          {/* AVAILABILITY */}
-          {availabilityFrom ? (
-            <View className="mt-3 px-1">
-              <SectionTitle>Availability</SectionTitle>
-              <View className="mt-2">
-                <Card>
-                  <StatRow label="From" value={availabilityFrom} />
-                </Card>
-              </View>
-            </View>
-          ) : null}
-
-          {/* NOTES */}
-          {notes ? (
-            <View className="mt-3 px-1">
-              <SectionTitle>Notes</SectionTitle>
-              <View className="mt-2">
-                <Card>
-                  <Text className="text-[12px] text-slate-200">{notes}</Text>
-                </Card>
-              </View>
-            </View>
-          ) : null}
-
-          {/* RELATED (SAME CATEGORY) */}
-          {category ? (
-            <View className="mt-3 px-1">
-              <SectionTitle>Related Category</SectionTitle>
-              <View className="mt-2">
-                <Card>
-                  <Text className="text-[11px] text-slate-400">Same category: {category}</Text>
-
-                  {related.length === 0 ? (
-                    <Text className="mt-2 text-[11px] text-slate-600">No related clothing found.</Text>
-                  ) : (
-                    <View className="mt-2 flex-row flex-wrap">
-                      {related.map((r, idx) => {
-                        const name = String((r as any)?.name ?? "").trim();
-                        if (!name) return null;
-
-                        const imgs = buildClothingImageCandidates(r);
-                        const img = imgs[0] ?? null;
-
-                        return (
-                          <View key={`${name}::${idx}`} className="w-1/3 p-1">
-                            <Pressable
-                              onPress={() => goRelated(name)}
-                              className="rounded-3xl p-3 border items-center border-slate-700 bg-slate-900/70"
+              <View className="flex-row">
+                <View className="w-[132px]">
+                  <View className="rounded-[26px] bg-fuchsia-900/10 border border-fuchsia-200/14 p-3 items-center justify-center">
+                    <View style={{ width: 96, height: 96, alignItems: "center", justifyContent: "center" }}>
+                      {heroUri ? (
+                        <>
+                          <ExpoImage
+                            source={{ uri: heroUri }}
+                            style={{ width: 96, height: 96 }}
+                            contentFit="contain"
+                            transition={120}
+                            cachePolicy="disk"
+                            onLoadStart={() => setHeroImgLoading(true)}
+                            onLoad={() => setHeroImgLoading(false)}
+                            onError={onHeroError}
+                          />
+                          {heroImgLoading ? (
+                            <View
+                              style={{
+                                position: "absolute",
+                                left: 0,
+                                top: 0,
+                                right: 0,
+                                bottom: 0,
+                                alignItems: "center",
+                                justifyContent: "center",
+                                backgroundColor: "rgba(217, 70, 239, 0.12)",
+                                borderRadius: 18,
+                              }}
                             >
-                              <View
-                                style={{
-                                  width: 68,
-                                  height: 68,
-                                  alignItems: "center",
-                                  justifyContent: "center",
-                                  borderRadius: 18,
-                                  backgroundColor: "rgba(2,6,23,0.35)",
-                                  borderWidth: 1,
-                                  borderColor: "rgba(51,65,85,0.7)",
-                                }}
-                              >
-                                {img ? (
-                                  <Image source={{ uri: img }} style={{ width: 64, height: 64 }} resizeMode="contain" />
-                                ) : (
-                                  <Feather name="image" size={18} color="#64748b" />
-                                )}
-                              </View>
-
-                              <Text
-                                className="text-[11px] font-semibold text-slate-100 text-center mt-2"
-                                numberOfLines={2}
-                              >
-                                {name}
-                              </Text>
-
-                              <Text className="text-[10px] text-slate-500 mt-1" numberOfLines={1}>
-                                {category}
-                              </Text>
-                            </Pressable>
+                              <ActivityIndicator />
+                            </View>
+                          ) : null}
+                        </>
+                      ) : (
+                        <View style={{ width: 96, height: 96, alignItems: "center", justifyContent: "center" }}>
+                          <LocalIcon
+                            source={null}
+                            size={96}
+                            roundedClassName="rounded-[22px]"
+                            placeholderClassName="bg-fuchsia-950/16 border border-fuchsia-200/14"
+                          />
+                          <View style={{ position: "absolute", alignItems: "center" }}>
+                            <Feather name="image" size={18} color="#f5d0fe" />
+                            <Text className="text-fuchsia-100/60 text-[10px] mt-2">No image</Text>
                           </View>
-                        );
-                      })}
+                        </View>
+                      )}
                     </View>
-                  )}
-                </Card>
+                  </View>
+                </View>
+
+                <View className="flex-1 pl-3">
+                  <BoutiqueTitle title={displayName} subtitle={subtitleLine || null} />
+
+                  <View className="mt-3 flex-row justify-center items-center">
+                    <Pressable
+                      onPress={() => {
+                        onToggleCollected();
+                        onSetToOneIfNeeded();
+                      }}
+                      className={`px-3 py-2 rounded-full border ${
+                        isCollected ? "bg-emerald-500/15 border-emerald-500/35" : "bg-violet-500/10 border-violet-200/18"
+                      }`}
+                    >
+                      <Text className={`text-[12px] font-extrabold ${isCollected ? "text-emerald-100" : "text-fuchsia-100"}`}>
+                        {isCollected ? "Owned" : "Not Owned"}
+                      </Text>
+                    </Pressable>
+
+                    {isCollected ? (
+                      <View className="flex-row items-center ml-3">
+                        <Pressable
+                          onPress={onDec}
+                          className="w-9 h-9 rounded-2xl bg-fuchsia-950/12 border border-fuchsia-200/14 items-center justify-center"
+                        >
+                          <Text className="text-fuchsia-50 text-[16px] font-bold">−</Text>
+                        </Pressable>
+
+                        <View className="px-3">
+                          <Text className="text-[14px] text-fuchsia-50 font-semibold text-center">{count}</Text>
+                          <Text className="text-[10px] text-fuchsia-100/60 text-center">owned</Text>
+                        </View>
+
+                        <Pressable
+                          onPress={onInc}
+                          className="w-9 h-9 rounded-2xl bg-fuchsia-950/12 border border-fuchsia-200/14 items-center justify-center"
+                        >
+                          <Text className="text-fuchsia-50 text-[16px] font-bold">+</Text>
+                        </Pressable>
+                      </View>
+                    ) : null}
+                  </View>
+                </View>
               </View>
-            </View>
+
+              <StylistNote label="Mabel" value={notes || null} />
+            </BoutiqueCard>
+          </View>
+
+          <BoutiqueSectionLabel>Overview</BoutiqueSectionLabel>
+          <BoutiqueCard>
+            <BoutiqueChip label="Category" value={category} />
+            <BoutiqueChip label="Seasonality" value={seasonality} />
+            <BoutiqueChip label="Version Added" value={versionAdded} />
+            <BoutiqueChip label="Villager Equip" value={villEquip} />
+          </BoutiqueCard>
+
+          <BoutiqueSectionLabel>Pricing</BoutiqueSectionLabel>
+          <BoutiqueCard>
+            <BoutiqueChip label="Sell" value={sell ? `${sell} Bells` : null} />
+            <BoutiqueChip label="Buy" value={buy} />
+          </BoutiqueCard>
+
+          {(labelThemes || styles) ? (
+            <>
+              <BoutiqueSectionLabel>Style</BoutiqueSectionLabel>
+              <BoutiqueCard>
+                <BoutiqueChip label="Label Themes" value={labelThemes} />
+                <BoutiqueChip label="Styles" value={styles} />
+              </BoutiqueCard>
+            </>
           ) : null}
+
+          {availabilityFrom ? (
+            <>
+              <BoutiqueSectionLabel>Availability</BoutiqueSectionLabel>
+              <BoutiqueCard>
+                <BoutiqueChip label="From" value={availabilityFrom} />
+              </BoutiqueCard>
+            </>
+          ) : null}
+
+          {category ? (
+            <>
+              <BoutiqueSectionLabel>Related</BoutiqueSectionLabel>
+              <BoutiqueCard>
+                <View className="flex-row items-center justify-between">
+                  {relatedLoading ? <ActivityIndicator /> : null}
+                </View>
+
+                {!relatedLoading && related.length === 0 ? (
+                  <Text className="mt-2 text-[11px] text-fuchsia-100/45">No related clothing found.</Text>
+                ) : relatedLoading ? (
+                  <Text className="mt-2 text-[11px] text-fuchsia-100/45">Loading related…</Text>
+                ) : (
+                  <View className="mt-2 flex-row flex-wrap">
+                    {related.map((r, idx) => {
+                      const name = String(r?.name ?? "").trim();
+                      if (!name) return null;
+
+                      const imgs = liteImageCandidates(r);
+                      const img = imgs[0] ?? null;
+
+                      return (
+                        <View key={`${name}::${idx}`} className="w-1/3 p-1">
+                          <Pressable
+                            onPress={() => goRelated(name)}
+                            className="rounded-[26px] p-3 border items-center border-fuchsia-200/14 bg-fuchsia-900/10"
+                          >
+                            <View
+                              style={{
+                                width: 68,
+                                height: 68,
+                                alignItems: "center",
+                                justifyContent: "center",
+                                borderRadius: 18,
+                                backgroundColor: "rgba(217, 70, 239, 0.10)",
+                                borderWidth: 1,
+                                borderColor: "rgba(248, 208, 254, 0.16)",
+                              }}
+                            >
+                              {img ? (
+                                <ExpoImage
+                                  source={{ uri: img }}
+                                  style={{ width: 64, height: 64 }}
+                                  contentFit="contain"
+                                  transition={120}
+                                  cachePolicy="disk"
+                                />
+                              ) : (
+                                <View style={{ width: 68, height: 68, alignItems: "center", justifyContent: "center" }}>
+                                  <LocalIcon
+                                    source={null}
+                                    size={68}
+                                    roundedClassName="rounded-2xl"
+                                    placeholderClassName="bg-fuchsia-950/16 border border-fuchsia-200/14"
+                                  />
+                                  <View style={{ position: "absolute" }}>
+                                    <Feather name="image" size={18} color="#f5d0fe" />
+                                  </View>
+                                </View>
+                              )}
+                            </View>
+
+                            <Text className="text-[11px] font-semibold text-fuchsia-50 text-center mt-2" numberOfLines={2}>
+                              {name}
+                            </Text>
+
+                            <Text className="text-[10px] text-fuchsia-100/60 mt-1" numberOfLines={1}>
+                              {category}
+                            </Text>
+                          </Pressable>
+                        </View>
+                      );
+                    })}
+                  </View>
+                )}
+              </BoutiqueCard>
+            </>
+          ) : null}
+
+          <View className="h-6" />
         </ScrollView>
       )}
     </PageWrapper>

@@ -1,48 +1,53 @@
-// app/json/furniture/[id].tsx
-import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { View, Text, ScrollView, ActivityIndicator, Image, Pressable } from "react-native";
+//client/app/(animalCrossing)/furniture/[id].tsx
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { View, Text, ScrollView, ActivityIndicator, Pressable } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { Image as ExpoImage } from "expo-image";
 
 import PageWrapper from "@/components/PageWrapper";
 import {
   fetchFurnitureByName,
-  fetchFurnitureIndex,
   warmFurnitureIndex,
+  fetchRelatedFurnitureLite,
   type NookipediaFurnitureItem,
+  type NookipediaFurnitureLite,
 } from "@/lib/animalCrossing/nookipediaFurniture";
 import { useAnimalCrossingCollectionStore, acMakeKey } from "@/store/animalCrossingCollectionStore";
+import LocalIcon from "@/components/LocalIcon";
 
 const THUMB_PRIMARY = 256;
 const THUMB_FALLBACK = 128;
 
-function uniqStrings(list: any[]) {
+function uniqStrings(list: string[]) {
   const out: string[] = [];
   const seen = new Set<string>();
-  for (const x of list) {
-    const s = String(x ?? "").trim();
-    if (!s) continue;
-    if (seen.has(s)) continue;
-    seen.add(s);
-    out.push(s);
+  for (const s of list) {
+    const v = String(s || "").trim();
+    if (!v) continue;
+    if (seen.has(v)) continue;
+    seen.add(v);
+    out.push(v);
   }
   return out;
 }
 
-function buildFurnitureImageCandidates(item?: NookipediaFurnitureItem | null): string[] {
+function buildFurnitureImageCandidates(item?: any | null): string[] {
   if (!item) return [];
-  const candidates: any[] = [];
+  const candidates: string[] = [];
 
   const vars = Array.isArray((item as any).variations) ? (item as any).variations : [];
   for (const v of vars) {
-    candidates.push((v as any).image_url_square);
-    candidates.push((v as any).image_url);
-    candidates.push((v as any).image);
+    const sq = (v as any).image_url_square;
+    const url = (v as any).image_url ?? (v as any).image;
+    if (sq) candidates.push(String(sq));
+    if (url) candidates.push(String(url));
   }
 
-  candidates.push((item as any).image_url_square);
-  candidates.push((item as any).image_url);
-  candidates.push((item as any).image);
+  const directSq = (item as any).image_url_square;
+  const direct = (item as any).image_url ?? (item as any).image;
+  if (directSq) candidates.push(String(directSq));
+  if (direct) candidates.push(String(direct));
 
   return uniqStrings(candidates);
 }
@@ -70,7 +75,11 @@ function getVariations(item?: NookipediaFurnitureItem | null): Variation[] {
 
 function getBestImageForVariation(v?: Variation | null) {
   if (!v) return null;
-  const candidates = uniqStrings([v.image_url_square, v.image_url, (v as any).image]);
+  const candidates = uniqStrings([
+    String(v.image_url_square ?? ""),
+    String(v.image_url ?? ""),
+    String((v as any).image ?? ""),
+  ]);
   return candidates[0] ?? null;
 }
 
@@ -105,26 +114,121 @@ function yesNo(v: any): string | null {
   return null;
 }
 
-function StatRow({ label, value }: { label: string; value?: string | null }) {
-  if (!value) return null;
+function liteToImageCandidates(x?: NookipediaFurnitureLite | null): string[] {
+  if (!x) return [];
+  return uniqStrings([String(x.image_url_square ?? ""), String(x.image_url ?? "")]);
+}
+
+// -----------------------------
+// BETTER FURNITURE COLORSCHEME (AC: warm paper + mint + wood)
+// - Softer mint paper instead of deep emerald
+// - Warm “wood” accents
+// - Category-tinted icon badge
+// -----------------------------
+
+function SectionLabel({ children }: { children: React.ReactNode; }) {
   return (
-    <View className="flex-row items-center justify-between py-1">
-      <Text className="text-[12px] text-slate-400">{label}</Text>
-      <Text className="text-[12px] text-slate-100 font-semibold text-right ml-3 flex-1">{value}</Text>
+    <View className="flex-row items-center mt-4 mb-2 px-1">
+      <View className="w-2 h-2 rounded-full bg-teal-300/80 mr-2" />
+      <Text className="text-[11px] font-extrabold tracking-[0.16em] uppercase text-teal-100/90">{children}</Text>
     </View>
   );
 }
 
-function SectionTitle({ children }: { children: React.ReactNode }) {
+function PaperCard({ children }: { children: React.ReactNode; }) {
   return (
-    <Text className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+    <View className="rounded-[28px] bg-teal-950/25 border border-teal-400/18 p-4 overflow-hidden">
+      {/* warm + mint “paper” blobs */}
+      <View className="absolute -top-10 -right-10 w-44 h-44 rounded-full bg-teal-300/10" />
+      <View className="absolute -bottom-12 -left-12 w-52 h-52 rounded-full bg-lime-300/10" />
+      <View className="absolute top-8 left-10 w-2 h-2 rounded-full bg-white/6" />
+      <View className="absolute bottom-10 right-12 w-3 h-3 rounded-full bg-white/5" />
       {children}
-    </Text>
+    </View>
   );
 }
 
-function Card({ children }: { children: React.ReactNode }) {
-  return <View className="rounded-3xl bg-slate-900/80 border border-slate-700 p-4">{children}</View>;
+function WoodTitle({ title, subtitle }: { title: string; subtitle?: string | null; }) {
+  return (
+    <View className="items-center">
+      <View className="px-4 py-2 rounded-2xl bg-amber-900/30 border border-amber-200/18">
+        <Text className="text-[16px] font-extrabold text-amber-50 text-center">{title}</Text>
+      </View>
+      {subtitle ? <Text className="mt-2 text-[11px] text-teal-100/80 text-center">{subtitle}</Text> : null}
+    </View>
+  );
+}
+
+function Badge({ icon, text }: { icon?: React.ReactNode; text: string; }) {
+  return (
+    <View className="flex-row items-center mr-2 mb-2 px-3 py-2 rounded-full bg-teal-900/14 border border-teal-300/18">
+      {icon ? <View className="mr-2">{icon}</View> : null}
+      <Text className="text-[11px] font-semibold text-teal-50">{text}</Text>
+    </View>
+  );
+}
+
+function LeafChip({ label, value }: { label: string; value?: any; }) {
+  const v = value == null ? "" : String(value).trim();
+  if (!v) return null;
+
+  return (
+    <View className="flex-row items-start justify-between py-2">
+      <View className="flex-row items-center">
+        <View className="w-5 items-center">
+          <Text className="text-[12px] text-teal-200">•</Text>
+        </View>
+        <Text className="text-[11px] text-teal-100/90">{label}</Text>
+      </View>
+      <Text className="text-[11px] text-slate-50 text-right ml-3 flex-1">{v}</Text>
+    </View>
+  );
+}
+
+function SpeechBubble({ label, value }: { label: string; value?: string | null; }) {
+  const v = String(value ?? "").trim();
+  if (!v) return null;
+
+  return (
+    <View className="mt-3">
+      <View className="rounded-[22px] bg-teal-900/14 border border-teal-300/16 px-4 py-3">
+        <Text className="text-[10px] font-bold tracking-[0.14em] uppercase text-teal-100/70">{label}</Text>
+        <Text className="mt-1 text-[12px] text-slate-50 leading-5">{v}</Text>
+      </View>
+      <View className="ml-6 w-0 h-0 border-l-[10px] border-r-[10px] border-t-[12px] border-l-transparent border-r-transparent border-t-teal-300/16" />
+    </View>
+  );
+}
+
+function categoryIconName(category?: string | null): keyof typeof Feather.glyphMap {
+  const c = String(category ?? "").toLowerCase();
+  if (c.includes("wall")) return "layout";
+  if (c.includes("floor")) return "grid";
+  if (c.includes("rug")) return "square";
+  if (c.includes("houseware")) return "home";
+  if (c.includes("misc")) return "box";
+  if (c.includes("ceiling")) return "umbrella";
+  return "package";
+}
+
+/**
+ * More “AC” category palette:
+ * - Housewares = mint
+ * - Misc = sky
+ * - Wall = lilac
+ * - Floor = sand
+ * - Rug = rose
+ * - Ceiling = aqua
+ */
+function categoryAccent(category?: string | null) {
+  const c = String(category ?? "").toLowerCase();
+  if (c.includes("houseware")) return { iconBg: "bg-teal-500/16", iconBorder: "border-teal-200/18", iconColor: "#a7f3d0" };
+  if (c.includes("misc")) return { iconBg: "bg-sky-500/14", iconBorder: "border-sky-200/18", iconColor: "#bae6fd" };
+  if (c.includes("wall")) return { iconBg: "bg-violet-500/14", iconBorder: "border-violet-200/18", iconColor: "#ddd6fe" };
+  if (c.includes("floor")) return { iconBg: "bg-amber-500/12", iconBorder: "border-amber-200/18", iconColor: "#fde68a" };
+  if (c.includes("rug")) return { iconBg: "bg-rose-500/12", iconBorder: "border-rose-200/18", iconColor: "#fecdd3" };
+  if (c.includes("ceiling")) return { iconBg: "bg-cyan-500/12", iconBorder: "border-cyan-200/18", iconColor: "#a5f3fc" };
+  return { iconBg: "bg-teal-500/14", iconBorder: "border-teal-200/18", iconColor: "#a7f3d0" };
 }
 
 export default function FurnitureDetailPage() {
@@ -134,15 +238,10 @@ export default function FurnitureDetailPage() {
   const furnitureName = useMemo(() => decodeURIComponent(rawId), [rawId]);
 
   const entryKey = useMemo(() => acMakeKey("furniture", furnitureName), [furnitureName]);
-  const entry = useAnimalCrossingCollectionStore(
-    useCallback((s: any) => s.entries[entryKey], [entryKey])
-  );
+  const entry = useAnimalCrossingCollectionStore(useCallback((s: any) => s.entries[entryKey], [entryKey]));
   const toggleCollected = useAnimalCrossingCollectionStore(useCallback((s: any) => s.toggleCollected, []));
-  const incrementCount = useAnimalCrossingCollectionStore(useCallback((s: any) => s.incrementCount, []));
-  const decrementCount = useAnimalCrossingCollectionStore(useCallback((s: any) => s.decrementCount, []));
 
   const isCollected = !!entry?.collected;
-  const count = Number(entry?.count || 0);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -154,7 +253,7 @@ export default function FurnitureDetailPage() {
   const [heroLoading, setHeroLoading] = useState(false);
 
   const [relatedLoading, setRelatedLoading] = useState(false);
-  const [related, setRelated] = useState<NookipediaFurnitureItem[]>([]);
+  const [related, setRelated] = useState<NookipediaFurnitureLite[]>([]);
 
   useEffect(() => {
     void warmFurnitureIndex();
@@ -169,7 +268,6 @@ export default function FurnitureDetailPage() {
         setLoading(true);
         setItem(null);
         setSelectedVarIndex(0);
-
         setRelated([]);
         setRelatedLoading(false);
 
@@ -191,47 +289,21 @@ export default function FurnitureDetailPage() {
 
         const series = asNonEmptyString((fetched as any)?.item_series);
         const set = asNonEmptyString((fetched as any)?.item_set);
-
         const needsRelated = !!(series || set);
 
         if (needsRelated) {
           setRelatedLoading(true);
-
           try {
-            const index = await fetchFurnitureIndex();
+            const xs = await fetchRelatedFurnitureLite({
+              item_set: set,
+              item_series: set ? null : series,
+              excludeName: String((fetched as any)?.name ?? furnitureName),
+              limit: 24,
+            });
             if (cancelled) return;
-
-            const me = String((fetched as any)?.name ?? furnitureName).trim().toLowerCase();
-
-            const filtered = index.filter((x: any) => {
-              const n = String(x?.name ?? "").trim().toLowerCase();
-              if (!n || n === me) return false;
-
-              const xs = asNonEmptyString(x?.item_series);
-              const xset = asNonEmptyString(x?.item_set);
-
-              if (set && xset && xset === set) return true;
-              if (series && xs && xs === series) return true;
-
-              return false;
-            });
-
-            filtered.sort((a: any, b: any) => {
-              const aSet = asNonEmptyString(a?.item_set);
-              const bSet = asNonEmptyString(b?.item_set);
-              if (set) {
-                const aIs = aSet === set ? 1 : 0;
-                const bIs = bSet === set ? 1 : 0;
-                if (aIs !== bIs) return bIs - aIs;
-              }
-              const an = String(a?.name ?? "");
-              const bn = String(b?.name ?? "");
-              return an.localeCompare(bn);
-            });
-
-            setRelated(filtered.slice(0, 24));
+            setRelated(xs);
           } catch (e2) {
-            console.warn("Related furniture index failed:", e2);
+            console.warn("Related lookup failed:", e2);
           } finally {
             if (!cancelled) setRelatedLoading(false);
           }
@@ -255,7 +327,6 @@ export default function FurnitureDetailPage() {
     const v = variations[selectedVarIndex];
     const vImg = getBestImageForVariation(v);
     if (vImg) return vImg;
-
     const candidates = buildFurnitureImageCandidates(item);
     return candidates[0] ?? null;
   }, [variations, selectedVarIndex, item]);
@@ -266,9 +337,35 @@ export default function FurnitureDetailPage() {
     setSelectedVarIndex(0);
   }, [variations.length, selectedVarIndex]);
 
-  const onSelectVariation = useCallback((idx: number) => {
-    setSelectedVarIndex(idx);
-  }, []);
+  useEffect(() => {
+    if (!hero) return;
+    ExpoImage.prefetch(hero).catch(() => { });
+  }, [hero]);
+
+  const lastPrefetchKeyRef = useRef<string>("");
+  useEffect(() => {
+    const urls: string[] = [];
+
+    for (const r of related.slice(0, 9)) {
+      const c = liteToImageCandidates(r);
+      if (c[0]) urls.push(c[0]);
+    }
+    for (const v of variations.slice(0, 9)) {
+      const u = getBestImageForVariation(v);
+      if (u) urls.push(u);
+    }
+
+    const capped = uniqStrings(urls).slice(0, 12);
+    const key = capped.join("|");
+    if (!key || key === lastPrefetchKeyRef.current) return;
+    lastPrefetchKeyRef.current = key;
+
+    capped.forEach((u) => {
+      ExpoImage.prefetch(u).catch(() => { });
+    });
+  }, [related, variations]);
+
+  const onSelectVariation = useCallback((idx: number) => setSelectedVarIndex(idx), []);
 
   const displayName = item?.name ? String(item.name) : furnitureName;
 
@@ -291,7 +388,6 @@ export default function FurnitureDetailPage() {
   const patternTotal = (item as any)?.pattern_total != null ? String((item as any).pattern_total) : null;
 
   const customizable = yesNo((item as any)?.customizable);
-
   const customKits = (item as any)?.custom_kits != null ? String((item as any).custom_kits) : null;
   const customKitType = asNonEmptyString((item as any)?.custom_kit_type);
   const customBodyPart = asNonEmptyString((item as any)?.custom_body_part);
@@ -310,283 +406,200 @@ export default function FurnitureDetailPage() {
   const buyArr = Array.isArray((item as any)?.buy) ? (item as any).buy : [];
   const buyText = buyArr.length
     ? buyArr
-        .map((b: any) => {
-          const p = formatBells(b?.price);
-          const c = asNonEmptyString(b?.currency);
-          if (!p) return null;
-          return c ? `${p} ${c}` : `${p}`;
-        })
-        .filter((s: any) => !!s)
-        .join(" • ")
+      .map((b: any) => {
+        const p = formatBells(b?.price);
+        const c = asNonEmptyString(b?.currency);
+        if (!p) return null;
+        return c ? `${p} ${c}` : `${p}`;
+      })
+      .filter((s: any) => !!s)
+      .join(" • ")
     : null;
 
   const availabilityArr = Array.isArray((item as any)?.availability) ? (item as any).availability : [];
   const availabilityText =
     availabilityArr.length > 0
       ? availabilityArr
-          .map((a: any) => {
-            const from = asNonEmptyString(a?.from);
-            const note = asNonEmptyString(a?.note);
-            if (!from && !note) return null;
-            if (from && note) return `${from} (${note})`;
-            return from ?? note;
-          })
-          .filter((s: any) => !!s)
-          .join(" • ")
+        .map((a: any) => {
+          const from = asNonEmptyString(a?.from);
+          const note = asNonEmptyString(a?.note);
+          if (!from && !note) return null;
+          if (from && note) return `${from} (${note})`;
+          return from ?? note;
+        })
+        .filter((s: any) => !!s)
+        .join(" • ")
       : null;
 
   const notes = asNonEmptyString((item as any)?.notes);
 
-  const needsRelated = !!(itemSeries || itemSet);
-  const showMainSpinner = loading || (needsRelated && relatedLoading);
+  const showMainSpinner = loading;
 
   const goRelated = useCallback(
     (name: string) => {
-      router.push({
-        pathname: "/json/furniture/[id]",
-        params: { id: encodeURIComponent(name) },
-      } as any);
+      router.push({ pathname: "/furniture/[id]", params: { id: encodeURIComponent(name) } } as any);
     },
     [router]
   );
+
+  const subtitleLine = useMemo(() => {
+    const parts: string[] = [];
+    if (itemSet) parts.push(`Set: ${itemSet}`);
+    else if (itemSeries) parts.push(`Series: ${itemSeries}`);
+    if (category) parts.push(category);
+    return parts.join(" • ");
+  }, [itemSet, itemSeries, category]);
+
+  const iconName = categoryIconName(category);
+  const accent = categoryAccent(category);
 
   return (
     <PageWrapper scroll={false} title={displayName} subtitle={category ?? "Furniture"} headerLayout="inline">
       {showMainSpinner ? (
         <View className="flex-1 items-center justify-center mt-6">
           <ActivityIndicator />
-          <Text className="mt-2 text-sm text-slate-300">{loading ? "Loading…" : "Loading related…"}</Text>
+          <Text className="mt-2 text-sm text-teal-100/80">Loading…</Text>
         </View>
       ) : error ? (
         <View className="flex-1 items-center justify-center mt-6 px-5">
-          <Text className="text-sm text-rose-300 text-center">{error}</Text>
+          <View className="rounded-[26px] bg-rose-950/30 border border-rose-500/25 px-4 py-3">
+            <Text className="text-sm text-rose-200 text-center">{error}</Text>
+          </View>
         </View>
       ) : (
-        <ScrollView contentContainerStyle={{ paddingBottom: 28 }}>
-          {/* HERO */}
+        <ScrollView contentContainerStyle={{ paddingBottom: 28 }} className="px-3">
+          {/* TOP “CATALOG” CARD */}
           <View className="mt-4">
-            <Card>
-              <View className="items-center">
-                <View style={{ width: 160, height: 160, alignItems: "center", justifyContent: "center" }}>
-                  {hero ? (
-                    <>
-                      <Image
-                        source={{ uri: hero }}
-                        style={{ width: 160, height: 160 }}
-                        resizeMode="contain"
-                        onLoadStart={() => setHeroLoading(true)}
-                        onLoadEnd={() => setHeroLoading(false)}
-                        onError={() => setHeroLoading(false)}
-                      />
-
-                      {heroLoading ? (
-                        <View
-                          style={{
-                            position: "absolute",
-                            left: 0,
-                            top: 0,
-                            right: 0,
-                            bottom: 0,
-                            alignItems: "center",
-                            justifyContent: "center",
-                            backgroundColor: "rgba(2,6,23,0.25)",
-                            borderRadius: 24,
-                          }}
-                        >
-                          <ActivityIndicator />
-                        </View>
-                      ) : null}
-                    </>
-                  ) : (
-                    <View className="w-[160px] h-[160px] rounded-3xl bg-slate-950/60 border border-slate-700 items-center justify-center">
-                      <Feather name="image" size={20} color="#64748b" />
-                      <Text className="text-slate-500 text-[11px] mt-2">No image</Text>
-                    </View>
-                  )}
-                </View>
-
-                <View className="flex-row items-center mt-3">
-                  <Pressable onPress={() => toggleCollected("furniture", furnitureName)}>
-                    <Text
-                      className={`px-3 py-2 rounded-2xl border text-[12px] font-semibold ${
-                        isCollected
-                          ? "text-emerald-200 bg-emerald-500/15 border-emerald-500/40"
-                          : "text-slate-200 bg-slate-950/40 border-slate-700"
-                      }`}
-                    >
-                      {isCollected ? "Collected" : "Collect"}
-                    </Text>
-                  </Pressable>
-
-                  {isCollected ? (
-                    <View className="flex-row items-center ml-3">
-                      <Pressable onPress={() => decrementCount("furniture", furnitureName)}>
-                        <Text
-                          className="w-8 h-8 text-center text-[16px] font-bold text-slate-100 rounded-2xl bg-slate-950/60 border border-slate-700"
-                          style={{ textAlignVertical: "center" }}
-                        >
-                          −
-                        </Text>
-                      </Pressable>
-
-                      <View className="px-3">
-                        <Text className="text-[13px] text-slate-100 font-semibold">{count}</Text>
-                      </View>
-
-                      <Pressable onPress={() => incrementCount("furniture", furnitureName)}>
-                        <Text
-                          className="w-8 h-8 text-center text-[16px] font-bold text-slate-100 rounded-2xl bg-slate-950/60 border border-slate-700"
-                          style={{ textAlignVertical: "center" }}
-                        >
-                          +
-                        </Text>
-                      </Pressable>
-                    </View>
-                  ) : null}
-                </View>
-
-                <Text className="mt-3 text-base font-semibold text-slate-50 text-center">{displayName}</Text>
-              </View>
-            </Card>
-          </View>
-
-          {/* OVERVIEW */}
-          <View className="mt-3 px-1">
-            <SectionTitle>Overview</SectionTitle>
-            <View className="mt-2">
-              <Card>
-                <StatRow label="Category" value={category} />
-                <StatRow label="Series" value={itemSeries} />
-                <StatRow label="Set" value={itemSet} />
-                <StatRow label="Tag" value={tag} />
-                <StatRow label="Themes" value={themes} />
-                <StatRow label="Functions" value={functions} />
-              </Card>
-            </View>
-          </View>
-
-          {/* HHA + LUCKY */}
-          <View className="mt-3 px-1">
-            <SectionTitle>HHA & Lucky</SectionTitle>
-            <View className="mt-2">
-              <Card>
-                <StatRow label="HHA Category" value={hhaCategory} />
-                <StatRow label="HHA Base" value={hhaBase} />
-                <StatRow label="Lucky" value={lucky} />
-                <StatRow label="Lucky Season" value={luckySeason} />
-              </Card>
-            </View>
-          </View>
-
-          {/* PRICING */}
-          <View className="mt-3 px-1">
-            <SectionTitle>Pricing</SectionTitle>
-            <View className="mt-2">
-              <Card>
-                <StatRow label="Buy" value={buyText} />
-                <StatRow label="Sell" value={sell ? `${sell} Bells` : null} />
-                <StatRow label="Availability" value={availabilityText} />
-              </Card>
-            </View>
-          </View>
-
-          {/* CUSTOMIZATION */}
-          <View className="mt-3 px-1">
-            <SectionTitle>Customization</SectionTitle>
-            <View className="mt-2">
-              <Card>
-                <StatRow label="Customizable" value={customizable} />
-                <StatRow label="Custom Kits" value={customKits} />
-                <StatRow label="Kit Type" value={customKitType} />
-                <StatRow label="Body Part" value={customBodyPart} />
-                <StatRow label="Pattern Part" value={customPatternPart} />
-                <StatRow label="Variation Total" value={variationTotal} />
-                <StatRow label="Pattern Total" value={patternTotal} />
-              </Card>
-            </View>
-          </View>
-
-          {/* SIZE + META */}
-          <View className="mt-3 px-1">
-            <SectionTitle>Size & Meta</SectionTitle>
-            <View className="mt-2">
-              <Card>
-                <StatRow label="Grid" value={gridW && gridL ? `${gridW} × ${gridL}` : null} />
-                <StatRow label="Height" value={height} />
-                <StatRow label="Door Decor" value={doorDecor} />
-                <StatRow label="Version Added" value={versionAdded} />
-                <StatRow label="Unlocked" value={unlocked} />
-              </Card>
-            </View>
-          </View>
-
-          {/* RELATED */}
-          {itemSeries || itemSet ? (
-            <View className="mt-3 px-1">
-              <SectionTitle>Related {itemSet ? "Set" : "Series"}</SectionTitle>
-
-              <View className="mt-2">
-                <Card>
-                  <Text className="text-[11px] text-slate-400">
-                    {itemSet ? `Same set: ${itemSet}` : `Same series: ${itemSeries}`}
+            <PaperCard>
+              <View className="flex-row items-center justify-between mb-3">
+                <View className="flex-row items-center">
+                  <View className={`w-8 h-8 rounded-2xl ${accent.iconBg} border ${accent.iconBorder} items-center justify-center`}>
+                    <Feather name={iconName} size={16} color={accent.iconColor} />
+                  </View>
+                  <Text className="ml-2 text-[11px] font-bold tracking-[0.14em] text-teal-100/75 uppercase">
+                    Nook&#39;s Catalog
                   </Text>
+                </View>
 
-                  {related.length === 0 ? (
-                    <Text className="mt-2 text-[11px] text-slate-600">No related items found.</Text>
-                  ) : (
-                    <View className="mt-2 flex-row flex-wrap">
-                      {related.map((r, idx) => {
-                        const name = String((r as any)?.name ?? "").trim();
-                        if (!name) return null;
-
-                        const candidates = buildFurnitureImageCandidates(r);
-                        const img = candidates[0] ?? null;
-
-                        return (
-                          <View key={`${name}::${idx}`} className="w-1/3 p-1">
-                            <Pressable
-                              onPress={() => goRelated(name)}
-                              className="rounded-3xl p-3 border items-center border-slate-700 bg-slate-900/70"
-                            >
-                              <View
-                                style={{
-                                  width: 68,
-                                  height: 68,
-                                  alignItems: "center",
-                                  justifyContent: "center",
-                                  borderRadius: 18,
-                                  backgroundColor: "rgba(2,6,23,0.35)",
-                                  borderWidth: 1,
-                                  borderColor: "rgba(51,65,85,0.7)",
-                                }}
-                              >
-                                {img ? (
-                                  <Image source={{ uri: img }} style={{ width: 64, height: 64 }} resizeMode="contain" />
-                                ) : (
-                                  <Feather name="image" size={18} color="#64748b" />
-                                )}
-                              </View>
-
-                              <Text className="text-[11px] font-semibold text-slate-100 text-center mt-2" numberOfLines={2}>
-                                {name}
-                              </Text>
-                            </Pressable>
-                          </View>
-                        );
-                      })}
-                    </View>
-                  )}
-                </Card>
+                <Pressable onPress={() => toggleCollected("furniture", furnitureName)}>
+                  <View
+                    className={`px-3 py-2 rounded-full border ${isCollected ? "bg-teal-500/18 border-teal-200/22" : "bg-amber-500/10 border-amber-200/18"
+                      }`}
+                  >
+                    <Text className={`text-[12px] font-extrabold ${isCollected ? "text-teal-50" : "text-amber-100"}`}>
+                      {isCollected ? "In Storage" : "Need This"}
+                    </Text>
+                  </View>
+                </Pressable>
               </View>
-            </View>
-          ) : null}
 
-          {/* VARIATIONS GRID */}
+              <View className="flex-row items-center">
+                <View className="w-[132px]">
+                  <View className="rounded-[26px] bg-teal-900/14 border border-teal-300/16 p-3 items-center justify-center">
+                    <View style={{ width: 96, height: 96, alignItems: "center", justifyContent: "center" }}>
+                      {hero ? (
+                        <>
+                          <ExpoImage
+                            source={{ uri: hero }}
+                            style={{ width: 96, height: 96 }}
+                            contentFit="contain"
+                            transition={120}
+                            cachePolicy="disk"
+                            onLoadStart={() => setHeroLoading(true)}
+                            onLoad={() => setHeroLoading(false)}
+                            onError={() => setHeroLoading(false)}
+                          />
+                          {heroLoading && (
+                            <View
+                              style={{
+                                position: "absolute",
+                                inset: 0,
+                                alignItems: "center",
+                                justifyContent: "center",
+                                backgroundColor: "rgba(13, 148, 136, 0.18)",
+                                borderRadius: 18,
+                              }}
+                            >
+                              <ActivityIndicator />
+                            </View>
+                          )}
+                        </>
+                      ) : (
+                        <View className="w-[96px] h-[96px] rounded-[22px] bg-teal-950/35 border border-teal-300/16 items-center justify-center">
+                          <LocalIcon
+                            source={null}
+                            size={92}
+                            roundedClassName="rounded-[22px]"
+                            placeholderClassName="bg-teal-950/35 border border-teal-300/16"
+                          />
+                          <View style={{ position: "absolute", alignItems: "center" }}>
+                            <Feather name="image" size={18} color="#99f6e4" />
+                            <Text className="text-teal-100/60 text-[10px] mt-2">No image</Text>
+                          </View>
+                        </View>
+                      )}
+                    </View>
+                  </View>
+                </View>
+
+                <View className="flex-1 pl-3">
+                  <WoodTitle title={displayName} subtitle={subtitleLine || null} />
+                </View>
+              </View>
+            </PaperCard>
+          </View>
+
+          <SectionLabel>Overview</SectionLabel>
+          <PaperCard>
+            <LeafChip label="Category" value={category} />
+            <LeafChip label="Series" value={itemSeries} />
+            <LeafChip label="Set" value={itemSet} />
+            <LeafChip label="Tag" value={tag} />
+            <LeafChip label="Themes" value={themes} />
+            <LeafChip label="Functions" value={functions} />
+          </PaperCard>
+
+          <SectionLabel>Pricing</SectionLabel>
+          <PaperCard>
+            <LeafChip label="Buy" value={buyText} />
+            <LeafChip label="Sell" value={sell ? `${sell} Bells` : null} />
+            <LeafChip label="Availability" value={availabilityText} />
+          </PaperCard>
+
+          <SectionLabel>HHA & Lucky</SectionLabel>
+          <PaperCard>
+            <LeafChip label="HHA Category" value={hhaCategory} />
+            <LeafChip label="HHA Base" value={hhaBase} />
+            <LeafChip label="Lucky" value={lucky} />
+            <LeafChip label="Lucky Season" value={luckySeason} />
+          </PaperCard>
+
+          <SectionLabel>Customization</SectionLabel>
+          <PaperCard>
+            <LeafChip label="Customizable" value={customizable} />
+            <LeafChip label="Custom Kits" value={customKits} />
+            <LeafChip label="Kit Type" value={customKitType} />
+            <LeafChip label="Body Part" value={customBodyPart} />
+            <LeafChip label="Pattern Part" value={customPatternPart} />
+            <LeafChip label="Variation Total" value={variationTotal} />
+            <LeafChip label="Pattern Total" value={patternTotal} />
+          </PaperCard>
+
+          <SectionLabel>Size & Meta</SectionLabel>
+          <PaperCard>
+            <LeafChip label="Grid" value={gridW && gridL ? `${gridW} × ${gridL}` : null} />
+            <LeafChip label="Height" value={height} />
+            <LeafChip label="Door Decor" value={doorDecor} />
+            <LeafChip label="Version Added" value={versionAdded} />
+            <LeafChip label="Unlocked" value={unlocked} />
+            <LeafChip label="Thumbsize" value={thumbUsed ? `${thumbUsed}px` : null} />
+          </PaperCard>
+
           {variations.length > 0 ? (
-            <View className="mt-3 px-1">
-              <SectionTitle>Variations</SectionTitle>
+            <>
+              <SectionLabel>Variations</SectionLabel>
 
-              <View className="mt-2 flex-row flex-wrap">
+              <View className="flex-row flex-wrap">
                 {variations.map((v, idx) => {
                   const img = getBestImageForVariation(v);
                   const isActive = idx === selectedVarIndex;
@@ -604,9 +617,8 @@ export default function FurnitureDetailPage() {
                     <View key={`${label}::${idx}`} className="w-1/3 p-1">
                       <Pressable
                         onPress={() => onSelectVariation(idx)}
-                        className={`rounded-3xl p-3 border items-center ${
-                          isActive ? "border-sky-400 bg-slate-900/90" : "border-slate-700 bg-slate-900/70"
-                        }`}
+                        className={`rounded-[26px] p-3 border items-center ${isActive ? "border-teal-200/35 bg-teal-900/14" : "border-teal-300/16 bg-teal-950/18"
+                          }`}
                       >
                         <View
                           style={{
@@ -615,48 +627,116 @@ export default function FurnitureDetailPage() {
                             alignItems: "center",
                             justifyContent: "center",
                             borderRadius: 18,
-                            backgroundColor: "rgba(2,6,23,0.35)",
+                            backgroundColor: "rgba(13, 148, 136, 0.12)",
                             borderWidth: 1,
-                            borderColor: isActive ? "rgba(56,189,248,0.55)" : "rgba(51,65,85,0.7)",
+                            borderColor: isActive ? "rgba(153, 246, 228, 0.45)" : "rgba(94, 234, 212, 0.16)",
                           }}
                         >
                           {img ? (
-                            <Image source={{ uri: img }} style={{ width: 64, height: 64 }} resizeMode="contain" />
+                            <ExpoImage
+                              source={{ uri: img }}
+                              style={{ width: 64, height: 64, borderRadius: 18 }}
+                              contentFit="contain"
+                              transition={120}
+                              cachePolicy="disk"
+                            />
                           ) : (
-                            <Feather name="image" size={18} color="#64748b" />
+                            <Feather name="image" size={18} color="#99f6e4" />
                           )}
                         </View>
 
-                        <Text className="text-[11px] font-semibold text-slate-100 text-center mt-2" numberOfLines={2}>
+                        <Text className="text-[11px] font-semibold text-slate-50 text-center mt-2" numberOfLines={2}>
                           {label}
                         </Text>
 
                         {colors ? (
-                          <Text className="text-[10px] text-slate-500 text-center mt-1" numberOfLines={2}>
+                          <Text className="text-[10px] text-teal-100/60 text-center mt-1" numberOfLines={2}>
                             {colors}
                           </Text>
                         ) : (
-                          <Text className="text-[10px] text-slate-600 text-center mt-1">—</Text>
+                          <Text className="text-[10px] text-teal-100/40 text-center mt-1">—</Text>
                         )}
                       </Pressable>
                     </View>
                   );
                 })}
               </View>
-            </View>
+            </>
           ) : null}
 
-          {/* NOTES */}
-          {notes ? (
-            <View className="mt-3 px-1">
-              <SectionTitle>Notes</SectionTitle>
-              <View className="mt-2">
-                <Card>
-                  <Text className="text-[12px] text-slate-200">{notes}</Text>
-                </Card>
-              </View>
-            </View>
+          {itemSeries || itemSet ? (
+            <>
+              <SectionLabel>Related {itemSet ? "Set" : "Series"}</SectionLabel>
+              <PaperCard>
+                <View className="flex-row items-center justify-between">{relatedLoading ? <ActivityIndicator /> : null}</View>
+
+                {!relatedLoading && related.length === 0 ? (
+                  <Text className="mt-2 text-[11px] text-teal-100/55">No related items found.</Text>
+                ) : relatedLoading ? (
+                  <Text className="mt-2 text-[11px] text-teal-100/55">Loading related…</Text>
+                ) : (
+                  <View className="mt-2 flex-row flex-wrap">
+                    {related.map((r, idx) => {
+                      const name = String(r?.name ?? "").trim();
+                      if (!name) return null;
+
+                      const candidates = liteToImageCandidates(r);
+                      const img = candidates[0] ?? null;
+
+                      return (
+                        <View key={`${name}::${idx}`} className="w-1/3 p-1">
+                          <Pressable
+                            onPress={() => goRelated(name)}
+                            className="rounded-[26px] p-3 border items-center border-teal-300/16 bg-teal-950/18"
+                          >
+                            <View
+                              style={{
+                                width: 68,
+                                height: 68,
+                                alignItems: "center",
+                                justifyContent: "center",
+                                borderRadius: 18,
+                                backgroundColor: "rgba(13, 148, 136, 0.12)",
+                                borderWidth: 1,
+                                borderColor: "rgba(94, 234, 212, 0.16)",
+                              }}
+                            >
+                              {img ? (
+                                <ExpoImage
+                                  source={{ uri: img }}
+                                  style={{ width: 64, height: 64 }}
+                                  contentFit="contain"
+                                  transition={120}
+                                  cachePolicy="disk"
+                                />
+                              ) : (
+                                <Feather name="image" size={18} color="#99f6e4" />
+                              )}
+                            </View>
+
+                            <Text className="text-[11px] font-semibold text-slate-50 text-center mt-2" numberOfLines={2}>
+                              {name}
+                            </Text>
+                          </Pressable>
+                        </View>
+                      );
+                    })}
+                  </View>
+                )}
+              </PaperCard>
+            </>
           ) : null}
+
+          {notes ? (
+            <>
+              <SectionLabel>Notes</SectionLabel>
+              <PaperCard>
+                <Text className="text-[12px] text-slate-50 leading-5">{notes}</Text>
+              </PaperCard>
+            </>
+          ) : null}
+
+          <View className="h-6" />
         </ScrollView>
       )}
     </PageWrapper>

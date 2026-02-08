@@ -1,13 +1,9 @@
 // components/Pokemon/PokemonNationalDex.tsx
 import React, { useEffect, useMemo, useState } from "react";
-import { View, Text, FlatList, ActivityIndicator, Image, Pressable } from "react-native";
+import { View, Text, FlatList, ActivityIndicator, Pressable } from "react-native";
+import { Image as ExpoImage } from "expo-image";
 import { useRouter } from "expo-router";
-import {
-  getPokemonList,
-  extractPokemonIdFromUrl,
-  type PokemonListResult,
-  type PokemonListResponse,
-} from "@/lib/pokemon/index";
+import { getPokemonList, extractPokemonIdFromUrl, type PokemonListResult, type PokemonListResponse } from "@/lib/pokemon/index";
 
 export type DexViewMode = "national" | "generation" | "region" | "game";
 
@@ -19,39 +15,35 @@ type ListItem = {
 type PokemonNationalDexProps = {
   search: string;
   from?: number; // National Dex start (inclusive)
-  to?: number;   // National Dex end (inclusive)
+  to?: number; // National Dex end (inclusive)
   viewMode: DexViewMode; // currently only "national"
 };
 
 const PAGE_SIZE = 50;
 
-// Simple in-memory cache for the full National Dex
 let NATIONAL_DEX_CACHE: ListItem[] | null = null;
 
-// --- Small tile component for each Pokémon card ---
 type DexTileProps = {
   item: ListItem;
-  onPress: (id: number) => void;
+  onPress: (name: string) => void;
 };
 
 const DexTile: React.FC<DexTileProps> = ({ item, onPress }) => {
   const spriteUrl =
-    "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/" +
-    item.id +
-    ".png";
+    "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/" + item.id + ".png";
 
   return (
-    <Pressable onPress={() => onPress(item.id)} className="w-1/3 p-1">
+    <Pressable onPress={() => onPress(item.name)} className="w-1/3 p-1">
       <View className="rounded-3xl p-3 border mb-1 bg-slate-900/80 border-slate-700 items-center">
-        <Image
+        <ExpoImage
           source={{ uri: spriteUrl }}
           style={{ width: 60, height: 60 }}
-          resizeMode="contain"
+          contentFit="contain"
+          transition={120}
+          cachePolicy="disk"
         />
-        <Text className="text-[11px] text-slate-400 mt-1">
-          #{String(item.id).padStart(3, "0")}
-        </Text>
-        <Text className="text-xs font-semibold text-slate-50 text-center">
+        <Text className="text-[11px] text-slate-400 mt-1">#{String(item.id).padStart(3, "0")}</Text>
+        <Text className="text-xs font-semibold text-slate-50 text-center" numberOfLines={1}>
           {item.name.charAt(0).toUpperCase() + item.name.slice(1)}
         </Text>
       </View>
@@ -59,12 +51,8 @@ const DexTile: React.FC<DexTileProps> = ({ item, onPress }) => {
   );
 };
 
-const PokemonNationalDex: React.FC<PokemonNationalDexProps> = ({
-  search,
-  from,
-  to,
-  viewMode, // currently unused but kept for flexibility
-}) => {
+const PokemonNationalDex: React.FC<PokemonNationalDexProps> = ({ search, from, to, viewMode }) => {
+  void viewMode;
   const router = useRouter();
 
   const [allItems, setAllItems] = useState<ListItem[]>([]);
@@ -82,7 +70,6 @@ const PokemonNationalDex: React.FC<PokemonNationalDexProps> = ({
 
   const normalizedQuery = search.trim().toLowerCase();
 
-  // Fetch the full National Dex once, cache it in memory
   useEffect(() => {
     let cancelled = false;
 
@@ -90,7 +77,6 @@ const PokemonNationalDex: React.FC<PokemonNationalDexProps> = ({
       try {
         setError(null);
 
-        // If we already have a cache, re-use it
         if (NATIONAL_DEX_CACHE && !cancelled) {
           setAllItems(NATIONAL_DEX_CACHE);
           setLoading(false);
@@ -116,7 +102,6 @@ const PokemonNationalDex: React.FC<PokemonNationalDexProps> = ({
 
         if (cancelled) return;
 
-        // Dedupe just in case
         const seen = new Set<number>();
         const deduped: ListItem[] = [];
         for (const item of aggregated) {
@@ -145,21 +130,15 @@ const PokemonNationalDex: React.FC<PokemonNationalDexProps> = ({
     };
   }, []);
 
-  // Apply National Dex ID range (for generations / views in the future)
   const rangedItems = useMemo(() => {
     let base = allItems;
 
-    if (typeof from === "number") {
-      base = base.filter((item) => item.id >= from);
-    }
-    if (typeof to === "number") {
-      base = base.filter((item) => item.id <= to);
-    }
+    if (typeof from === "number") base = base.filter((item) => item.id >= from);
+    if (typeof to === "number") base = base.filter((item) => item.id <= to);
 
     return base;
   }, [allItems, from, to]);
 
-  // Apply search across the (optionally ranged) list
   const filteredItems = useMemo(() => {
     if (!normalizedQuery) return rangedItems;
 
@@ -170,24 +149,20 @@ const PokemonNationalDex: React.FC<PokemonNationalDexProps> = ({
     });
   }, [rangedItems, normalizedQuery]);
 
-  const handlePress = (id: number) => {
+  const handlePress = (name: string) => {
     router.push({
       pathname: "/pokemon/[id]",
-      params: { id: String(id) },
+      params: { id: name },
     } as any);
   };
 
-  const renderItem = ({ item }: { item: ListItem }) => {
-    return <DexTile item={item} onPress={handlePress} />;
-  };
+  const renderItem = ({ item }: { item: ListItem }) => <DexTile item={item} onPress={handlePress} />;
 
   if (loading && allItems.length === 0) {
     return (
       <View className="flex-1 items-center justify-center mt-4">
         <ActivityIndicator />
-        <Text className="mt-2 text-sm text-slate-300">
-          Loading National Pokédex…
-        </Text>
+        <Text className="mt-2 text-sm text-slate-300">Loading National Pokédex…</Text>
       </View>
     );
   }
@@ -203,9 +178,7 @@ const PokemonNationalDex: React.FC<PokemonNationalDexProps> = ({
   if (!loading && filteredItems.length === 0) {
     return (
       <View className="flex-1 items-center justify-center mt-4 px-4">
-        <Text className="text-sm text-slate-400 text-center">
-          No Pokémon found in this view. Try a different search.
-        </Text>
+        <Text className="text-sm text-slate-400 text-center">No Pokémon found in this view. Try a different search.</Text>
       </View>
     );
   }
@@ -216,10 +189,7 @@ const PokemonNationalDex: React.FC<PokemonNationalDexProps> = ({
       keyExtractor={(item) => String(item.id)}
       renderItem={renderItem}
       numColumns={3}
-      contentContainerStyle={{
-        paddingHorizontal: 4,
-        paddingBottom: 24,
-      }}
+      contentContainerStyle={{ paddingHorizontal: 4, paddingBottom: 24 }}
     />
   );
 };

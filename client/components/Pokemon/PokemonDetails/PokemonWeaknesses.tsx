@@ -26,7 +26,7 @@ const PokemonWeaknesses: React.FC<PokemonWeaknessesProps> = ({
       </Text>
       <View className="flex-row flex-wrap">
         {weaknesses.map((w) => {
-          const { bg, border, text, tint } = getTypeStyle(w);
+          const { bg, text, tint } = getTypeStyle(w);
           return (
             <LiquidGlass
               key={w}
@@ -40,7 +40,7 @@ const PokemonWeaknesses: React.FC<PokemonWeaknessesProps> = ({
                 marginBottom: 8,
               }}
             >
-              <View className={`px-4 py-2 rounded-full border ${bg} ${border}`}>
+              <View className={`px-4 py-2 rounded-full border ${bg}`}>
                 <Text className={`text-[12px] font-semibold ${text}`}>
                   {capitalize(w)}
                 </Text>

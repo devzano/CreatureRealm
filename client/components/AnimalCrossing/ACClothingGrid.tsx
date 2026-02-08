@@ -1,24 +1,25 @@
 // components/AnimalCrossing/ACClothingGrid.tsx
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { View, Text, ActivityIndicator, Image, Pressable } from "react-native";
+import { View, Text, ActivityIndicator, Pressable } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import { Image as ExpoImage } from "expo-image";
 
 import {
   fetchClothingByName,
   fetchClothingNames,
   type NookipediaClothingItem,
 } from "@/lib/animalCrossing/nookipediaClothing";
-
 import ACGridWrapper from "@/components/AnimalCrossing/ACGridWrapper";
 import { useAnimalCrossingCollectionStore, acMakeKey } from "@/store/animalCrossingCollectionStore";
 import { useACNameDetailGrid } from "@/lib/animalCrossing/useACNameDetailGrid";
+import LocalIcon from "@/components/LocalIcon";
 
 const PAGE_SIZE = 45;
 const THUMB_PRIMARY = 256;
 const THUMB_FALLBACK = 128;
 
-const PREFETCH_BUFFER = 6;
+const PREFETCH_BUFFER = 12;
 const DETAIL_CONCURRENCY = 3;
 const INITIAL_PREFETCH = 9;
 
@@ -54,6 +55,7 @@ function buildClothingImageCandidates(item?: NookipediaClothingItem | null): str
 type ACClothingGridProps = {
   search: string;
   collectedOnly?: boolean;
+  collectedIds?: string[];
 };
 
 type ClothingTileProps = {
@@ -70,13 +72,8 @@ const ClothingTile: React.FC<ClothingTileProps> = React.memo(
 
     const key = useMemo(() => acMakeKey("clothing", name), [name]);
 
-    const entry = useAnimalCrossingCollectionStore(
-      useCallback((s: any) => s.entries?.[key], [key])
-    );
-
-    const toggleCollected = useAnimalCrossingCollectionStore(
-      useCallback((s: any) => s.toggleCollected, [])
-    );
+    const entry = useAnimalCrossingCollectionStore(useCallback((s: any) => s.entries?.[key], [key]));
+    const toggleCollected = useAnimalCrossingCollectionStore(useCallback((s: any) => s.toggleCollected, []));
 
     const isCollected = !!entry?.collected;
 
@@ -92,7 +89,7 @@ const ClothingTile: React.FC<ClothingTileProps> = React.memo(
 
     useEffect(() => {
       if (!currentUri) return;
-      Image.prefetch(currentUri).catch(() => {});
+      ExpoImage.prefetch(currentUri).catch(() => {});
     }, [currentUri]);
 
     const goDetails = useCallback(() => {
@@ -128,12 +125,14 @@ const ClothingTile: React.FC<ClothingTileProps> = React.memo(
             <View style={{ width: 60, height: 60, alignItems: "center", justifyContent: "center" }}>
               {currentUri ? (
                 <>
-                  <Image
+                  <ExpoImage
                     source={{ uri: currentUri }}
                     style={{ width: 60, height: 60 }}
-                    resizeMode="contain"
+                    contentFit="contain"
+                    transition={120}
+                    cachePolicy="disk"
                     onLoadStart={() => setImgLoading(true)}
-                    onLoadEnd={() => setImgLoading(false)}
+                    onLoad={() => setImgLoading(false)}
                     onError={handleImageError}
                   />
 
@@ -156,13 +155,21 @@ const ClothingTile: React.FC<ClothingTileProps> = React.memo(
                   ) : null}
                 </>
               ) : (
-                <View className="w-[60px] h-[60px] rounded-2xl bg-slate-950/60 border border-slate-700 items-center justify-center">
-                  {showOverlaySpinner ? <ActivityIndicator /> : <Feather name="image" size={18} color="#64748b" />}
+                <View style={{ width: 60, height: 60, alignItems: "center", justifyContent: "center" }}>
+                  <LocalIcon
+                    source={null}
+                    size={60}
+                    roundedClassName="rounded-2xl"
+                    placeholderClassName="bg-slate-950/60 border border-slate-700"
+                  />
+                  <View style={{ position: "absolute" }}>
+                    {showOverlaySpinner ? <ActivityIndicator /> : <Feather name="image" size={18} color="#64748b" />}
+                  </View>
                 </View>
               )}
             </View>
 
-            <Text className="text-xs font-semibold text-slate-50 text-center mt-2" numberOfLines={2}>
+            <Text className="text-xs font-semibold text-slate-50 text-center mt-2" numberOfLines={1}>
               {name}
             </Text>
 
@@ -189,33 +196,41 @@ const ClothingTile: React.FC<ClothingTileProps> = React.memo(
   }
 );
 
-const ACClothingGrid: React.FC<ACClothingGridProps> = ({ search, collectedOnly = false }) => {
-  const entries = useAnimalCrossingCollectionStore((s: any) => (collectedOnly ? s.entries : null));
+const ACClothingGrid: React.FC<ACClothingGridProps> = ({ search, collectedOnly = false, collectedIds }) => {
+  const entries = useAnimalCrossingCollectionStore(useCallback((s: any) => s.entries, []));
 
-  const collectedNameSet = useMemo(() => {
-    if (!collectedOnly) return null;
-
+  const collectedSet = useMemo(() => {
     const set = new Set<string>();
-    const src = entries || {};
-    for (const [key, entry] of Object.entries(src)) {
-      if (!String(key).startsWith("clothing:")) continue;
-      const name = String(key).slice("clothing:".length);
 
-      const count = Math.max(Number((entry as any)?.count || 0), 0);
-      const collected = !!(entry as any)?.collected;
-
-      if (count > 0 || collected) set.add(name);
+    if (Array.isArray(collectedIds)) {
+      for (const x of collectedIds) {
+        const s = String(x ?? "").trim();
+        if (s) set.add(s);
+      }
+      return set;
     }
+
+    if (!collectedOnly) return set;
+
+    for (const [key, entry] of Object.entries(entries || {})) {
+      if (!String(key).startsWith("clothing:")) continue;
+
+      const isCollected = !!(entry as any)?.collected;
+      const count = Math.max(Number((entry as any)?.count || 0), 0);
+      if (!isCollected && count <= 0) continue;
+
+      const name = String(key).slice("clothing:".length).trim();
+      if (name) set.add(name);
+    }
+
     return set;
-  }, [entries, collectedOnly]);
+  }, [entries, collectedOnly, collectedIds]);
 
   const extraFilter = useMemo(() => {
     if (!collectedOnly) return undefined;
-
-    if (!collectedNameSet || collectedNameSet.size <= 0) return () => false;
-
-    return (name: string) => collectedNameSet.has(String(name));
-  }, [collectedOnly, collectedNameSet]);
+    if (collectedSet.size <= 0) return () => false;
+    return (name: string) => collectedSet.has(String(name));
+  }, [collectedOnly, collectedSet]);
 
   const grid = useACNameDetailGrid<NookipediaClothingItem>({
     search,
@@ -231,10 +246,10 @@ const ACClothingGrid: React.FC<ACClothingGridProps> = ({ search, collectedOnly =
   });
 
   const headerLine = useMemo(() => {
-    const loading = Object.keys(grid.detailLoadingByName).length > 0 ? " • loading…" : "";
-    return collectedOnly
-      ? `Collected: ${grid.filteredNames.length} items${loading}`
-      : `Showing ${grid.visibleNames.length} / ${grid.filteredNames.length} items${loading}`;
+    const label = collectedOnly ? "collected clothing" : "clothing";
+    return `Showing ${grid.visibleNames.length} / ${grid.filteredNames.length} ${label}${
+      Object.keys(grid.detailLoadingByName).length > 0 ? " • loading…" : ""
+    }`;
   }, [grid.visibleNames.length, grid.filteredNames.length, grid.detailLoadingByName, collectedOnly]);
 
   const renderClothingItem = useCallback(
@@ -253,7 +268,7 @@ const ACClothingGrid: React.FC<ACClothingGridProps> = ({ search, collectedOnly =
   return (
     <ACGridWrapper<string>
       isInitialLoading={grid.namesLoading && !grid.namesLoadedOnce}
-      initialLoadingText="Loading clothing list…"
+      initialLoadingText={collectedOnly ? "Loading your collected clothing…" : "Loading clothing list…"}
       errorText={grid.namesError}
       onRetry={grid.retryReloadNames}
       isEmpty={grid.filteredNames.length === 0}

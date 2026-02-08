@@ -73,6 +73,9 @@ export type WeaponIndexItem = {
   rarity: string | null;
   technology: number | null;
 
+  // NEW: mini-stat shown on index cards
+  attack: number | null;
+
   description: string | null;
   isAvailable: boolean;
 
@@ -100,6 +103,10 @@ export type WeaponDetail = {
   iconUrl: string | null;
   rarity: string | null;
   technology: number | null;
+
+  // NEW: parsed from mini-stat if present on detail page; can be merged from index fallback
+  attack: number | null;
+
   description: string | null;
   isAvailable: boolean;
   recipes: WeaponRecipeIngredient[];
@@ -205,6 +212,45 @@ async function fetchHtml(url: string): Promise<string> {
 }
 
 // -----------------------------
+// Mini stats parsing helpers
+// -----------------------------
+
+function extractMiniStatsBlock(html: string): string | null {
+  return (
+    firstMatch(html, /<div\b[^>]*class="d-flex flex-column small"[^>]*>\s*([\s\S]*?)\s*<\/div>/i) ??
+    firstMatch(html, /<div\b[^>]*class='d-flex flex-column small'[^>]*>\s*([\s\S]*?)\s*<\/div>/i) ??
+    null
+  );
+}
+
+function extractLabeledNumber(miniStatsHtml: string, label: string): string | null {
+  const safe = String(miniStatsHtml ?? "");
+  const lbl = String(label ?? "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); // escape regex
+
+  // Handles both:
+  // <span ...>Attack</span><span class="border ...">280</span>
+  // and Technology variant where label is nested in an extra span:
+  // <span ...><span ...>Technology</span></span><span class="border ...">15</span>
+  return (
+    firstMatch(
+      safe,
+      new RegExp(
+        `${lbl}\\s*<\\/span>[\\s\\S]*?<span\\b[^>]*class="[^"]*\\bborder\\b[^"]*"[^>]*>\\s*([0-9]+)\\s*<\\/span>`,
+        "i"
+      )
+    ) ??
+    firstMatch(
+      safe,
+      new RegExp(
+        `${lbl}\\s*<\\/span>[\\s\\S]*?<span\\b[^>]*class='[^']*\\bborder\\b[^']*'[^>]*>\\s*([0-9]+)\\s*<\\/span>`,
+        "i"
+      )
+    ) ??
+    null
+  );
+}
+
+// -----------------------------
 // Index parsing (/en/Weapon)
 // -----------------------------
 
@@ -241,17 +287,13 @@ export function parseWeaponIndexHtml(html: string): WeaponIndexItem[] {
 
     const iconUrl = extractSize128ImgUrl(chunk) ?? extractAnyInventoryIconUrl(chunk) ?? null;
 
-    const techStr =
-      firstMatch(
-        chunk,
-        /Technology<\/span>\s*<\/span>\s*<span\b[^>]*class="[^"]*\bborder\b[^"]*"[^>]*>\s*([0-9]+)\s*<\/span>/i
-      ) ??
-      firstMatch(
-        chunk,
-        /Technology<\/span>\s*<\/span>\s*<span\b[^>]*class='[^']*\bborder\b[^']*'[^>]*>\s*([0-9]+)\s*<\/span>/i
-      );
+    // Mini stats: Attack + Technology live here
+    const mini = extractMiniStatsBlock(chunk);
+    const techStr = mini ? extractLabeledNumber(mini, "Technology") : null;
+    const atkStr = mini ? extractLabeledNumber(mini, "Attack") : null;
 
-    const technology = techStr ? Number(techStr) : null;
+    const technology = techStr != null ? Number(techStr) : NaN;
+    const attack = atkStr != null ? Number(atkStr) : NaN;
 
     const descHtml =
       firstMatch(chunk, /<div\b[^>]*class="card-body[^"]*"[^>]*>\s*<div>([\s\S]*?)<\/div>\s*<\/div>/i) ??
@@ -274,7 +316,8 @@ export function parseWeaponIndexHtml(html: string): WeaponIndexItem[] {
       name: cleanKey(name ?? slug),
       iconUrl: iconUrl ? absUrl(iconUrl) : null,
       rarity: rarity ? cleanKey(rarity) : null,
-      technology: Number.isFinite(technology as any) ? technology : null,
+      technology: Number.isFinite(technology) ? technology : null,
+      attack: Number.isFinite(attack) ? attack : null,
       description: description || null,
       isAvailable,
       recipes,
@@ -341,6 +384,10 @@ function parseRecipes(recipesHtml: string): WeaponRecipeIngredient[] {
 function parseWeaponDetailHtml(html: string, slugKey: string): WeaponDetail {
   const src = String(html ?? "");
 
+  const mini = extractMiniStatsBlock(src);
+  const techStr = mini ? extractLabeledNumber(mini, "Technology") : null;
+  const atkStr = mini ? extractLabeledNumber(mini, "Attack") : null;
+
   const base: WeaponDetail = {
     slug: cleanKey(slugKey),
     name: cleanKey(
@@ -363,16 +410,11 @@ function parseWeaponDetailHtml(html: string, slugKey: string): WeaponDetail {
           ""
       ) || null,
     technology: (() => {
-      const techStr =
-        firstMatch(
-          src,
-          /Technology<\/span>\s*<\/span>\s*<span\b[^>]*class="[^"]*\bborder\b[^"]*"[^>]*>\s*([0-9]+)\s*<\/span>/i
-        ) ??
-        firstMatch(
-          src,
-          /Technology<\/span>\s*<\/span>\s*<span\b[^>]*class='[^']*\bborder\b[^']*'[^>]*>\s*([0-9]+)\s*<\/span>/i
-        );
       const n = techStr != null ? Number(techStr) : NaN;
+      return Number.isFinite(n) ? n : null;
+    })(),
+    attack: (() => {
+      const n = atkStr != null ? Number(atkStr) : NaN;
       return Number.isFinite(n) ? n : null;
     })(),
     description: (() => {
@@ -484,6 +526,7 @@ function mergeWithIndexFallback(detail: WeaponDetail): WeaponDetail {
     iconUrl: detail.iconUrl || index.iconUrl,
     rarity: detail.rarity || index.rarity,
     technology: detail.technology ?? index.technology ?? null,
+    attack: detail.attack ?? index.attack ?? null,
     description: detail.description || index.description,
     isAvailable: detail.isAvailable ?? index.isAvailable,
     recipes: detail.recipes?.length ? detail.recipes : index.recipes,

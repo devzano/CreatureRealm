@@ -20,7 +20,7 @@ export function Card({
   return (
     <View
       className="rounded-3xl bg-slate-900/80 border p-4"
-      style={{ borderColor: borderColor ?? "rgba(51, 65, 85, 1)" }} // slate-700 fallback
+      style={{ borderColor: borderColor ?? "rgba(51, 65, 85, 1)" }}
     >
       {children}
     </View>

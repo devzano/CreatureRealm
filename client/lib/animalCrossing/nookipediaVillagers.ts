@@ -61,106 +61,158 @@ export type NookipediaVillager = {
     [k: string]: any;
   };
 
-  // API returns extra keys
   [k: string]: any;
 };
 
-/**
- * ---------- Villagers Index Cache ----------
- */
 const INDEX_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
 
-let villagersCache: { fetchedAt: number; items: NookipediaVillager[] } | null = null;
-let villagersPromise: Promise<NookipediaVillager[]> | null = null;
+type CacheEntry = { fetchedAt: number; items: NookipediaVillager[] };
 
-function isFresh(cache: typeof villagersCache) {
+const villagersCacheByGame: Record<string, CacheEntry | undefined> = {};
+const villagersPromiseByGame: Record<string, Promise<NookipediaVillager[]> | undefined> = {};
+
+function isFresh(cache?: CacheEntry) {
   if (!cache) return false;
   return Date.now() - cache.fetchedAt < INDEX_TTL_MS;
 }
 
-export async function fetchVillagersIndex(opts?: { force?: boolean }): Promise<NookipediaVillager[]> {
-  const force = !!opts?.force;
+function normalizeGame(game?: string) {
+  const g = String(game ?? "").trim().toLowerCase();
+  return g || "nh";
+}
 
-  if (!force && isFresh(villagersCache)) return villagersCache!.items;
-  if (!force && villagersPromise) return villagersPromise;
+function unwrapVillagerResponse(res: any): NookipediaVillager | null {
+  if (!res) return null;
+  if (Array.isArray(res)) return (res[0] as NookipediaVillager) ?? null;
+  if (typeof res === "object") return res as NookipediaVillager;
+  return null;
+}
+
+function pickNhdetailsFlag(game: string, force?: boolean) {
+  if (force) return "true";
+  return game === "nh" ? "true" : undefined;
+}
+
+function uniqStrings(list: any[]): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const x of list) {
+    const s = String(x ?? "").trim();
+    if (!s) continue;
+    if (seen.has(s)) continue;
+    seen.add(s);
+    out.push(s);
+  }
+  return out;
+}
+
+function looksLikeVillagerIndexRow(v: any): boolean {
+  if (!v || typeof v !== "object") return false;
+
+  const name = typeof v.name === "string" ? v.name.trim() : "";
+  if (!name) return false;
+
+  const hasSpecies = typeof v.species === "string" && v.species.trim().length > 0;
+  const hasPersonality = typeof v.personality === "string" && v.personality.trim().length > 0;
+  const hasId = typeof v.id === "string" && v.id.trim().length > 0;
+
+  return hasSpecies || hasPersonality || hasId;
+}
+
+export async function fetchVillagersIndex(opts?: {
+  force?: boolean;
+  game?: string;
+}): Promise<NookipediaVillager[]> {
+  const force = !!opts?.force;
+  const game = normalizeGame(opts?.game);
+
+  const cache = villagersCacheByGame[game];
+  if (!force && isFresh(cache)) return cache!.items;
+
+  const inflight = villagersPromiseByGame[game];
+  if (!force && inflight) return inflight;
 
   const run = async () => {
     try {
-      const items = await nookipediaFetchWithRetry<NookipediaVillager[]>(`/villagers`);
-      villagersCache = { fetchedAt: Date.now(), items: Array.isArray(items) ? items : [] };
-      return villagersCache.items;
+      const q = buildQuery({ game });
+      const items = await nookipediaFetchWithRetry<any>(`/villagers${q}`);
+
+      const arrRaw = Array.isArray(items) ? (items as any[]) : [];
+      const arr = arrRaw.filter(looksLikeVillagerIndexRow) as NookipediaVillager[];
+
+      villagersCacheByGame[game] = { fetchedAt: Date.now(), items: arr };
+      return arr;
     } finally {
-      villagersPromise = null;
+      villagersPromiseByGame[game] = undefined;
     }
   };
 
-  villagersPromise = run();
-  return villagersPromise;
+  villagersPromiseByGame[game] = run();
+  return villagersPromiseByGame[game]!;
 }
 
 export async function warmVillagersIndex(): Promise<NookipediaVillager[] | null> {
   try {
-    return await fetchVillagersIndex();
+    return await fetchVillagersIndex({ game: "nh" });
   } catch {
     return null;
   }
 }
 
-/**
- * Names:
- * - Try fast path excludedetails=true if supported
- * - Fallback to full index
- */
-export async function fetchVillagerNames(): Promise<string[]> {
-  // fast path (if API supports it)
-  try {
-    const q = buildQuery({ excludedetails: "true" });
-    const names = await nookipediaFetchWithRetry<string[]>(`/villagers${q}`);
-    if (Array.isArray(names) && names.length) {
-      return names.map((s) => String(s ?? "").trim()).filter((s) => !!s);
-    }
-  } catch {
-    // ignore and fallback
-  }
-
-  const items = await fetchVillagersIndex();
-  return items
-    .map((x) => String(x?.name ?? "").trim())
-    .filter((s) => !!s);
+export async function fetchVillagerNames(opts?: { force?: boolean; game?: string }): Promise<string[]> {
+  const game = normalizeGame(opts?.game);
+  const items = await fetchVillagersIndex({ force: opts?.force, game });
+  return uniqStrings(items.map((x) => x?.name));
 }
 
 /**
- * Detail:
- * - Try /villagers/{name}
- * - Fallback /villagers?name={name}
- * - Supports optional thumbsize query (keeps parity with your other modules)
+ * Species list pulled from the index endpoint (fast, complete, no detail fetch needed).
  */
+export async function fetchVillagerSpecies(opts?: { force?: boolean; game?: string }): Promise<string[]> {
+  const game = normalizeGame(opts?.game);
+  const items = await fetchVillagersIndex({ force: opts?.force, game });
+  const species = uniqStrings(items.map((x) => x?.species));
+  return species.sort((a, b) => a.localeCompare(b));
+}
+
+/**
+ * Map name -> species pulled from the index endpoint.
+ * Useful for filtering without waiting for detail fetches.
+ */
+export async function fetchVillagerSpeciesByName(opts?: {
+  force?: boolean;
+  game?: string;
+}): Promise<Record<string, string>> {
+  const game = normalizeGame(opts?.game);
+  const items = await fetchVillagersIndex({ force: opts?.force, game });
+
+  const out: Record<string, string> = {};
+  for (const v of items) {
+    const name = String(v?.name ?? "").trim();
+    const sp = String(v?.species ?? "").trim();
+    if (!name || !sp) continue;
+    out[name] = sp;
+  }
+  return out;
+}
+
 export async function fetchVillagerByName(
   villagerName: string,
-  opts?: { thumbsize?: number }
+  opts?: { thumbsize?: number; game?: string; nhdetails?: boolean }
 ): Promise<NookipediaVillager | null> {
   const name = String(villagerName ?? "").trim();
   if (!name) return null;
 
-  const qs = buildQuery({
+  const game = normalizeGame(opts?.game);
+  const nhdetails = pickNhdetailsFlag(game, opts?.nhdetails === true);
+
+  const q = buildQuery({
+    game,
+    nhdetails,
+    name,
     thumbsize: opts?.thumbsize != null ? String(Math.trunc(opts.thumbsize)) : undefined,
   });
 
-  const encoded = encodeURIComponent(name);
-
-  // Pattern A: /villagers/{name}
-  try {
-    return await nookipediaFetchWithRetry<NookipediaVillager>(`/villagers/${encoded}${qs}`);
-  } catch {
-    // Pattern B: /villagers?name={name}
-    const q2 = buildQuery({
-      name,
-      thumbsize: opts?.thumbsize != null ? String(Math.trunc(opts.thumbsize)) : undefined,
-    });
-
-    // Some APIs return an array for query lookups — handle both.
-    const res = await nookipediaFetchWithRetry<any>(`/villagers${q2}`);
-    if (Array.isArray(res)) return (res[0] as NookipediaVillager) ?? null;
-    return (res as NookipediaVillager) ?? null;
-  }
+  const res = await nookipediaFetchWithRetry<any>(`/villagers${q}`);
+  return unwrapVillagerResponse(res);
 }

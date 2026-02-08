@@ -41,47 +41,47 @@ const HYPE_LEVELS: Array<{
   border: string;
   iconColor: string;
 }> = [
-  {
-    value: 1,
-    label: "Curious",
-    icon: "help-circle-outline",
-    tint: "rgba(148,163,184,0.10)",
-    border: "rgba(148,163,184,0.22)",
-    iconColor: "#94a3b8",
-  },
-  {
-    value: 2,
-    label: "Interested",
-    icon: "thumb-up-outline",
-    tint: "rgba(56,189,248,0.10)",
-    border: "rgba(56,189,248,0.28)",
-    iconColor: "#38bdf8",
-  },
-  {
-    value: 3,
-    label: "Want it",
-    icon: "rocket-launch-outline",
-    tint: "rgba(10,212,242,0.12)",
-    border: "rgba(10,212,242,0.30)",
-    iconColor: "#67e8f9",
-  },
-  {
-    value: 4,
-    label: "Need it",
-    icon: "alert-decagram-outline",
-    tint: "rgba(250,204,21,0.12)",
-    border: "rgba(250,204,21,0.32)",
-    iconColor: "#facc15",
-  },
-  {
-    value: 5,
-    label: "PLEASE",
-    icon: "fire",
-    tint: "rgba(249,115,22,0.12)",
-    border: "rgba(249,115,22,0.34)",
-    iconColor: "#fb923c",
-  },
-];
+    {
+      value: 1,
+      label: "Curious",
+      icon: "help-circle-outline",
+      tint: "rgba(148,163,184,0.10)",
+      border: "rgba(148,163,184,0.22)",
+      iconColor: "#94a3b8",
+    },
+    {
+      value: 2,
+      label: "Interested",
+      icon: "thumb-up-outline",
+      tint: "rgba(56,189,248,0.10)",
+      border: "rgba(56,189,248,0.28)",
+      iconColor: "#38bdf8",
+    },
+    {
+      value: 3,
+      label: "Want it",
+      icon: "rocket-launch-outline",
+      tint: "rgba(10,212,242,0.12)",
+      border: "rgba(10,212,242,0.30)",
+      iconColor: "#67e8f9",
+    },
+    {
+      value: 4,
+      label: "Need it",
+      icon: "alert-decagram-outline",
+      tint: "rgba(250,204,21,0.12)",
+      border: "rgba(250,204,21,0.32)",
+      iconColor: "#facc15",
+    },
+    {
+      value: 5,
+      label: "PLEASE",
+      icon: "fire",
+      tint: "rgba(249,115,22,0.12)",
+      border: "rgba(249,115,22,0.34)",
+      iconColor: "#fb923c",
+    },
+  ];
 
 const RequestUniverseModal: React.FC<RequestUniverseModalProps> = ({
   visible,
@@ -140,7 +140,7 @@ const RequestUniverseModal: React.FC<RequestUniverseModalProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
 
-  const fixedHeight = Math.max(560, Math.min(Math.floor(windowH * 0.9), 560));
+  const fixedHeight = isSuccess ? 360 : Math.max(560, Math.min(Math.floor(windowH * 0.9), 560));
 
   return (
     <BottomSheetModal
@@ -162,7 +162,7 @@ const RequestUniverseModal: React.FC<RequestUniverseModalProps> = ({
 
           <View>
             <Text className="font-psemibold text-base" style={{ color: ui.title }}>
-              {isSuccess ? "Request sent" : "Request a new universe"}
+              {isSuccess ? "Request Sent" : "Request A New Universe"}
             </Text>
             <Text className="font-pregular text-xs" style={{ color: ui.sub }}>
               {isSuccess
@@ -274,7 +274,7 @@ const RequestUniverseModal: React.FC<RequestUniverseModalProps> = ({
                   Name
                 </Text>
                 <TextInput
-                  placeholder="full name"
+                  placeholder="name"
                   value={name}
                   onChangeText={setName}
                   editable={!isSubmitting}
@@ -306,7 +306,7 @@ const RequestUniverseModal: React.FC<RequestUniverseModalProps> = ({
                 Universe (Game Name)
               </Text>
               <TextInput
-                placeholder="…………………………"
+                placeholder="✱✱✱✱✱✱✱✱✱✱✱"
                 value={universe}
                 onChangeText={setUniverse}
                 editable={!isSubmitting}
@@ -377,7 +377,6 @@ const styles = StyleSheet.create({
 
   ratingSection: { marginBottom: 14 },
 
-  // ✅ One-row icon hype meter + tiny labels underneath
   hypeRow: { flexDirection: "row", alignItems: "center", marginTop: 2 },
   hypeItem: { flex: 1, marginRight: 8 },
   hypeGlass: { borderRadius: 14, borderWidth: 1, overflow: "hidden" },

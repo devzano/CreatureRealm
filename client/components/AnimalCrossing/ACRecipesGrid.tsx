@@ -1,20 +1,23 @@
 // components/AnimalCrossing/ACRecipesGrid.tsx
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { View, Text, ActivityIndicator, Image, Pressable } from "react-native";
+import { View, Text, ActivityIndicator, Pressable } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import { Image as ExpoImage } from "expo-image";
 
 import { fetchRecipeByName, fetchRecipeNames, type NookipediaRecipeItem } from "@/lib/animalCrossing/nookipediaRecipes";
 import ACGridWrapper from "@/components/AnimalCrossing/ACGridWrapper";
 import { useACNameDetailGrid } from "@/lib/animalCrossing/useACNameDetailGrid";
 import { useAnimalCrossingCollectionStore } from "@/store/animalCrossingCollectionStore";
+import LocalIcon from "@/components/LocalIcon";
 
 const PAGE_SIZE = 45;
 const THUMB_PRIMARY = 256;
 const THUMB_FALLBACK = 128;
 
-const PREFETCH_BUFFER = 6;
-const DETAIL_CONCURRENCY = 3;
+const PREFETCH_BUFFER = 12;
+
+const DETAIL_CONCURRENCY = 2;
 const INITIAL_PREFETCH = 9;
 
 function uniqStrings(list: any[]) {
@@ -58,11 +61,7 @@ const RecipeTile: React.FC<RecipeTileProps> = React.memo(
     const entry = useAnimalCrossingCollectionStore(useCallback((s: any) => s.entries?.[key], [key]));
 
     const toggleCollected = useAnimalCrossingCollectionStore(useCallback((s: any) => s.toggleCollected, []));
-    const incrementCount = useAnimalCrossingCollectionStore(useCallback((s: any) => s.incrementCount, []));
-    const decrementCount = useAnimalCrossingCollectionStore(useCallback((s: any) => s.decrementCount, []));
-
     const isCollected = !!entry?.collected;
-    const count = Math.max(Number(entry?.count || 0), 0);
 
     const candidates = useMemo(() => buildRecipeImageCandidates(detail), [detail]);
     const [candidateIndex, setCandidateIndex] = useState(0);
@@ -76,7 +75,7 @@ const RecipeTile: React.FC<RecipeTileProps> = React.memo(
 
     useEffect(() => {
       if (!currentUri) return;
-      Image.prefetch(currentUri).catch(() => {});
+      ExpoImage.prefetch(currentUri).catch(() => {});
     }, [currentUri]);
 
     const goDetails = useCallback(() => {
@@ -115,12 +114,14 @@ const RecipeTile: React.FC<RecipeTileProps> = React.memo(
             <View style={{ width: 60, height: 60, alignItems: "center", justifyContent: "center" }}>
               {currentUri ? (
                 <>
-                  <Image
+                  <ExpoImage
                     source={{ uri: currentUri }}
                     style={{ width: 60, height: 60 }}
-                    resizeMode="contain"
+                    contentFit="contain"
+                    transition={120}
+                    cachePolicy="disk"
                     onLoadStart={() => setImgLoading(true)}
-                    onLoadEnd={() => setImgLoading(false)}
+                    onLoad={() => setImgLoading(false)}
                     onError={handleImageError}
                   />
 
@@ -143,13 +144,21 @@ const RecipeTile: React.FC<RecipeTileProps> = React.memo(
                   ) : null}
                 </>
               ) : (
-                <View className="w-[60px] h-[60px] rounded-2xl bg-slate-950/60 border border-slate-700 items-center justify-center">
-                  {showOverlaySpinner ? <ActivityIndicator /> : <Feather name="image" size={18} color="#64748b" />}
+                <View style={{ width: 60, height: 60, alignItems: "center", justifyContent: "center" }}>
+                  <LocalIcon
+                    source={null}
+                    size={60}
+                    roundedClassName="rounded-2xl"
+                    placeholderClassName="bg-slate-950/60 border border-slate-700"
+                  />
+                  <View style={{ position: "absolute" }}>
+                    {showOverlaySpinner ? <ActivityIndicator /> : <Feather name="image" size={18} color="#64748b" />}
+                  </View>
                 </View>
               )}
             </View>
 
-            <Text className="text-xs font-semibold text-slate-50 text-center mt-2" numberOfLines={2}>
+            <Text className="text-xs font-semibold text-slate-50 text-center mt-2" numberOfLines={1}>
               {name}
             </Text>
 
@@ -166,31 +175,9 @@ const RecipeTile: React.FC<RecipeTileProps> = React.memo(
               }`}
             >
               <Text className={`text-[10px] font-semibold ${isCollected ? "text-emerald-200" : "text-slate-300"}`}>
-                {isCollected ? "Collected" : "Collect"}
+                {isCollected ? "Learned" : "Learn"}
               </Text>
             </Pressable>
-
-            {isCollected ? (
-              <View className="flex-row items-center ml-2">
-                <Pressable
-                  onPress={() => decrementCount("recipe", name)}
-                  className="w-6 h-6 rounded-xl bg-slate-950/60 border border-slate-700 items-center justify-center"
-                >
-                  <Text className="text-slate-100 text-[12px] font-bold">−</Text>
-                </Pressable>
-
-                <View className="px-2">
-                  <Text className="text-[11px] text-slate-200 font-semibold">{count}</Text>
-                </View>
-
-                <Pressable
-                  onPress={() => incrementCount("recipe", name)}
-                  className="w-6 h-6 rounded-xl bg-slate-950/60 border border-slate-700 items-center justify-center"
-                >
-                  <Text className="text-slate-100 text-[12px] font-bold">+</Text>
-                </Pressable>
-              </View>
-            ) : null}
           </View>
         </View>
       </View>
@@ -199,15 +186,34 @@ const RecipeTile: React.FC<RecipeTileProps> = React.memo(
 );
 
 const ACRecipesGrid: React.FC<ACRecipesGridProps> = ({ search, collectedOnly = false, collectedIds }) => {
+  const entries = useAnimalCrossingCollectionStore(useCallback((s: any) => s.entries, []));
+
   const collectedSet = useMemo(() => {
-    const xs = Array.isArray(collectedIds) ? collectedIds : [];
     const set = new Set<string>();
-    xs.forEach((x) => {
-      const s = String(x ?? "").trim();
-      if (s) set.add(s);
-    });
+
+    if (Array.isArray(collectedIds)) {
+      for (const x of collectedIds) {
+        const s = String(x ?? "").trim();
+        if (s) set.add(s);
+      }
+      return set;
+    }
+
+    if (!collectedOnly) return set;
+
+    for (const [key, entry] of Object.entries(entries || {})) {
+      if (!String(key).startsWith("recipe:")) continue;
+
+      const isCollected = !!(entry as any)?.collected;
+      const count = Math.max(Number((entry as any)?.count || 0), 0);
+      if (!isCollected && count <= 0) continue;
+
+      const name = String(key).slice("recipe:".length).trim();
+      if (name) set.add(name);
+    }
+
     return set;
-  }, [collectedIds]);
+  }, [entries, collectedOnly, collectedIds]);
 
   const extraFilter = useMemo(() => {
     if (!collectedOnly) return undefined;
@@ -218,7 +224,7 @@ const ACRecipesGrid: React.FC<ACRecipesGridProps> = ({ search, collectedOnly = f
   const grid = useACNameDetailGrid<NookipediaRecipeItem>({
     search,
     fetchNames: fetchRecipeNames,
-    fetchDetail: fetchRecipeByName,
+    fetchDetail: fetchRecipeByName as any,
     pageSize: PAGE_SIZE,
     thumbPrimary: THUMB_PRIMARY,
     thumbFallback: THUMB_FALLBACK,
@@ -229,7 +235,7 @@ const ACRecipesGrid: React.FC<ACRecipesGridProps> = ({ search, collectedOnly = f
   });
 
   const headerLine = useMemo(() => {
-    const label = collectedOnly ? "collected" : "items";
+    const label = collectedOnly ? "collected recipes" : "recipes";
     return `Showing ${grid.visibleNames.length} / ${grid.filteredNames.length} ${label}${
       Object.keys(grid.detailLoadingByName).length > 0 ? " • loading…" : ""
     }`;
@@ -251,7 +257,7 @@ const ACRecipesGrid: React.FC<ACRecipesGridProps> = ({ search, collectedOnly = f
   return (
     <ACGridWrapper<string>
       isInitialLoading={grid.namesLoading && !grid.namesLoadedOnce}
-      initialLoadingText="Loading recipes list…"
+      initialLoadingText={collectedOnly ? "Loading your collected recipes…" : "Loading recipes list…"}
       errorText={grid.namesError}
       onRetry={grid.retryReloadNames}
       isEmpty={grid.filteredNames.length === 0}

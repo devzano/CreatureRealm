@@ -7,8 +7,10 @@ import { useRouter } from "expo-router";
 import type { PalListItem } from "@/lib/palworld/paldbDeck";
 import { usePalworldCollectionStore } from "@/store/palworldCollectionStore";
 import AppImages from "@/constants/images";
-import RemoteIcon from "../RemoteIcon";
+import RemoteIcon from "./RemoteIcon";
 import { Image } from "expo-image";
+import LiquidGlass from "../ui/LiquidGlass";
+import GlassBadge from "../ui/helpers/GlassBadge";
 
 export type PalDexFilter = "all" | "caught" | "lucky" | "alpha";
 
@@ -22,6 +24,7 @@ const EMPTY_ENTRY = Object.freeze({
 });
 
 const ACTIVE_HIGHLIGHT = "#0cd3f1";
+const ALPHA_HIGHLIGHT = "#ef4444";
 
 type PaldeckGridProps = {
   pals: PalListItem[];
@@ -41,7 +44,12 @@ function palDexId(p: PalListItem): string {
   return id || "unknown";
 }
 
-const PaldeckGrid: React.FC<PaldeckGridProps> = ({ pals, search, dexFilter, onChangeDexFilter }) => {
+const PaldeckGrid: React.FC<PaldeckGridProps> = ({
+  pals,
+  search,
+  dexFilter,
+  onChangeDexFilter,
+}) => {
   const router = useRouter();
   const entries = usePalworldCollectionStore((s) => s.entries);
 
@@ -53,7 +61,8 @@ const PaldeckGrid: React.FC<PaldeckGridProps> = ({ pals, search, dexFilter, onCh
     if (normalizedSearch) {
       base = base.filter((p) => {
         const elementStr = (p.elements ?? []).join(" ");
-        const haystack = `${(p as any).numberRaw ?? ""} ${p.number} ${p.name} ${p.id} ${elementStr}`.toLowerCase();
+        const haystack =
+          `${(p as any).numberRaw ?? ""} ${p.number} ${p.name} ${p.id} ${elementStr}`.toLowerCase();
         return haystack.includes(normalizedSearch);
       });
     }
@@ -84,7 +93,9 @@ const PaldeckGrid: React.FC<PaldeckGridProps> = ({ pals, search, dexFilter, onCh
   );
 
   const renderDexItem = useCallback(
-    ({ item }: { item: PalListItem; }) => <PalDexTile pal={item} onOpen={onOpenDetails} />,
+    ({ item }: { item: PalListItem }) => (
+      <PalDexTile pal={item} onOpen={onOpenDetails} />
+    ),
     [onOpenDetails]
   );
 
@@ -111,9 +122,13 @@ const PaldeckGrid: React.FC<PaldeckGridProps> = ({ pals, search, dexFilter, onCh
   };
 
   const FilterChip = useCallback(
-    ({ id, label }: { id: PalDexFilter; label: string; }) => {
+    ({ id, label }: { id: PalDexFilter; label: string }) => {
       const active = dexFilter === id;
-      const isAll = id === 'all';
+      const isAll = id === "all";
+
+      const iconSize = id === "lucky" ? 24 : 18;
+
+      const activeTint = id === "alpha" ? ALPHA_HIGHLIGHT : ACTIVE_HIGHLIGHT;
 
       return (
         <Pressable
@@ -123,10 +138,10 @@ const PaldeckGrid: React.FC<PaldeckGridProps> = ({ pals, search, dexFilter, onCh
           style={{
             width: 34,
             height: 34,
-            borderColor: active ? `${ACTIVE_HIGHLIGHT}99` : "rgba(148,163,184,0.22)",
-            backgroundColor: active ? `${ACTIVE_HIGHLIGHT}22` : "rgba(148,163,184,0.06)",
-            justifyContent: 'center',
-            alignItems: 'center',
+            borderColor: active ? `${activeTint}99` : "rgba(148,163,184,0.22)",
+            backgroundColor: active ? `${activeTint}22` : "rgba(148,163,184,0.06)",
+            justifyContent: "center",
+            alignItems: "center",
           }}
         >
           {isAll ? (
@@ -134,7 +149,7 @@ const PaldeckGrid: React.FC<PaldeckGridProps> = ({ pals, search, dexFilter, onCh
               className="text-[10px] font-bold"
               style={{
                 color: active ? "rgba(229,250,255,1)" : "rgba(226,232,240,0.75)",
-                textAlign: 'center',
+                textAlign: "center",
                 includeFontPadding: false,
               }}
             >
@@ -144,9 +159,9 @@ const PaldeckGrid: React.FC<PaldeckGridProps> = ({ pals, search, dexFilter, onCh
             <Image
               source={FILTER_ICONS[id]}
               style={{
-                width: 18,
-                height: 18,
-                tintColor: active ? "rgba(229,250,255,1)" : "rgba(226,232,240,0.75)",
+                width: iconSize,
+                height: iconSize,
+                tintColor: active ? activeTint : "rgba(226,232,240,0.75)",
               }}
               contentFit="contain"
             />
@@ -163,18 +178,17 @@ const PaldeckGrid: React.FC<PaldeckGridProps> = ({ pals, search, dexFilter, onCh
         style={{
           flexDirection: "row",
           alignItems: "center",
+          justifyContent: "space-between",
           paddingHorizontal: 6,
           marginTop: 8,
           marginBottom: 8,
+          gap: 10,
         }}
       >
-        <Text
-          className="text-[14px] text-slate-500"
-          numberOfLines={1}
-          style={{ flex: 1 }}
-        >
-          Showing {filteredPals.length} / {pals.length} pals
-        </Text>
+        <GlassBadge
+          label={`Showing ${filteredPals.length} / ${pals.length} pals`}
+          tintColor="rgba(148,163,184,0.08)"
+        />
 
         <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
           <FilterChip id="all" label="All" />
@@ -260,6 +274,7 @@ const PalDexTile: React.FC<PalDexTileProps> = React.memo(({ pal, onOpen }) => {
     imageSource,
     imageSize = 14,
     onPress,
+    activeTintColor,
   }: {
     active: boolean;
     iconOn: string;
@@ -267,34 +282,43 @@ const PalDexTile: React.FC<PalDexTileProps> = React.memo(({ pal, onOpen }) => {
     imageSource?: any;
     imageSize?: number;
     onPress: () => void;
-  }) => (
-    <Pressable
-      onPress={onPress}
-      hitSlop={8}
-      className="mr-1.5 rounded-full border items-center justify-center"
-      style={{
-        width: 26,
-        height: 26,
-        borderColor: active ? `${ACTIVE_HIGHLIGHT}99` : "rgba(55,65,81,0.9)",
-        backgroundColor: active ? `${ACTIVE_HIGHLIGHT}22` : "rgba(15,23,42,0.9)",
-      }}
-    >
-      {imageSource ? (
-        <Image
-          source={imageSource}
-          style={{
-            width: imageSize,
-            height: imageSize,
-            tintColor: "#6b7280",
-            opacity: 0.95,
-          }}
-          contentFit="contain"
-        />
-      ) : (
-        <MaterialCommunityIcons name={(active ? iconOn : iconOff) as any} size={14} color="#6b7280" />
-      )}
-    </Pressable>
-  );
+    activeTintColor?: string;
+  }) => {
+    const tint = active ? (activeTintColor ?? ACTIVE_HIGHLIGHT) : "#6b7280";
+
+    return (
+      <Pressable
+        onPress={onPress}
+        hitSlop={8}
+        className="mr-1.5 rounded-full border items-center justify-center"
+        style={{
+          width: 26,
+          height: 26,
+          borderColor: active ? `${tint}99` : "rgba(55,65,81,0.9)",
+          backgroundColor: active ? `${tint}22` : "rgba(15,23,42,0.9)",
+        }}
+      >
+        {imageSource ? (
+          <Image
+            source={imageSource}
+            style={{
+              width: imageSize,
+              height: imageSize,
+              tintColor: tint,
+              opacity: active ? 1 : 0.95,
+            }}
+            contentFit="contain"
+          />
+        ) : (
+          <MaterialCommunityIcons
+            name={(active ? iconOn : iconOff) as any}
+            size={14}
+            color={tint}
+          />
+        )}
+      </Pressable>
+    );
+  };
 
   return (
     <View className="w-1/3 p-1">
@@ -302,8 +326,12 @@ const PalDexTile: React.FC<PalDexTileProps> = React.memo(({ pal, onOpen }) => {
         <Pressable onPress={goDetails} className="items-center">
           <RemoteIcon uri={iconUri} size={60} roundedClassName="rounded-2xl" />
 
-          {!!displayNum && <Text className="text-[11px] text-slate-400 mt-1">{displayNum}</Text>}
-          <Text className="text-xs font-semibold text-slate-50 text-center">{pal.name}</Text>
+          {!!displayNum && (
+            <Text className="text-[11px] text-slate-400 mt-1">{displayNum}</Text>
+          )}
+          <Text className="text-xs font-semibold text-slate-50 text-center">
+            {pal.name}
+          </Text>
         </Pressable>
 
         <View className="flex-row items-center mt-2">
@@ -313,6 +341,7 @@ const PalDexTile: React.FC<PalDexTileProps> = React.memo(({ pal, onOpen }) => {
             iconOff="pokeball"
             imageSource={AppImages.caughtPalworldIcon}
             onPress={onToggleCaught}
+            activeTintColor={ACTIVE_HIGHLIGHT}
           />
 
           <IconToggle
@@ -322,6 +351,7 @@ const PalDexTile: React.FC<PalDexTileProps> = React.memo(({ pal, onOpen }) => {
             imageSource={AppImages.luckyPalworldIcon}
             imageSize={20}
             onPress={onToggleLucky}
+            activeTintColor={ACTIVE_HIGHLIGHT}
           />
 
           <IconToggle
@@ -330,6 +360,7 @@ const PalDexTile: React.FC<PalDexTileProps> = React.memo(({ pal, onOpen }) => {
             iconOff="alpha-a-circle-outline"
             imageSource={AppImages.alphaPalworldIcon}
             onPress={onToggleAlpha}
+            activeTintColor={ALPHA_HIGHLIGHT}
           />
         </View>
       </View>

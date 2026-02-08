@@ -1,12 +1,14 @@
 // components/AnimalCrossing/ACInteriorGrid.tsx
 import React, { useEffect, useMemo, useState, useCallback } from "react";
-import { View, Text, Pressable, Image } from "react-native";
+import { View, Text, Pressable } from "react-native";
 import { useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
+import { Image as ExpoImage } from "expo-image";
 
 import { fetchInteriorIndex, type NookipediaInteriorIndexItem } from "@/lib/animalCrossing/nookipediaInterior";
 import ACGridWrapper from "@/components/AnimalCrossing/ACGridWrapper";
 import { useAnimalCrossingCollectionStore } from "@/store/animalCrossingCollectionStore";
+import LocalIcon from "@/components/LocalIcon";
 
 type ACInteriorGridProps = {
   search: string;
@@ -23,15 +25,30 @@ type InteriorTileProps = {
 };
 
 const InteriorTile: React.FC<InteriorTileProps> = React.memo(({ item, onPress }) => {
-  const { getEntry, toggleCollected, incrementCount, decrementCount } = useAnimalCrossingCollectionStore();
+  const name = useMemo(() => String(item?.name ?? "").trim(), [item?.name]);
+  const category = useMemo(() => String((item as any)?.category ?? "").trim(), [item]);
+  const uri = useMemo(() => String((item as any)?.image_url ?? "").trim(), [item]);
 
-  const name = String(item?.name ?? "").trim();
-  const category = String(item?.category ?? "").trim();
-  const uri = String((item as any)?.image_url ?? "").trim();
+  const key = useMemo(() => `interior:${name}`, [name]);
 
-  const entry = getEntry("interior", name);
+  const entry = useAnimalCrossingCollectionStore(useCallback((s: any) => s.entries?.[key], [key]));
+  const toggleCollected = useAnimalCrossingCollectionStore(useCallback((s: any) => s.toggleCollected, []));
+
   const isCollected = !!entry?.collected;
-  const count = Number(entry?.count || 0);
+
+  useEffect(() => {
+    if (!uri) return;
+    ExpoImage.prefetch(uri).catch(() => {});
+  }, [uri]);
+
+  const onToggle = useCallback(
+    (e: any) => {
+      e?.stopPropagation?.();
+      if (!name) return;
+      toggleCollected("interior", name);
+    },
+    [toggleCollected, name]
+  );
 
   return (
     <View className="w-1/3 p-1">
@@ -39,68 +56,47 @@ const InteriorTile: React.FC<InteriorTileProps> = React.memo(({ item, onPress })
         <Pressable onPress={() => (name ? onPress(name) : null)} className="items-center">
           <View style={{ width: THUMB, height: THUMB, alignItems: "center", justifyContent: "center" }}>
             {uri ? (
-              <Image source={{ uri }} style={{ width: THUMB, height: THUMB }} resizeMode="contain" />
+              <ExpoImage
+                source={{ uri }}
+                style={{ width: THUMB, height: THUMB }}
+                contentFit="contain"
+                transition={120}
+                cachePolicy="disk"
+              />
             ) : (
-              <View className="w-[60px] h-[60px] rounded-2xl bg-slate-950/60 border border-slate-700 items-center justify-center">
-                <Feather name="image" size={18} color="#64748b" />
+              <View style={{ width: THUMB, height: THUMB, alignItems: "center", justifyContent: "center" }}>
+                <LocalIcon
+                  source={null}
+                  size={THUMB}
+                  roundedClassName="rounded-2xl"
+                  placeholderClassName="bg-slate-950/60 border border-slate-700"
+                />
+                <View style={{ position: "absolute" }}>
+                  <Feather name="image" size={18} color="#64748b" />
+                </View>
               </View>
             )}
           </View>
 
-          {/* Collected + Count controls */}
           <View className="flex-row items-center mt-2">
             <Pressable
-              onPress={(e) => {
-                (e as any)?.stopPropagation?.();
-                if (!name) return;
-                toggleCollected("interior", name);
-              }}
+              onPress={onToggle}
               className={`px-2 py-1 rounded-2xl border ${
                 isCollected ? "bg-emerald-500/15 border-emerald-500/40" : "bg-slate-950/40 border-slate-700"
               }`}
             >
               <Text className={`text-[10px] font-semibold ${isCollected ? "text-emerald-200" : "text-slate-300"}`}>
-                {isCollected ? "Collected" : "Collect"}
+                {isCollected ? "In Storage" : "Need This"}
               </Text>
             </Pressable>
-
-            {isCollected ? (
-              <View className="flex-row items-center ml-2">
-                <Pressable
-                  onPress={(e) => {
-                    (e as any)?.stopPropagation?.();
-                    if (!name) return;
-                    decrementCount("interior", name);
-                  }}
-                  className="w-6 h-6 rounded-xl bg-slate-950/60 border border-slate-700 items-center justify-center"
-                >
-                  <Text className="text-slate-100 text-[12px] font-bold">−</Text>
-                </Pressable>
-
-                <View className="px-2">
-                  <Text className="text-[11px] text-slate-200 font-semibold">{count}</Text>
-                </View>
-
-                <Pressable
-                  onPress={(e) => {
-                    (e as any)?.stopPropagation?.();
-                    if (!name) return;
-                    incrementCount("interior", name);
-                  }}
-                  className="w-6 h-6 rounded-xl bg-slate-950/60 border border-slate-700 items-center justify-center"
-                >
-                  <Text className="text-slate-100 text-[12px] font-bold">+</Text>
-                </Pressable>
-              </View>
-            ) : null}
           </View>
 
-          <Text className="text-xs font-semibold text-slate-50 text-center mt-2" numberOfLines={2}>
-            {name || "Unknown"}
+          <Text className="text-xs font-semibold text-slate-50 text-center mt-2" numberOfLines={1}>
+            {name}
           </Text>
 
           <Text className="text-[10px] text-slate-500 mt-1" numberOfLines={1}>
-            {category || "Interior"}
+            {category}
           </Text>
         </Pressable>
       </View>
@@ -114,7 +110,6 @@ const ACInteriorGrid: React.FC<ACInteriorGridProps> = ({ search, collectedOnly =
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [items, setItems] = useState<NookipediaInteriorIndexItem[]>([]);
-
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
   const normalizedSearch = useMemo(() => String(search ?? "").trim().toLowerCase(), [search]);
@@ -142,15 +137,34 @@ const ACInteriorGrid: React.FC<ACInteriorGridProps> = ({ search, collectedOnly =
     void load();
   }, [load]);
 
+  const entries = useAnimalCrossingCollectionStore(useCallback((s: any) => s.entries, []));
+
   const collectedSet = useMemo(() => {
-    const xs = Array.isArray(collectedIds) ? collectedIds : [];
     const set = new Set<string>();
-    xs.forEach((x) => {
-      const s = String(x ?? "").trim();
-      if (s) set.add(s);
-    });
+
+    if (Array.isArray(collectedIds)) {
+      for (const x of collectedIds) {
+        const s = String(x ?? "").trim();
+        if (s) set.add(s);
+      }
+      return set;
+    }
+
+    if (!collectedOnly) return set;
+
+    for (const [key, entry] of Object.entries(entries || {})) {
+      if (!String(key).startsWith("interior:")) continue;
+
+      const isCollected = !!(entry as any)?.collected;
+      const count = Math.max(Number((entry as any)?.count || 0), 0);
+      if (!isCollected && count <= 0) continue;
+
+      const name = String(key).slice("interior:".length).trim();
+      if (name) set.add(name);
+    }
+
     return set;
-  }, [collectedIds]);
+  }, [entries, collectedOnly, collectedIds]);
 
   const baseFiltered = useMemo(() => {
     const base = Array.isArray(items) ? items : [];
@@ -165,12 +179,8 @@ const ACInteriorGrid: React.FC<ACInteriorGridProps> = ({ search, collectedOnly =
 
   const filtered = useMemo(() => {
     if (!collectedOnly) return baseFiltered;
-
-    if (collectedSet.size > 0) {
-      return baseFiltered.filter((it) => collectedSet.has(String(it?.name ?? "").trim()));
-    }
-
-    return [];
+    if (collectedSet.size <= 0) return [];
+    return baseFiltered.filter((it) => collectedSet.has(String(it?.name ?? "").trim()));
   }, [baseFiltered, collectedOnly, collectedSet]);
 
   const visibleItems = useMemo(() => filtered.slice(0, visibleCount), [filtered, visibleCount]);
@@ -191,14 +201,14 @@ const ACInteriorGrid: React.FC<ACInteriorGridProps> = ({ search, collectedOnly =
   );
 
   const headerLine = useMemo(() => {
-    const label = collectedOnly ? "collected" : "items";
+    const label = collectedOnly ? "collected interior" : "interior";
     return `Showing ${visibleItems.length} / ${filtered.length} ${label}`;
   }, [visibleItems.length, filtered.length, collectedOnly]);
 
   return (
     <ACGridWrapper<NookipediaInteriorIndexItem>
       isInitialLoading={loading}
-      initialLoadingText="Loading interior…"
+      initialLoadingText={collectedOnly ? "Loading your collected interior…" : "Loading interior…"}
       errorText={err}
       onRetry={load}
       isEmpty={filtered.length === 0}

@@ -13,41 +13,15 @@ import { Feather } from "@expo/vector-icons";
 
 type PageWrapperProps = {
   children: React.ReactNode;
-
-  /** Main header title */
   title?: string;
-  /** Optional line under the title */
   subtitle?: string;
-
-  /** If true, content is wrapped in ScrollView; otherwise a plain View */
   scroll?: boolean;
-
-  /** Hide the default back button on the top-left */
   hideBackButton?: boolean;
-
-  /**
-   * Hide header chrome (title, subtitle, header background).
-   * You still get the top nav row for buttons.
-   */
   hideHeaderChrome?: boolean;
-
-  /** Optional extra nodes on the left side of the header (next to back) */
   leftActions?: React.ReactNode;
-
-  /** Optional nodes on the right side of the header (icons, buttons, etc.) */
   rightActions?: React.ReactNode;
-
-  /** Custom back behavior; defaults to router.back() */
   onBackPress?: () => void;
-
-  /** Optional override for page background, defaults to slate-950 */
   backgroundColor?: string;
-
-  /**
-   * Header layout variant:
-   * - 'inline': Title/subtitle appear inline with back button and leftActions
-   * - 'stacked': Title/subtitle appear below the nav row (default)
-   */
   headerLayout?: 'inline' | 'stacked';
 } & Omit<ViewProps, "children">;
 
@@ -192,7 +166,7 @@ const PageWrapper: React.FC<PageWrapperProps> = ({
       {...rest}
     >
       {Header}
-      <View className="flex-1 px-4 pb-4">{children}</View>
+      <View className="flex-1 px-2 pb-4">{children}</View>
     </View>
   );
 };

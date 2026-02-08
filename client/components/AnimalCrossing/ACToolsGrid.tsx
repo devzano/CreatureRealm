@@ -1,19 +1,21 @@
 // components/AnimalCrossing/ACToolsGrid.tsx
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { View, Text, ActivityIndicator, Image, Pressable } from "react-native";
+import { View, Text, ActivityIndicator, Pressable } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import { Image as ExpoImage } from "expo-image";
 
 import { fetchToolByName, fetchToolNames, type NookipediaToolItem } from "@/lib/animalCrossing/nookipediaTools";
 import ACGridWrapper from "@/components/AnimalCrossing/ACGridWrapper";
 import { useACNameDetailGrid } from "@/lib/animalCrossing/useACNameDetailGrid";
 import { useAnimalCrossingCollectionStore } from "@/store/animalCrossingCollectionStore";
+import LocalIcon from "@/components/LocalIcon";
 
 const PAGE_SIZE = 45;
 const THUMB_PRIMARY = 256;
 const THUMB_FALLBACK = 128;
 
-const PREFETCH_BUFFER = 6;
+const PREFETCH_BUFFER = 12;
 const DETAIL_CONCURRENCY = 3;
 const INITIAL_PREFETCH = 9;
 
@@ -86,7 +88,7 @@ const ToolTile: React.FC<ToolTileProps> = React.memo(
 
     useEffect(() => {
       if (!currentUri) return;
-      Image.prefetch(currentUri).catch(() => {});
+      ExpoImage.prefetch(currentUri).catch(() => {});
     }, [currentUri]);
 
     const goDetails = useCallback(() => {
@@ -124,12 +126,14 @@ const ToolTile: React.FC<ToolTileProps> = React.memo(
             <View style={{ width: 60, height: 60, alignItems: "center", justifyContent: "center" }}>
               {currentUri ? (
                 <>
-                  <Image
+                  <ExpoImage
                     source={{ uri: currentUri }}
                     style={{ width: 60, height: 60 }}
-                    resizeMode="contain"
+                    contentFit="contain"
+                    transition={120}
+                    cachePolicy="disk"
                     onLoadStart={() => setImgLoading(true)}
-                    onLoadEnd={() => setImgLoading(false)}
+                    onLoad={() => setImgLoading(false)}
                     onError={handleImageError}
                   />
 
@@ -152,13 +156,21 @@ const ToolTile: React.FC<ToolTileProps> = React.memo(
                   ) : null}
                 </>
               ) : (
-                <View className="w-[60px] h-[60px] rounded-2xl bg-slate-950/60 border border-slate-700 items-center justify-center">
-                  {showOverlaySpinner ? <ActivityIndicator /> : <Feather name="image" size={18} color="#64748b" />}
+                <View style={{ width: 60, height: 60, alignItems: "center", justifyContent: "center" }}>
+                  <LocalIcon
+                    source={null}
+                    size={60}
+                    roundedClassName="rounded-2xl"
+                    placeholderClassName="bg-slate-950/60 border border-slate-700"
+                  />
+                  <View style={{ position: "absolute" }}>
+                    {showOverlaySpinner ? <ActivityIndicator /> : <Feather name="image" size={18} color="#64748b" />}
+                  </View>
                 </View>
               )}
             </View>
 
-            <Text className="text-xs font-semibold text-slate-50 text-center mt-2" numberOfLines={2}>
+            <Text className="text-xs font-semibold text-slate-50 text-center mt-2" numberOfLines={1}>
               {name}
             </Text>
 
@@ -178,28 +190,6 @@ const ToolTile: React.FC<ToolTileProps> = React.memo(
                 {isCollected ? "Collected" : "Collect"}
               </Text>
             </Pressable>
-
-            {isCollected ? (
-              <View className="flex-row items-center ml-2">
-                <Pressable
-                  onPress={() => decrementCount("tool", name)}
-                  className="w-6 h-6 rounded-xl bg-slate-950/60 border border-slate-700 items-center justify-center"
-                >
-                  <Text className="text-slate-100 text-[12px] font-bold">−</Text>
-                </Pressable>
-
-                <View className="px-2">
-                  <Text className="text-[11px] text-slate-200 font-semibold">{count}</Text>
-                </View>
-
-                <Pressable
-                  onPress={() => incrementCount("tool", name)}
-                  className="w-6 h-6 rounded-xl bg-slate-950/60 border border-slate-700 items-center justify-center"
-                >
-                  <Text className="text-slate-100 text-[12px] font-bold">+</Text>
-                </Pressable>
-              </View>
-            ) : null}
           </View>
         </View>
       </View>
@@ -208,15 +198,34 @@ const ToolTile: React.FC<ToolTileProps> = React.memo(
 );
 
 const ACToolsGrid: React.FC<ACToolsGridProps> = ({ search, collectedOnly = false, collectedIds }) => {
+  const entries = useAnimalCrossingCollectionStore(useCallback((s: any) => s.entries, []));
+
   const collectedSet = useMemo(() => {
-    const xs = Array.isArray(collectedIds) ? collectedIds : [];
     const set = new Set<string>();
-    xs.forEach((x) => {
-      const s = String(x ?? "").trim();
-      if (s) set.add(s);
-    });
+
+    if (Array.isArray(collectedIds)) {
+      for (const x of collectedIds) {
+        const s = String(x ?? "").trim();
+        if (s) set.add(s);
+      }
+      return set;
+    }
+
+    if (!collectedOnly) return set;
+
+    for (const [key, entry] of Object.entries(entries || {})) {
+      if (!key.startsWith("tool:")) continue;
+
+      const isCollected = !!(entry as any)?.collected;
+      const count = Math.max(Number((entry as any)?.count || 0), 0);
+      if (!isCollected && count <= 0) continue;
+
+      const name = key.slice("tool:".length).trim();
+      if (name) set.add(name);
+    }
+
     return set;
-  }, [collectedIds]);
+  }, [entries, collectedOnly, collectedIds]);
 
   const extraFilter = useMemo(() => {
     if (!collectedOnly) return undefined;
@@ -260,7 +269,7 @@ const ACToolsGrid: React.FC<ACToolsGridProps> = ({ search, collectedOnly = false
   return (
     <ACGridWrapper<string>
       isInitialLoading={grid.namesLoading && !grid.namesLoadedOnce}
-      initialLoadingText="Loading tool list…"
+      initialLoadingText={collectedOnly ? "Loading your collected tools…" : "Loading tool list…"}
       errorText={grid.namesError}
       onRetry={grid.retryReloadNames}
       isEmpty={grid.filteredNames.length === 0}

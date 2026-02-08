@@ -1,425 +1,81 @@
-// components/palworld/MaterialGrid.tsx
+// components/palworld/WeaponGrid.tsx
 import React, { useMemo, useEffect, useState, useCallback, useRef } from "react";
 import { View, Text, Pressable, ScrollView, ActivityIndicator } from "react-native";
-import { MaterialCommunityIcons, Ionicons } from "@expo/vector-icons";
+import { Ionicons } from "@expo/vector-icons";
+
+import { fetchWeaponDetail, type WeaponIndexItem, type WeaponDetail } from "@/lib/palworld/items/paldbWeapon";
+
+import RemoteIcon, { prefetchRemoteIcons } from "@/components/Palworld/RemoteIcon";
+import BottomSheetModal from "@/components/ui/BottomSheetModal";
+import { filterOutWorkFromRecipeRows } from "@/lib/palworld/paldbDetailKit";
 
 import {
-  fetchMaterialDetail,
-  type MaterialIndexItem,
-  type MaterialDetail,
-  type TreantNode,
-  type DetailRecipeRow,
-  type DroppedByRow,
-  type TreasureBoxRow,
-  type MerchantRow,
-  type KeyValueRow,
-} from "@/lib/palworld/items/paldbMaterial";
+  nonZeroNum,
+  slugToKind,
+  prettyRarity,
+  rarityRing,
+  SheetSectionLabel,
+  KeyValueRows,
+  ProducedAtSection,
+  RecipeSection,
+  DroppedBySection,
+  TreasureBoxSection,
+  WanderingMerchantSection,
+  TreantSection,
+  EffectsSection,
+  QuickRecipeSection,
+} from "@/components/Palworld/PalDetailSections";
+import { clamp } from "../Construction/palGridKit";
 
-import RemoteIcon, { prefetchRemoteIcons } from "@/components/RemoteIcon";
-import BottomSheetModal from "@/components/ui/BottomSheetModal";
-
-type MaterialGridProps = {
-  items: MaterialIndexItem[];
-  onPressItem?: (item: MaterialIndexItem) => void;
-
+type WeaponGridProps = {
+  items: WeaponIndexItem[];
+  onPressItem?: (item: WeaponIndexItem) => void;
   emptyText?: string;
-  showUnavailable?: boolean; // default false
-  numColumns?: number; // default 3
-
-  prefetchIcons?: boolean; // default true
+  showUnavailable?: boolean;
+  numColumns?: number;
+  prefetchIcons?: boolean;
 };
 
-function clamp(n: number, lo: number, hi: number) {
-  return Math.max(lo, Math.min(hi, n));
+function StatPill({ label, value }: { label: string; value: number | null; }) {
+  if (value == null || value === 0) return null;
+
+  return (
+    <View className="items-center">
+      <Text className="text-[10px] text-white/60">{label}</Text>
+      <View className="mt-1 px-3 py-[3px] rounded-full border bg-white/5 border-white/10">
+        <Text className="text-[10px] text-white/85">{String(value)}</Text>
+      </View>
+    </View>
+  );
 }
 
-function rarityRing(rarityRaw?: string | null) {
-  const r = (rarityRaw ?? "").toLowerCase();
-  if (r.includes("legend")) return "border-amber-400/70";
-  if (r.includes("epic")) return "border-fuchsia-400/70";
-  if (r.includes("rare")) return "border-sky-400/70";
-  if (r.includes("uncommon")) return "border-emerald-400/70";
-  return "border-white/10";
-}
-
-function prettyRarity(r?: string | null) {
-  const s = (r ?? "").trim();
-  return s || "Common";
-}
-
-function safeNum(v: any): number | null {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : null;
-}
-
-function slugToKind(slug: string) {
-  const s = (slug ?? "").trim();
-  if (!s) return "Unknown";
-  const last = s.split("/").filter(Boolean).slice(-1)[0] ?? s;
-  const base = last.replace(/[#?].*$/, "");
-  return base.replace(/_/g, " ").replace(/\s+/g, " ").trim();
-}
-
-function stripTrailingMaterial(name: string) {
+function stripTrailingWeapon(name: string) {
   const s = String(name ?? "").replace(/\s+/g, " ").trim();
   if (!s) return s;
-  return s.replace(/\s*material\s*$/i, "").trim();
+  return s.replace(/\s*weapon\s*$/i, "").trim();
 }
 
 function buildTwoLineTitle(nameRaw: string) {
-  const base = stripTrailingMaterial(nameRaw);
-  const line1 = base || "Material";
-  const line2 = "Material";
+  const base = stripTrailingWeapon(nameRaw);
+  const line1 = base || "Weapon";
+  const line2 = "Weapon";
   return { line1, line2 };
 }
 
-function statFillIconName(key: string): string {
-  const k = (key ?? "").toLowerCase().trim();
-
-  if (k.includes("gold") || k.includes("coin") || k.includes("price") || k.includes("sell") || k.includes("buy"))
-    return "cash";
-
-  if (k.includes("rarity")) return "star-circle";
-  if (k === "type" || k.includes("category")) return "shape";
-  if (k.includes("rank")) return "trophy";
-  if (k.includes("code") || k.includes("id")) return "barcode";
-
-  if (k.includes("weight")) return "scale-bathroom";
-  if (k.includes("max stack") || k.includes("maxstack") || k.includes("stack")) return "layers";
-  if (k.includes("durability")) return "shield";
-  if (k.includes("cooldown")) return "timer";
-  if (k.includes("work") || k.includes("workload")) return "hammer";
-  if (k.includes("attack")) return "sword";
-  if (k.includes("defense")) return "shield-star";
-  if (k.includes("hp") || k.includes("health")) return "heart";
-  if (k.includes("stamina")) return "run-fast";
-
-  if (k.includes("technology") || k.includes("tech")) return "atom";
-  if (k.includes("required") || k.includes("needed")) return "clipboard-check";
-
-  return "information";
-}
-
-function renderTreant(node: TreantNode, depth: number) {
-  const pad = Math.min(22, depth * 12);
-  const qtyLabel = node?.qty != null ? `x${node.qty}` : "—";
-
-  return (
-    <View key={`${node.slug ?? "node"}:${depth}:${node.iconUrl ?? ""}`} style={{ marginLeft: pad }}>
-      <View className="flex-row items-center py-1">
-        <RemoteIcon
-          uri={node.iconUrl ?? null}
-          size={18}
-          roundedClassName="rounded-md"
-          placeholderClassName="bg-white/5 border border-white/10"
-          contentFit="contain"
-        />
-        <Text className="ml-2 text-white/85 text-[12px]">{qtyLabel}</Text>
-
-        {!!node.slug && (
-          <Text className="text-white/35 text-[11px] ml-2" numberOfLines={1}>
-            {node.slug}
-          </Text>
-        )}
-      </View>
-
-      {!!node.children?.length && node.children.map((c) => renderTreant(c, depth + 1))}
-    </View>
-  );
-}
-
-function SheetSectionLabel({ children }: { children: React.ReactNode }) {
-  return <Text className="text-white/80 text-[12px] mb-2">{children}</Text>;
-}
-
-function KeyValueRows({ rows }: { rows: KeyValueRow[] }) {
-  if (!rows?.length) return null;
-
-  return (
-    <View className="rounded-2xl border border-white/10 bg-white/[0.03] overflow-hidden">
-      {rows.map((r, idx) => {
-        const iconUrl = r?.keyItem?.iconUrl ?? r?.keyIconUrl ?? null;
-        const iconName = statFillIconName(String(r?.key ?? ""));
-
-        return (
-          <View
-            key={`${r?.key ?? "k"}:${idx}`}
-            className={[
-              "flex-row items-center justify-between py-3 px-3",
-              idx !== rows.length - 1 ? "border-b border-white/5" : "",
-            ].join(" ")}
-          >
-            <View className="flex-row items-center flex-1 pr-3">
-              {iconUrl ? (
-                <RemoteIcon
-                  uri={iconUrl}
-                  size={22}
-                  roundedClassName="rounded-md"
-                  placeholderClassName="bg-white/5 border border-white/10"
-                  contentFit="contain"
-                />
-              ) : (
-                <View className="w-[22px] h-[22px] items-center justify-center">
-                  <MaterialCommunityIcons name={iconName as any} size={18} color="rgba(255,255,255,0.75)" />
-                </View>
-              )}
-
-              <Text className="ml-3 text-white/85 text-[13px]" numberOfLines={1}>
-                {r?.key ?? "—"}
-              </Text>
-            </View>
-
-            <Text className="text-white/70 text-[13px]" numberOfLines={1}>
-              {r?.valueText ?? r?.valueItem?.name ?? "—"}
-            </Text>
-          </View>
-        );
-      })}
-    </View>
-  );
-}
-
-function ProducedAtSection({ rows }: { rows: { slug: string; name: string; iconUrl: string | null }[] }) {
-  if (!rows?.length) return null;
-
-  return (
-    <View className="mt-5">
-      <SheetSectionLabel>Produced At</SheetSectionLabel>
-
-      <View className="flex-row flex-wrap gap-2">
-        {rows.map((p) => (
-          <View key={p.slug} className="flex-row items-center px-3 py-2 rounded-full border border-white/10 bg-white/5">
-            <RemoteIcon
-              uri={p.iconUrl}
-              size={18}
-              roundedClassName="rounded-md"
-              placeholderClassName="bg-white/5 border border-white/10"
-              contentFit="contain"
-            />
-            <Text className="ml-2 text-white/85 text-[12px]" numberOfLines={1}>
-              {p.name}
-            </Text>
-          </View>
-        ))}
-      </View>
-    </View>
-  );
-}
-
-function RecipeSection({ title, rows }: { title: string; rows: DetailRecipeRow[] }) {
-  if (!rows?.length) return null;
-
-  return (
-    <View className="mt-5">
-      <SheetSectionLabel>{title}</SheetSectionLabel>
-
-      <View className="rounded-2xl border border-white/10 bg-white/[0.03] overflow-hidden">
-        {rows.map((row, idx) => (
-          <View
-            key={`${row.product?.slug ?? "row"}:${idx}`}
-            className={["py-4 px-3", idx !== rows.length - 1 ? "border-b border-white/5" : ""].join(" ")}
-          >
-            <View className="flex-row items-center justify-between">
-              <View className="flex-row items-center flex-1">
-                <RemoteIcon
-                  uri={row.product?.iconUrl ?? null}
-                  size={30}
-                  roundedClassName="rounded-xl"
-                  placeholderClassName="bg-white/5 border border-white/10"
-                />
-                <Text className="ml-3 text-white/90 text-[14px] font-semibold" numberOfLines={1}>
-                  {row.product?.name ?? "—"}
-                </Text>
-
-                {row.product?.qty != null ? (
-                  <Text className="text-white/60 text-[12px] ml-2">x{row.product.qty}</Text>
-                ) : null}
-              </View>
-
-              {!!row.schematicText && (
-                <Text className="text-white/55 text-[12px] ml-3" numberOfLines={1}>
-                  {row.schematicText}
-                </Text>
-              )}
-            </View>
-
-            {!!row.materials?.length && (
-              <View className="mt-3 flex-row flex-wrap gap-2">
-                {row.materials.map((m) => (
-                  <View
-                    key={m.slug}
-                    className="flex-row items-center px-3 py-2 rounded-full border border-white/10 bg-white/5"
-                  >
-                    <RemoteIcon
-                      uri={m.iconUrl ?? null}
-                      size={18}
-                      roundedClassName="rounded-md"
-                      placeholderClassName="bg-white/5 border border-white/10"
-                      contentFit="contain"
-                    />
-                    <Text className="ml-2 text-white/85 text-[12px]" numberOfLines={1}>
-                      {m.name}
-                    </Text>
-
-                    {m.qty != null ? (
-                      <Text className="text-white/60 text-[12px] ml-2">x{m.qty}</Text>
-                    ) : m.qtyText ? (
-                      <Text className="text-white/60 text-[12px] ml-2">{m.qtyText}</Text>
-                    ) : null}
-                  </View>
-                ))}
-              </View>
-            )}
-          </View>
-        ))}
-      </View>
-    </View>
-  );
-}
-
-function DroppedBySection({ rows }: { rows: DroppedByRow[] }) {
-  if (!rows?.length) return null;
-
-  return (
-    <View className="mt-5">
-      <SheetSectionLabel>Dropped By</SheetSectionLabel>
-
-      <View className="rounded-2xl border border-white/10 bg-white/[0.03] overflow-hidden">
-        {rows.map((r, idx) => (
-          <View
-            key={`${r.pal?.slug ?? "pal"}:${idx}`}
-            className={[
-              "flex-row items-center justify-between py-3 px-3",
-              idx !== rows.length - 1 ? "border-b border-white/5" : "",
-            ].join(" ")}
-          >
-            <View className="flex-row items-center flex-1">
-              <RemoteIcon
-                uri={r.pal?.iconUrl ?? null}
-                size={30}
-                roundedClassName="rounded-full"
-                placeholderClassName="bg-white/5 border border-white/10"
-              />
-              <Text className="ml-3 text-white/90 text-[14px]" numberOfLines={1}>
-                {r.pal?.name ?? "—"}
-              </Text>
-            </View>
-
-            <View className="items-end ml-3">
-              <Text className="text-white/70 text-[12px]" numberOfLines={1}>
-                {r.qtyText ?? "—"}
-              </Text>
-              <Text className="text-white/45 text-[11px]" numberOfLines={1}>
-                {r.probabilityText ?? "—"}
-              </Text>
-            </View>
-          </View>
-        ))}
-      </View>
-    </View>
-  );
-}
-
-function TreasureBoxSection({ rows }: { rows: TreasureBoxRow[] }) {
-  if (!rows?.length) return null;
-
-  return (
-    <View className="mt-5">
-      <SheetSectionLabel>Treasure Box</SheetSectionLabel>
-
-      <View className="rounded-2xl border border-white/10 bg-white/[0.03] overflow-hidden">
-        {rows.map((r, idx) => (
-          <View
-            key={`${r.item?.slug ?? "tb"}:${idx}`}
-            className={["py-4 px-3", idx !== rows.length - 1 ? "border-b border-white/5" : ""].join(" ")}
-          >
-            <View className="flex-row items-center justify-between">
-              <View className="flex-row items-center flex-1">
-                <RemoteIcon
-                  uri={r.item?.iconUrl ?? null}
-                  size={30}
-                  roundedClassName="rounded-xl"
-                  placeholderClassName="bg-white/5 border border-white/10"
-                />
-                <Text className="ml-3 text-white/90 text-[14px]" numberOfLines={1}>
-                  {r.item?.name ?? "—"}
-                </Text>
-
-                {!!r.qtyText && (
-                  <Text className="text-white/60 text-[12px] ml-2" numberOfLines={1}>
-                    x{r.qtyText}
-                  </Text>
-                )}
-              </View>
-            </View>
-
-            {!!r.sourceText && (
-              <Text className="text-white/50 text-[12px] mt-2" numberOfLines={3}>
-                {r.sourceText}
-              </Text>
-            )}
-          </View>
-        ))}
-      </View>
-    </View>
-  );
-}
-
-function WanderingMerchantSection({ rows }: { rows: MerchantRow[] }) {
-  if (!rows?.length) return null;
-
-  return (
-    <View className="mt-5">
-      <SheetSectionLabel>Wandering Merchant</SheetSectionLabel>
-
-      <View className="rounded-2xl border border-white/10 bg-white/[0.03] overflow-hidden">
-        {rows.map((r, idx) => (
-          <View
-            key={`${r.item?.slug ?? "wm"}:${idx}`}
-            className={["py-4 px-3", idx !== rows.length - 1 ? "border-b border-white/5" : ""].join(" ")}
-          >
-            <View className="flex-row items-center justify-between">
-              <View className="flex-row items-center flex-1">
-                <RemoteIcon
-                  uri={r.item?.iconUrl ?? null}
-                  size={30}
-                  roundedClassName="rounded-xl"
-                  placeholderClassName="bg-white/5 border border-white/10"
-                />
-                <Text className="ml-3 text-white/90 text-[14px]" numberOfLines={1}>
-                  {r.item?.name ?? "—"}
-                </Text>
-              </View>
-            </View>
-
-            {!!r.sourceText && (
-              <Text className="text-white/50 text-[12px] mt-2" numberOfLines={3}>
-                {r.sourceText}
-              </Text>
-            )}
-          </View>
-        ))}
-      </View>
-    </View>
-  );
-}
-
-// IMPORTANT: PalDB can have multiple variants (same slug) with different rarity.
-// We must key UI + caches by (slug + rarity) so variants don't collapse into one.
-function variantKey(it: Pick<MaterialIndexItem, "slug" | "rarity">) {
+function variantKey(it: Pick<WeaponIndexItem, "slug" | "rarity">) {
   const s = String(it?.slug ?? "").trim();
   const r = String(it?.rarity ?? "").trim();
   return `${s}::${r}`;
 }
 
-export default function MaterialGrid({
+export default function WeaponGrid({
   items,
   onPressItem,
-  emptyText = "No materials found.",
+  emptyText = "No weapons found.",
   showUnavailable = false,
   numColumns = 3,
   prefetchIcons = true,
-}: MaterialGridProps) {
+}: WeaponGridProps) {
   const cols = clamp(numColumns, 2, 4);
 
   const filtered = useMemo(() => {
@@ -428,19 +84,21 @@ export default function MaterialGrid({
   }, [items, showUnavailable]);
 
   const [sheetVisible, setSheetVisible] = useState(false);
-  const [selected, setSelected] = useState<MaterialIndexItem | null>(null);
+  const [selected, setSelected] = useState<WeaponIndexItem | null>(null);
 
-  // cache by VARIANT KEY (slug + rarity), not just slug
-  const detailCache = useRef<Map<string, MaterialDetail>>(new Map());
-  const [detail, setDetail] = useState<MaterialDetail | null>(null);
+  const detailCache = useRef<Map<string, WeaponDetail>>(new Map());
+  const [detail, setDetail] = useState<WeaponDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
 
+  const [treantView, setTreantView] = useState<"tree" | "list">("tree");
+
   const openSheet = useCallback(
-    async (it: MaterialIndexItem) => {
+    async (it: WeaponIndexItem) => {
       onPressItem?.(it);
 
       setSelected(it);
+      setTreantView("tree");
       setSheetVisible(true);
       setDetailError(null);
 
@@ -458,9 +116,7 @@ export default function MaterialGrid({
       setDetail(null);
       setDetailLoading(true);
       try {
-        // Detail page is by slug; variants typically share same detail URL.
-        // We still cache per variant so the UI doesn't “collapse” selections.
-        const d = await fetchMaterialDetail(slug);
+        const d = await fetchWeaponDetail(slug);
         detailCache.current.set(vKey, d);
         setDetail(d);
       } catch (e: any) {
@@ -489,22 +145,28 @@ export default function MaterialGrid({
 
   const sheetKind = selected ? slugToKind(selected.slug) : "—";
   const sheetRarity = selected ? prettyRarity(selected.rarity) : "—";
-  const sheetTech = selected ? safeNum(selected.technology) : null;
+  const sheetTech = selected ? nonZeroNum(selected.technology) : null;
+  const sheetAttack = selected ? nonZeroNum(selected.attack) : null;
 
   const TILE_H = 154;
 
-  // Detail-driven sections (match SchematicGrid)
   const description = (detail as any)?.description ?? null;
   const treant = (detail as any)?.treant ?? null;
-
   const stats = (detail as any)?.stats ?? [];
   const producedAt = (detail as any)?.producedAt ?? [];
-  const production = (detail as any)?.production ?? [];
-  const craftingMaterials = (detail as any)?.craftingMaterials ?? [];
+
+  const production = useMemo(() => filterOutWorkFromRecipeRows((detail as any)?.production ?? []), [detail]);
+  const craftingMaterials = useMemo(
+    () => filterOutWorkFromRecipeRows((detail as any)?.craftingMaterials ?? []),
+    [detail]
+  );
+
   const droppedBy = (detail as any)?.droppedBy ?? [];
   const treasureBox = (detail as any)?.treasureBox ?? [];
   const wanderingMerchant = (detail as any)?.wanderingMerchant ?? [];
   const others = (detail as any)?.others ?? [];
+  const effects = (detail as any)?.effects ?? [];
+  const quickRecipe = (detail as any)?.recipes ?? (selected as any)?.recipes ?? [];
 
   const hasDesc = !!String(description ?? "").trim();
 
@@ -516,10 +178,9 @@ export default function MaterialGrid({
             const disabled = !it.isAvailable;
             const ring = rarityRing(it.rarity);
 
-            const tech = safeNum(it.technology);
+            const tech = nonZeroNum(it.technology);
+            const attack = nonZeroNum(it.attack);
             const title = buildTwoLineTitle(it.name);
-
-            // key by variant so duplicates render
             const key = variantKey(it);
 
             return (
@@ -562,10 +223,10 @@ export default function MaterialGrid({
 
                     <View className="flex-1" />
 
-                    <View className="items-center mt-2">
-                      <Text className="text-[10px] text-white/60">Tech</Text>
-                      <View className="mt-1 px-3 py-[3px] rounded-full border bg-white/5 border-white/10">
-                        <Text className="text-[10px] text-white/85">{tech != null ? String(tech) : "—"}</Text>
+                    <View className="mt-2">
+                      <View className="flex-row justify-center gap-2">
+                        <StatPill label="Attack" value={attack} />
+                        <StatPill label="Tech" value={tech} />
                       </View>
                     </View>
                   </View>
@@ -596,9 +257,13 @@ export default function MaterialGrid({
                   {selected?.name ?? "—"}
                 </Text>
 
-                <Text className="text-white/60 text-[12px] mt-0.5" numberOfLines={1}>
-                  Tech {sheetTech ?? "—"}
-                </Text>
+                {sheetAttack != null || sheetTech != null ? (
+                  <Text className="text-white/60 text-[12px] mt-0.5" numberOfLines={1}>
+                    {sheetAttack != null ? `Attack ${sheetAttack}` : ""}
+                    {sheetAttack != null && sheetTech != null ? " • " : ""}
+                    {sheetTech != null ? `Tech ${sheetTech}` : ""}
+                  </Text>
+                ) : null}
               </View>
             </View>
 
@@ -610,7 +275,6 @@ export default function MaterialGrid({
             </Pressable>
           </View>
 
-          {/* Pills */}
           <View className="mt-4 flex-row flex-wrap gap-2">
             <View className="px-3 py-2 rounded-full border border-white/10 bg-white/5">
               <Text className="text-white/80 text-[12px]">
@@ -631,7 +295,6 @@ export default function MaterialGrid({
             ) : null}
           </View>
 
-          {/* Detail loading/error */}
           {detailLoading ? (
             <View className="mt-5 items-center">
               <ActivityIndicator />
@@ -643,7 +306,6 @@ export default function MaterialGrid({
             </View>
           ) : null}
 
-          {/* About */}
           {hasDesc ? (
             <View className="mt-5">
               <SheetSectionLabel>About</SheetSectionLabel>
@@ -652,39 +314,29 @@ export default function MaterialGrid({
               </View>
             </View>
           ) : null}
-
-          {/* Stats */}
+          <EffectsSection effects={effects as any[]} />
+          <QuickRecipeSection rows={quickRecipe as any} />
           {!!stats?.length ? (
             <View className="mt-5">
               <SheetSectionLabel>Stats</SheetSectionLabel>
-              <KeyValueRows rows={stats} />
+              <KeyValueRows rows={stats as any} />
             </View>
           ) : null}
-
-          {/* Dependency Tree */}
           {!!treant ? (
             <View className="mt-5">
-              <SheetSectionLabel>Dependency Tree</SheetSectionLabel>
-              <View className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
-                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                  <View className="pr-6">{renderTreant(treant as TreantNode, 0)}</View>
-                </ScrollView>
-              </View>
+              <TreantSection treant={treant as any} view={treantView} onViewChange={setTreantView} />
             </View>
           ) : null}
-
           <ProducedAtSection rows={producedAt as any} />
           <RecipeSection title="Production" rows={production as any} />
           <RecipeSection title="Crafting Materials" rows={craftingMaterials as any} />
           <DroppedBySection rows={droppedBy as any} />
           <TreasureBoxSection rows={treasureBox as any} />
           <WanderingMerchantSection rows={wanderingMerchant as any} />
-
-          {/* Others */}
           {!!others?.length ? (
             <View className="mt-5">
               <SheetSectionLabel>Others</SheetSectionLabel>
-              <KeyValueRows rows={others} />
+              <KeyValueRows rows={others as any} />
             </View>
           ) : null}
         </ScrollView>

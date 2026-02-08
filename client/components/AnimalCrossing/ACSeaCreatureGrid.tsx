@@ -1,8 +1,9 @@
 // components/AnimalCrossing/ACSeaCreatureGrid.tsx
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { View, Text, ActivityIndicator, Image, Pressable } from "react-native";
+import { View, Text, ActivityIndicator, Pressable } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import { Image as ExpoImage } from "expo-image";
 
 import {
   fetchSeaCreatureByName,
@@ -12,12 +13,13 @@ import {
 import ACGridWrapper from "@/components/AnimalCrossing/ACGridWrapper";
 import { useACNameDetailGrid } from "@/lib/animalCrossing/useACNameDetailGrid";
 import { useAnimalCrossingCollectionStore } from "@/store/animalCrossingCollectionStore";
+import LocalIcon from "@/components/LocalIcon";
 
 const PAGE_SIZE = 45;
 const THUMB_PRIMARY = 256;
 const THUMB_FALLBACK = 128;
 
-const PREFETCH_BUFFER = 6;
+const PREFETCH_BUFFER = 12;
 const DETAIL_CONCURRENCY = 3;
 const INITIAL_PREFETCH = 9;
 
@@ -68,12 +70,10 @@ const SeaTile: React.FC<SeaTileProps> = React.memo(
     const router = useRouter();
 
     const key = useMemo(() => `seaCreature:${String(name ?? "").trim()}`, [name]);
-
     const entry = useAnimalCrossingCollectionStore(useCallback((s: any) => s.entries?.[key], [key]));
 
     const toggleCollected = useAnimalCrossingCollectionStore(useCallback((s: any) => s.toggleCollected, []));
-    const incrementCount = useAnimalCrossingCollectionStore(useCallback((s: any) => s.incrementCount, []));
-    const decrementCount = useAnimalCrossingCollectionStore(useCallback((s: any) => s.decrementCount, []));
+    const setCount = useAnimalCrossingCollectionStore(useCallback((s: any) => s.setCount, []));
 
     const isCollected = !!entry?.collected;
     const count = Math.max(Number(entry?.count || 0), 0);
@@ -90,7 +90,7 @@ const SeaTile: React.FC<SeaTileProps> = React.memo(
 
     useEffect(() => {
       if (!currentUri) return;
-      Image.prefetch(currentUri).catch(() => {});
+      ExpoImage.prefetch(currentUri).catch(() => {});
     }, [currentUri]);
 
     const goDetails = useCallback(() => {
@@ -120,6 +120,15 @@ const SeaTile: React.FC<SeaTileProps> = React.memo(
 
     const showOverlaySpinner = imgLoading || isDetailLoading;
 
+    const onToggle = useCallback(
+      (e: any) => {
+        e?.stopPropagation?.();
+        toggleCollected("seaCreature", name);
+        if (!isCollected || count <= 0) setCount("seaCreature", name, 1);
+      },
+      [toggleCollected, setCount, name, isCollected, count]
+    );
+
     return (
       <View className="w-1/3 p-1">
         <View className="rounded-3xl p-3 border mb-1 bg-slate-900/80 border-slate-700 items-center">
@@ -127,12 +136,14 @@ const SeaTile: React.FC<SeaTileProps> = React.memo(
             <View style={{ width: 60, height: 60, alignItems: "center", justifyContent: "center" }}>
               {currentUri ? (
                 <>
-                  <Image
+                  <ExpoImage
                     source={{ uri: currentUri }}
                     style={{ width: 60, height: 60 }}
-                    resizeMode="contain"
+                    contentFit="contain"
+                    transition={120}
+                    cachePolicy="disk"
                     onLoadStart={() => setImgLoading(true)}
-                    onLoadEnd={() => setImgLoading(false)}
+                    onLoad={() => setImgLoading(false)}
                     onError={handleImageError}
                   />
 
@@ -155,8 +166,16 @@ const SeaTile: React.FC<SeaTileProps> = React.memo(
                   ) : null}
                 </>
               ) : (
-                <View className="w-[60px] h-[60px] rounded-2xl bg-slate-950/60 border border-slate-700 items-center justify-center">
-                  {showOverlaySpinner ? <ActivityIndicator /> : <Feather name="image" size={18} color="#64748b" />}
+                <View style={{ width: 60, height: 60, alignItems: "center", justifyContent: "center" }}>
+                  <LocalIcon
+                    source={null}
+                    size={60}
+                    roundedClassName="rounded-2xl"
+                    placeholderClassName="bg-slate-950/60 border border-slate-700"
+                  />
+                  <View style={{ position: "absolute" }}>
+                    {showOverlaySpinner ? <ActivityIndicator /> : <Feather name="image" size={18} color="#64748b" />}
+                  </View>
                 </View>
               )}
             </View>
@@ -168,42 +187,20 @@ const SeaTile: React.FC<SeaTileProps> = React.memo(
             <Text className="text-[10px] text-slate-500 mt-1" numberOfLines={1}>
               {seaSubtitle(detail)}
             </Text>
+
+            <View className="mt-2">
+              <Pressable
+                onPress={onToggle}
+                className={`px-2 py-1 rounded-2xl border ${
+                  isCollected ? "bg-emerald-500/15 border-emerald-500/40" : "bg-slate-950/40 border-slate-700"
+                }`}
+              >
+                <Text className={`text-[10px] font-semibold ${isCollected ? "text-emerald-200" : "text-slate-300"}`}>
+                  {isCollected ? "Caught" : "Not Caught"}
+                </Text>
+              </Pressable>
+            </View>
           </Pressable>
-
-          <View className="flex-row items-center mt-2">
-            <Pressable
-              onPress={() => toggleCollected("seaCreature", name)}
-              className={`px-2 py-1 rounded-2xl border ${
-                isCollected ? "bg-emerald-500/15 border-emerald-500/40" : "bg-slate-950/40 border-slate-700"
-              }`}
-            >
-              <Text className={`text-[10px] font-semibold ${isCollected ? "text-emerald-200" : "text-slate-300"}`}>
-                {isCollected ? "Collected" : "Collect"}
-              </Text>
-            </Pressable>
-
-            {isCollected ? (
-              <View className="flex-row items-center ml-2">
-                <Pressable
-                  onPress={() => decrementCount("seaCreature", name)}
-                  className="w-6 h-6 rounded-xl bg-slate-950/60 border border-slate-700 items-center justify-center"
-                >
-                  <Text className="text-slate-100 text-[12px] font-bold">−</Text>
-                </Pressable>
-
-                <View className="px-2">
-                  <Text className="text-[11px] text-slate-200 font-semibold">{count}</Text>
-                </View>
-
-                <Pressable
-                  onPress={() => incrementCount("seaCreature", name)}
-                  className="w-6 h-6 rounded-xl bg-slate-950/60 border border-slate-700 items-center justify-center"
-                >
-                  <Text className="text-slate-100 text-[12px] font-bold">+</Text>
-                </Pressable>
-              </View>
-            ) : null}
-          </View>
         </View>
       </View>
     );
@@ -211,15 +208,34 @@ const SeaTile: React.FC<SeaTileProps> = React.memo(
 );
 
 const ACSeaCreatureGrid: React.FC<ACSeaCreatureGridProps> = ({ search, collectedOnly = false, collectedIds }) => {
+  const entries = useAnimalCrossingCollectionStore(useCallback((s: any) => s.entries, []));
+
   const collectedSet = useMemo(() => {
-    const xs = Array.isArray(collectedIds) ? collectedIds : [];
     const set = new Set<string>();
-    xs.forEach((x) => {
-      const s = String(x ?? "").trim();
-      if (s) set.add(s);
-    });
+
+    if (Array.isArray(collectedIds)) {
+      for (const x of collectedIds) {
+        const s = String(x ?? "").trim();
+        if (s) set.add(s);
+      }
+      return set;
+    }
+
+    if (!collectedOnly) return set;
+
+    for (const [key, entry] of Object.entries(entries || {})) {
+      if (!String(key).startsWith("seaCreature:")) continue;
+
+      const isCollected = !!(entry as any)?.collected;
+      const count = Math.max(Number((entry as any)?.count || 0), 0);
+      if (!isCollected && count <= 0) continue;
+
+      const name = String(key).slice("seaCreature:".length).trim();
+      if (name) set.add(name);
+    }
+
     return set;
-  }, [collectedIds]);
+  }, [entries, collectedOnly, collectedIds]);
 
   const extraFilter = useMemo(() => {
     if (!collectedOnly) return undefined;
@@ -263,7 +279,7 @@ const ACSeaCreatureGrid: React.FC<ACSeaCreatureGridProps> = ({ search, collected
   return (
     <ACGridWrapper<string>
       isInitialLoading={grid.namesLoading && !grid.namesLoadedOnce}
-      initialLoadingText="Loading sea creatures…"
+      initialLoadingText={collectedOnly ? "Loading your collected sea creatures…" : "Loading sea creatures…"}
       errorText={grid.namesError}
       onRetry={grid.retryReloadNames}
       isEmpty={grid.filteredNames.length === 0}

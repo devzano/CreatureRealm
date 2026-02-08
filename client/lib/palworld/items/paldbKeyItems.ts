@@ -36,7 +36,7 @@ import {
   parseTreasureBoxTable,
   parseMerchantTable,
   parseTreantTreeFromPage,
-    stripItemSkillBarsFromHtml,
+  stripItemSkillBarsFromHtml,
   extractItemSkillBarsTextFromHtml,
   type DetailItemRef,
   type DetailRecipeRow,
@@ -47,7 +47,6 @@ import {
   type KeyValueRow,
 } from "@/lib/palworld/paldbDetailKit";
 
-// (Optional) re-export kit types for consumers that import from paldbKeyItem.ts
 export type {
   DetailItemRef,
   DetailRecipeRow,
@@ -58,9 +57,6 @@ export type {
   KeyValueRow,
 } from "@/lib/palworld/paldbDetailKit";
 
-// -----------------------------
-// Types (Index)
-// -----------------------------
 
 export type KeyItemRecipeIngredient = {
   slug: string;
@@ -84,23 +80,15 @@ export type KeyItemIndexItem = {
   recipes: KeyItemRecipeIngredient[];
 };
 
-// -----------------------------
-// Compat exports
-// -----------------------------
-
 export type KeyItemListItem = KeyItemIndexItem;
 
-export async function fetchKeyItemList(opts?: { force?: boolean }): Promise<KeyItemIndexItem[]> {
+export async function fetchKeyItemList(opts?: { force?: boolean; }): Promise<KeyItemIndexItem[]> {
   return fetchKeyItemIndex(opts);
 }
 
 export async function warmKeyItemList(): Promise<void> {
   return warmKeyItemIndex();
 }
-
-// -----------------------------
-// Types (Detail) - Sphere parity
-// -----------------------------
 
 export type KeyItemDetail = {
   // Index-ish fields (kept on detail for convenience)
@@ -113,7 +101,7 @@ export type KeyItemDetail = {
   isAvailable: boolean;
   recipes: KeyItemRecipeIngredient[];
 
-effects: string[];
+  effects: string[];
   stats: KeyValueRow[];
   others: KeyValueRow[];
 
@@ -133,7 +121,7 @@ effects: string[];
 
 let _indexCache: KeyItemIndexItem[] | null = null;
 let _indexCacheAt = 0;
-const _detailCache = new Map<string, { at: number; data: KeyItemDetail }>();
+const _detailCache = new Map<string, { at: number; data: KeyItemDetail; }>();
 
 const INDEX_TTL = 10 * 60 * 1000;
 const DETAIL_TTL = 10 * 60 * 1000;
@@ -150,7 +138,7 @@ export async function warmKeyItemIndex(): Promise<void> {
   }
 }
 
-export async function fetchKeyItemIndex(opts?: { force?: boolean }): Promise<KeyItemIndexItem[]> {
+export async function fetchKeyItemIndex(opts?: { force?: boolean; }): Promise<KeyItemIndexItem[]> {
   const force = !!opts?.force;
   const now = Date.now();
 
@@ -169,7 +157,7 @@ export async function fetchKeyItemIndex(opts?: { force?: boolean }): Promise<Key
   return items;
 }
 
-export async function fetchKeyItemDetail(slugOrHref: string, opts?: { force?: boolean }): Promise<KeyItemDetail> {
+export async function fetchKeyItemDetail(slugOrHref: string, opts?: { force?: boolean; }): Promise<KeyItemDetail> {
   const idRaw = String(slugOrHref ?? "").trim();
   if (!idRaw) throw new Error("fetchKeyItemDetail: missing slug/href");
 
@@ -348,7 +336,7 @@ function parseKeyItemDetailHtml(html: string, slugKey: string): KeyItemDetail {
     slug: cleanKey(slugKey),
     name: cleanKey(
       firstMatch(src, /<h2\b[^>]*>\s*([^<]+?)\s*<\/h2>/i) ??
-        (firstMatch(src, /<title>\s*([^<]+?)\s*<\/title>/i) ?? slugKey)
+      (firstMatch(src, /<title>\s*([^<]+?)\s*<\/title>/i) ?? slugKey)
     ),
     iconUrl: (() => {
       const icon =
@@ -362,8 +350,8 @@ function parseKeyItemDetailHtml(html: string, slugKey: string): KeyItemDetail {
     rarity:
       cleanKey(
         firstMatch(src, /<span\b[^>]*class="[^"]*\bhover_text_rarity\d+\b[^"]*"[^>]*>\s*([^<]+?)\s*<\/span>/i) ??
-          firstMatch(src, /<span\b[^>]*class='[^']*\bhover_text_rarity\d+\b[^']*'[^>]*>\s*([^<]+?)\s*<\/span>/i) ??
-          ""
+        firstMatch(src, /<span\b[^>]*class='[^']*\bhover_text_rarity\d+\b[^']*'[^>]*>\s*([^<]+?)\s*<\/span>/i) ??
+        ""
       ) || null,
     technology: (() => {
       const techStr =
@@ -378,7 +366,7 @@ function parseKeyItemDetailHtml(html: string, slugKey: string): KeyItemDetail {
       const n = techStr != null ? Number(techStr) : NaN;
       return Number.isFinite(n) ? n : null;
     })(),
-        description: (() => {
+    description: (() => {
       const noBars = stripItemSkillBarsFromHtml(src);
 
       const descHtml =

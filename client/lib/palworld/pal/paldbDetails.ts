@@ -23,27 +23,23 @@ export type PalDetail = {
   elements: string[]; // e.g. ["Neutral"]
   imageUrl: string | null;
   iconUrl?: string | null; // header icon fallback
-
+  partnerSkillVideo?: { id: string; thumbnail: string; };
   possibleDrops?: Array<{
     name: string;
     iconUrl?: string;
     amount?: string;
     probability?: string;
   }>;
-
   summary?: string;
-
   partnerSkillName?: string;
   partnerSkillLevel?: string;
   partnerSkillDescription?: string;
   partnerSkillIconUrl?: string | null;
-
   partnerSkillEffects?: Array<{
     level: number;
     description: string; // e.g. "CollectItem +0%"
     value?: string;
   }>;
-
   ranchDrops?: Array<{
     level: number;
     item: string;
@@ -51,41 +47,35 @@ export type PalDetail = {
     amount: string; // e.g. "1–5"
     probability: string;
   }>;
-
   isRanchPal?: boolean;
-
   partnerSkillTechnology?: {
     itemSlug?: string;
     itemName?: string;
     itemIconUrl?: string | null;
     technology?: number | null;
   };
-
   partnerSkillActiveStats?: Array<{
     level: number;
     values: Record<string, string>;
   }>;
-
   workSuitability?: Array<{ name: string; level: string; iconUrl?: string | null; }>;
-
-  // Cards
   stats?: Record<string, string>;
   statsRows?: Array<{ key: string; value: string; iconUrl?: string | null; }>;
-
   movement?: Record<string, string>;
   level65?: Record<string, string>;
-
+  food?: {
+    amount: number;
+    max: number;
+  };
   others?: Record<string, string>;
-
   activeSkills?: PalActiveSkill[];
-
   tribes?: Array<{
     palSlug: string;
     palName: string;
     iconUrl?: string | null;
     tribeRole: string; // e.g. "Tribe Boss" / "Tribe Normal"
   }>;
-
+  isAlpha?: boolean;
   spawner?: Array<{
     palSlug: string;
     palName: string;
@@ -94,13 +84,17 @@ export type PalDetail = {
     sourceText: string; // raw-ish readable text (keeps codes + percents)
     locations?: Array<{ slug: string; name: string; }>;
   }>;
-
   uniqueCombo?: {
     parents: [
       { palSlug: string; palName: string; iconUrl?: string | null; },
       { palSlug: string; palName: string; iconUrl?: string | null; }
     ];
     child: { palSlug: string; palName: string; iconUrl?: string | null; };
+  };
+  breedingParentCalcUrl?: string;
+  habitat?: {
+    day?: { count: number | null; mapUrl: string | null; };
+    night?: { count: number | null; mapUrl: string | null; };
   };
 };
 
@@ -536,11 +530,11 @@ function parsePartnerTechnologyFromFlexGrow(
 
   const techNum = Number(String(techRaw ?? "").match(/[0-9]+/)?.[0] ?? "");
   const technology = Number.isFinite(techNum) && techNum > 0 ? techNum : null;
-const itemName = cleanKey(itemSlug)
-  .replace(/_/g, " ")
-  .replace(/\s+/g, " ")
-  .replace(/([A-Za-z])ss\b/g, "$1s’s") // Foxparkss -> Foxparks’s
-  .trim();
+  const itemName = cleanKey(itemSlug)
+    .replace(/_/g, " ")
+    .replace(/\s+/g, " ")
+    .replace(/([A-Za-z])ss\b/g, "$1s’s") // Foxparkss -> Foxparks’s
+    .trim();
 
 
   return {
@@ -555,38 +549,35 @@ function extractPartnerSkillFlexGrowHtml(psCardChunk: string): string | null {
   const html = String(psCardChunk ?? "");
   if (!html) return null;
 
-  // Find the flex-grow-1 container
   const start = html.search(/<div[^>]*class="[^"]*\bflex-grow-1\b[^"]*"[^>]*>/i);
   if (start < 0) return null;
 
-  // End at the next section header (usually Work Suitability / Food / etc.)
   let end = html.search(/<div[^>]*class="mt-4\s+ps-2"[^>]*>/i);
   if (end > start) return html.slice(start, end);
 
-  // Fallback: end at next "card-title" section boundary inside the same card
   end = html.slice(start + 1).search(/<h5\b[^>]*class="card-title\b/i);
   if (end >= 0) return html.slice(start, start + 1 + end);
 
-  // Final fallback: take a reasonable slice
   return html.slice(start);
 }
 
-// Removes the "unlock item + Technology X" block from the Partner Skill description area
 function stripPartnerSkillTechBlockFromFlexGrow(flexGrowHtml: string): string {
   let h = String(flexGrowHtml ?? "");
   if (!h) return h;
-
-  // Remove the specific "Technology" badge row (with the unlock item icon)
   h = h.replace(
     /<div>\s*<a\b[^>]*data-hover="[^"]*Items%2FSkillUnlock_[^"]*"[^>]*>[\s\S]*?<\/a>\s*<span\b[^>]*class="d-inline-block[^"]*"[^>]*>[\s\S]*?<span\b[^>]*>\s*Technology\s*<\/span>[\s\S]*?<\/span>\s*<\/div>/gi,
     " "
   );
-
-  // Extra fallback: sometimes the same block is formatted slightly differently; remove any div that contains the Technology badge markup
   h = h.replace(
     /<div>\s*[\s\S]*?<span\b[^>]*class="d-inline-block[^"]*"[^>]*>[\s\S]*?<span\b[^>]*>\s*Technology\s*<\/span>[\s\S]*?<\/span>[\s\S]*?<\/div>/gi,
     " "
   );
+  h = h.replace(/<table[\s\S]*?<\/table>/gi, "");
+  h = h.replace(/(<\/div>)([^<]*)(?=<\/div>|$)/gi, (match, tag, trailing) => {
+    const trimmed = trailing.trim();
+    if (!trimmed || /^(\.|,|;|:|\?|!|\(|\))$/.test(trimmed)) return tag;
+    return tag;
+  });
 
   return h;
 }
@@ -663,6 +654,13 @@ function parseTribesFromTable(tableHtml: string) {
   }
 
   return deduped;
+}
+
+function isAlphaFromTribes(tribes?: PalDetail["tribes"]): boolean {
+  if (!tribes || tribes.length === 0) return false;
+  return tribes.some(
+    (t) => t.tribeRole.toLowerCase() === "tribe boss"
+  );
 }
 
 function extractSpawnerTableHtml(htmlOrCard: string) {
@@ -830,6 +828,67 @@ function parseUniqueComboFromBreedingFarmCard(
   };
 }
 
+function parseHabitatFromCard(cardChunk: string): PalDetail["habitat"] | undefined {
+  const chunk = String(cardChunk ?? "");
+  if (!chunk) return undefined;
+
+  // Collect all map links inside the Habitat card
+  const links = Array.from(
+    chunk.matchAll(/<a[^>]+href="([^"]+)"[^>]*>[\s\S]*?<\/a>/gi)
+  ).map((m) => ({
+    href: String(m[1] ?? "").trim(),
+    aHtml: String(m[0] ?? ""),
+  }));
+
+  if (!links.length) return undefined;
+
+  const pickCount = (aHtml: string): number | null => {
+    // "Day (107)" / "Night (107)" — most stable is grabbing (...) anywhere in anchor text
+    const text = cleanKey(htmlToText(aHtml));
+    const m = text.match(/\((\d{1,6})\)/);
+    if (!m) return null;
+    const n = Number(m[1]);
+    return Number.isFinite(n) ? n : null;
+  };
+
+  const pickType = (aHtml: string, href: string): "day" | "night" | null => {
+    const h = `${aHtml} ${href}`.toLowerCase();
+    if (h.includes("daytimelocations")) return "day";
+    if (h.includes("nighttimelocations")) return "night";
+
+    // fallback: sometimes the anchor contains the daytime/night icon
+    if (h.includes("timezone_daytime")) return "day";
+    if (h.includes("timezone_night")) return "night";
+
+    // last fallback: textual
+    if (/\bday\b/i.test(h)) return "day";
+    if (/\bnight\b/i.test(h)) return "night";
+
+    return null;
+  };
+
+  const out: NonNullable<PalDetail["habitat"]> = {};
+
+  for (const l of links) {
+    const hrefRaw = l.href;
+    if (!hrefRaw) continue;
+
+    // Normalize to absolute URL you can open later
+    const mapUrl = absUrl(hrefRaw);
+
+    const type = pickType(l.aHtml, hrefRaw);
+    if (!type) continue;
+
+    const count = pickCount(l.aHtml);
+
+    if (type === "day") out.day = { count, mapUrl };
+    if (type === "night") out.night = { count, mapUrl };
+  }
+
+  if (!out.day && !out.night) return undefined;
+  return out;
+}
+
 export function parsePalDetailHtml(html: string, slug: string): PalDetail {
   const name =
     firstMatch(
@@ -876,6 +935,10 @@ export function parsePalDetailHtml(html: string, slug: string): PalDetail {
   const imageUrl = hover ? absUrl(hover) : directImg ? absUrl(directImg) : null;
 
   const summary = parseSummaryFromHtml(html);
+  const videoId = firstMatch(html, /data-video-id=["']([^"']+)["']/i) ?? null;
+  const partnerSkillVideo = videoId
+    ? { id: videoId, thumbnail: `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg` }
+    : undefined;
   const possibleDrops = parsePossibleDropsFromHtml(html);
   const activeSkills = parseActiveSkillsFromHtml(html);
 
@@ -927,10 +990,8 @@ export function parsePalDetailHtml(html: string, slug: string): PalDetail {
 
     if (flexGrowHtml) {
       partnerSkillTechnology = parsePartnerTechnologyFromFlexGrow(flexGrowHtml);
-
       const cleanedForDesc = stripPartnerSkillTechBlockFromFlexGrow(flexGrowHtml);
-
-      const desc = cleanKey(htmlToText(cleanedForDesc));
+      const desc = cleanKey(htmlToText(cleanedForDesc)).replace(/\s+([.,;!?])/g, "$1");
       if (desc) partnerSkillDescription = desc;
     }
 
@@ -1048,6 +1109,8 @@ export function parsePalDetailHtml(html: string, slug: string): PalDetail {
 
   const cards = extractCardBodies(html);
   const findCard = (name: string) => cards.find((c) => c.title.toLowerCase().includes(name));
+  const habitatCard = findCard("habitat");
+  const habitat = habitatCard ? parseHabitatFromCard(habitatCard.chunk) : undefined;
 
   const statsCard = findCard("stats");
   const stats = statsCard ? parseKeyValueRowsFromCard(statsCard.chunk) : undefined;
@@ -1085,6 +1148,8 @@ export function parsePalDetailHtml(html: string, slug: string): PalDetail {
     }
   }
 
+  const isAlpha = isAlphaFromTribes(tribes);
+
   let spawner: PalDetail["spawner"] | undefined;
 
   const spawnerCard = findCard("spawner");
@@ -1114,6 +1179,25 @@ export function parsePalDetailHtml(html: string, slug: string): PalDetail {
 
   const othersCard = findCard("others");
   const others = othersCard ? parseKeyValueRowsFromCard(othersCard.chunk) : undefined;
+  const foodAmountRaw =
+    others?.FoodAmount ??
+    stats?.FoodAmount ??
+    undefined;
+
+  const foodStatRaw =
+    stats?.Food ??
+    undefined;
+
+  const foodAmount = Number(foodAmountRaw);
+  const foodMax = Number(foodStatRaw);
+
+  const food =
+    Number.isFinite(foodAmount) || Number.isFinite(foodMax)
+      ? {
+        amount: Number.isFinite(foodAmount) ? foodAmount : 0,
+        max: Number.isFinite(foodMax) ? foodMax : 0,
+      }
+      : undefined;
 
   const breedingFarmCard = findCard("breeding farm");
   const uniqueCombo = breedingFarmCard
@@ -1121,6 +1205,9 @@ export function parsePalDetailHtml(html: string, slug: string): PalDetail {
     : undefined;
 
   const palCode = (stats?.Code || others?.Code || "").trim() || undefined;
+
+  const breedingParentCalcUrl =
+    palCode ? `${BASE}/en/Breed?child=${encodeURIComponent(palCode)}` : undefined;
 
   return {
     id: slug,
@@ -1131,41 +1218,37 @@ export function parsePalDetailHtml(html: string, slug: string): PalDetail {
     elements,
     imageUrl,
     iconUrl: iconUrl ? absUrl(iconUrl) : null,
-
     summary,
-
     activeSkills,
-
     possibleDrops: possibleDrops.map((d) => ({
       name: d.itemName,
       iconUrl: d.iconUrl,
       amount: d.quantityText,
       probability: d.probabilityText,
     })),
-
     partnerSkillName,
     partnerSkillIconUrl: partnerSkillIconUrl ?? null,
     partnerSkillLevel,
     partnerSkillDescription,
-
     partnerSkillEffects,
     ranchDrops,
     isRanchPal,
-
     partnerSkillTechnology,
     partnerSkillActiveStats,
-
+    partnerSkillVideo,
     workSuitability,
-
     stats,
     statsRows,
+    food,
     movement,
     level65,
     others,
     tribes,
+    isAlpha,
     spawner,
-
     uniqueCombo,
+    breedingParentCalcUrl,
+    habitat,
   };
 }
 

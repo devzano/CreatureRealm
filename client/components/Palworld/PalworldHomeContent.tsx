@@ -1,21 +1,19 @@
 // components/Palworld/PalworldHomeContent.tsx
-import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
-import { View, Text, Pressable, TextInput, ScrollView, ActivityIndicator } from "react-native";
+import React, { useEffect, useMemo, useRef, useState, useCallback, useDeferredValue } from "react";
+import { View, Text, Pressable, TextInput, ScrollView, ActivityIndicator, InteractionManager } from "react-native";
 import { Feather } from "@expo/vector-icons";
-
+import LiquidGlass from "../ui/LiquidGlass";
 import PageWrapper from "@/components/PageWrapper";
 import MapCard from "@/components/MapCard";
-
-import { fetchPalList, type PalListItem } from "@/lib/palworld/paldbDeck";
-
 import { PalpagosIslandsMapModal } from "./PalworldMap";
 import PalworldBreedingCalculatorModal from "./PalworldBreedingCalculatorModal";
-import PaldeckGrid, { type PalDexFilter } from "@/components/Palworld/PaldeckGrid";
 
+import PaldeckGrid, { type PalDexFilter } from "@/components/Palworld/PaldeckGrid";
 import PalworldItemsGrid from "@/components/Palworld/PalworldItemsGrid";
 import PalworldConstructionGrid from "@/components/Palworld/PalworldConstructionGrid";
 import PalworldUpgradesGrid from "@/components/Palworld/PalworldUpgradesGrid";
 
+import { fetchPalList, type PalListItem } from "@/lib/palworld/paldbDeck";
 import { fetchSphereList, type SphereListItem } from "@/lib/palworld/items/paldbSpheres";
 import { fetchAmmoIndex, type AmmoIndexItem } from "@/lib/palworld/items/paldbAmmo";
 import { fetchMaterialIndex, type MaterialIndexItem } from "@/lib/palworld/items/paldbMaterial";
@@ -29,13 +27,19 @@ import { fetchSchematicList, type SchematicIndexItem } from "@/lib/palworld/item
 import { fetchAccessoryIndex, type AccessoryIndexItem } from "@/lib/palworld/items/paldbAccessory";
 import { fetchArmorIndex, type ArmorIndexItem } from "@/lib/palworld/items/paldbArmor";
 
-import { fetchMountIndex, type PalMountIndexItem } from "@/lib/palworld/paldbMounts";
-import { fetchPassiveSkillIndex, type PassiveSkillRow } from "@/lib/palworld/paldbPassiveSkills";
-import { fetchTechnologies, type TechnologyItem } from "@/lib/palworld/paldbTechnologies";
-import { fetchJournalIndex, type JournalIndexItem } from "@/lib/palworld/paldbJournal";
-import { fetchMissionIndex, type MissionIndexItem } from "@/lib/palworld/paldbMissions";
-import { fetchBaseLevels, type BaseIndex } from "@/lib/palworld/paldbBase";
-import { fetchMerchantOffers, type MerchantOfferRow } from "@/lib/palworld/paldbMerchants";
+import { fetchMountIndex, type PalMountIndexItem } from "@/lib/palworld/items/paldbMounts";
+import { fetchPassiveSkillIndex, type PassiveSkillRow } from "@/lib/palworld/upgrades/paldbPassiveSkills";
+import { fetchTechnologies, type TechnologyItem } from "@/lib/palworld/upgrades/paldbTechnologies";
+import { fetchJournalIndex, type JournalIndexItem } from "@/lib/palworld/upgrades/paldbJournal";
+import { fetchMissionIndex, type MissionIndexItem } from "@/lib/palworld/upgrades/paldbMissions";
+import { fetchBaseLevels, type BaseIndex } from "@/lib/palworld/upgrades/paldbBase";
+import { fetchMerchantOffers, type MerchantOfferRow } from "@/lib/palworld/upgrades/paldbMerchants";
+import { fetchTowerBosses, type TowerBossRow } from "@/lib/palworld/upgrades/paldbTowerBosses";
+import { fetchRaidIndex, fetchSummoningAltarIndex, type SummoningAltarBoss, type RaidEvent } from "@/lib/palworld/upgrades/paldbSummonsRaid";
+import { fetchDungeonWithPals, type DungeonWithPals } from "@/lib/palworld/upgrades/paldbDungeonsPals";
+import { fetchEggsIndex, type EggRow } from "@/lib/palworld/upgrades/paldbEggPals";
+import { listWorkSuitabilities, type WorkSuitabilityItem } from "@/lib/palworld/upgrades/paldbWorkSuitability";
+import { fetchSkillfruitOrchard, type SkillFruitOrchardRow } from "@/lib/palworld/upgrades/paldbSkillFruits";
 
 import { fetchStorageList, type StorageIndexItem } from "@/lib/palworld/construction/paldbStorage";
 import { fetchFoundationsList, type FoundationsIndexItem } from "@/lib/palworld/construction/paldbFoundations";
@@ -70,36 +74,43 @@ type ToolCardConfig = React.ComponentProps<typeof MapCard> & {
 const PalworldHomeContent: React.FC<PalworldHomeContentProps> = ({ onBackToCollections }) => {
   const toolsScrollRef = useRef<ScrollView | null>(null);
 
-  const [activeTab, setActiveTab] = useState<ActiveTab>("dex");
+  const [activeTabUI, setActiveTabUI] = useState<ActiveTab>("dex");
+  const [activeTabContent, setActiveTabContent] = useState<ActiveTab>("dex");
+
   const [search, setSearch] = useState("");
-  const normalizedSearch = search.trim().toLowerCase();
+  const deferredSearch = useDeferredValue(search);
+  const normalizedSearch = (deferredSearch ?? "").trim().toLowerCase();
 
   const [dexFilter, setDexFilter] = useState<PalDexFilter>("all");
   const [showPalpagosMap, setShowPalpagosMap] = useState(false);
   const [showBreedingCalc, setShowBreedingCalc] = useState(false);
 
+  const tabRef = useRef<ActiveTab>("dex");
+  useEffect(() => {
+    tabRef.current = activeTabUI;
+  }, [activeTabUI]);
+
   const setTab = useCallback((t: ActiveTab) => {
-    setActiveTab(t);
+    setActiveTabUI(t);
+
+    InteractionManager.runAfterInteractions(() => {
+      setActiveTabContent(t);
+    });
   }, []);
 
-  // Dex
   const [dexLoading, setDexLoading] = useState(false);
   const [dexError, setDexError] = useState<string | null>(null);
   const [pals, setPals] = useState<PalListItem[]>([]);
 
-  // Items tab state
   const [itemsLoading, setItemsLoading] = useState(false);
   const [itemsError, setItemsError] = useState<string | null>(null);
 
-  // Construction tab state
   const [constructionLoading, setConstructionLoading] = useState(false);
   const [constructionError, setConstructionError] = useState<string | null>(null);
 
-  // Upgrades tab state
   const [upgradesLoading, setUpgradesLoading] = useState(false);
   const [upgradesError, setUpgradesError] = useState<string | null>(null);
 
-  // Items data
   const [spheres, setSpheres] = useState<SphereListItem[]>([]);
   const [ammo, setAmmo] = useState<AmmoIndexItem[]>([]);
   const [materials, setMaterials] = useState<MaterialIndexItem[]>([]);
@@ -114,7 +125,6 @@ const PalworldHomeContent: React.FC<PalworldHomeContentProps> = ({ onBackToColle
   const [accessories, setAccessories] = useState<AccessoryIndexItem[]>([]);
   const [armor, setArmor] = useState<ArmorIndexItem[]>([]);
 
-  // Upgrades data
   const [passiveSkills, setPassiveSkills] = useState<PassiveSkillRow[]>([]);
   const [technologies, setTechnologies] = useState<TechnologyItem[]>([]);
   const [journals, setJournals] = useState<JournalIndexItem[]>([]);
@@ -122,8 +132,14 @@ const PalworldHomeContent: React.FC<PalworldHomeContentProps> = ({ onBackToColle
   const [missionsSub, setMissionsSub] = useState<MissionIndexItem[]>([]);
   const [base, setBase] = useState<BaseIndex | null>(null);
   const [merchantOffers, setMerchantOffers] = useState<MerchantOfferRow[]>([]);
+  const [towerBosses, setTowerBosses] = useState<TowerBossRow[]>([]);
+  const [summons, setSummons] = useState<SummoningAltarBoss[]>([]);
+  const [raids, setRaids] = useState<RaidEvent[]>([]);
+  const [dungeonPals, setDungeonPals] = useState<DungeonWithPals[]>([]);
+  const [eggs, setEggs] = useState<EggRow[]>([]);
+  const [workSuitability, setWorkSuitability] = useState<WorkSuitabilityItem[]>([]);
+  const [skillfruits, setSkillfruits] = useState<SkillFruitOrchardRow[]>([]);
 
-  // Construction data
   const [storage, setStorage] = useState<StorageIndexItem[]>([]);
   const [foundations, setFoundations] = useState<FoundationsIndexItem[]>([]);
   const [furniture, setFurniture] = useState<FurnitureIndexItem[]>([]);
@@ -139,7 +155,6 @@ const PalworldHomeContent: React.FC<PalworldHomeContentProps> = ({ onBackToColle
   const [didLoadConstructionOnce, setDidLoadConstructionOnce] = useState(false);
   const [didLoadUpgradesOnce, setDidLoadUpgradesOnce] = useState(false);
 
-  // Initial dex load
   useEffect(() => {
     let cancelled = false;
 
@@ -154,16 +169,9 @@ const PalworldHomeContent: React.FC<PalworldHomeContentProps> = ({ onBackToColle
         setPals(list);
       } catch (e) {
         console.warn("Failed to fetch paldb pals list:", e);
-        if (!cancelled) setDexError("Failed to load Paldeck from paldb.cc");
+        if (!cancelled) setDexError("Failed to load Paldeck");
       } finally {
         if (!cancelled) setDexLoading(false);
-
-        // Optional background prefetch for Building (so it feels instant later)
-        if (!cancelled && !didLoadConstructionOnce) {
-          setTimeout(() => {
-            loadConstructionData({ markDidLoad: true }).catch(() => {});
-          }, 600);
-        }
       }
     })();
 
@@ -173,7 +181,7 @@ const PalworldHomeContent: React.FC<PalworldHomeContentProps> = ({ onBackToColle
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function loadItemsData(opts?: { markDidLoad?: boolean }) {
+  async function loadItemsData(opts?: { markDidLoad?: boolean; }) {
     const markDidLoad = opts?.markDidLoad ?? true;
 
     try {
@@ -233,7 +241,7 @@ const PalworldHomeContent: React.FC<PalworldHomeContentProps> = ({ onBackToColle
     }
   }
 
-  async function loadConstructionData(opts?: { markDidLoad?: boolean }) {
+  async function loadConstructionData(opts?: { markDidLoad?: boolean; }) {
     const markDidLoad = opts?.markDidLoad ?? true;
 
     try {
@@ -284,22 +292,40 @@ const PalworldHomeContent: React.FC<PalworldHomeContentProps> = ({ onBackToColle
     }
   }
 
-  async function loadUpgradesData(opts?: { markDidLoad?: boolean }) {
+  async function loadUpgradesData(opts?: { markDidLoad?: boolean; }) {
     const markDidLoad = opts?.markDidLoad ?? true;
 
     try {
       setUpgradesError(null);
       setUpgradesLoading(true);
 
-      const [passiveSkillIndex, technologyList, journalIndex, missionIndex, baseIndex, merchantOfferList] =
-        await Promise.all([
-          fetchPassiveSkillIndex(),
-          fetchTechnologies(),
-          fetchJournalIndex(),
-          fetchMissionIndex(),
-          fetchBaseLevels(),
-          fetchMerchantOffers(),
-        ]);
+      const [
+        passiveSkillIndex,
+        technologyList,
+        journalIndex,
+        missionIndex,
+        baseIndex,
+        merchantOfferList,
+        towerBossList,
+        raidIndex,
+        summoningAltarIndex,
+        dungeonWithPalsList,
+        eggsIndex,
+        skillfruitList,
+      ] = await Promise.all([
+        fetchPassiveSkillIndex(),
+        fetchTechnologies(),
+        fetchJournalIndex(),
+        fetchMissionIndex(),
+        fetchBaseLevels(),
+        fetchMerchantOffers(),
+        fetchTowerBosses(),
+        fetchRaidIndex(),
+        fetchSummoningAltarIndex(),
+        fetchDungeonWithPals(),
+        fetchEggsIndex(),
+        fetchSkillfruitOrchard(),
+      ]);
 
       setPassiveSkills(passiveSkillIndex?.items ?? []);
       setTechnologies(technologyList ?? []);
@@ -308,6 +334,14 @@ const PalworldHomeContent: React.FC<PalworldHomeContentProps> = ({ onBackToColle
       setMissionsSub(missionIndex?.sub ?? []);
       setBase(baseIndex ?? null);
       setMerchantOffers(merchantOfferList ?? []);
+      setTowerBosses(towerBossList ?? []);
+      setRaids(raidIndex ?? []);
+      setSummons(summoningAltarIndex ?? []);
+      setDungeonPals(dungeonWithPalsList ?? []);
+      setEggs(eggsIndex?.rows ?? []);
+      const workSuitabilityIndex = listWorkSuitabilities();
+      setWorkSuitability(workSuitabilityIndex);
+      setSkillfruits(skillfruitList ?? []);
 
       if (markDidLoad) setDidLoadUpgradesOnce(true);
     } catch (e) {
@@ -318,36 +352,37 @@ const PalworldHomeContent: React.FC<PalworldHomeContentProps> = ({ onBackToColle
     }
   }
 
-  // Lazy-load per tab
   useEffect(() => {
     let cancelled = false;
 
-    (async () => {
+    const run = () => {
       if (cancelled) return;
 
-      if (activeTab === "items") {
-        if (!didLoadItemsOnce) await loadItemsData({ markDidLoad: true });
+      if (activeTabContent === "items") {
+        if (!didLoadItemsOnce) loadItemsData({ markDidLoad: true }).catch(() => { });
         return;
       }
 
-      if (activeTab === "construction") {
-        if (!didLoadConstructionOnce) await loadConstructionData({ markDidLoad: true });
+      if (activeTabContent === "construction") {
+        if (!didLoadConstructionOnce) loadConstructionData({ markDidLoad: true }).catch(() => { });
         return;
       }
 
-      if (activeTab === "upgrades") {
-        if (!didLoadUpgradesOnce) await loadUpgradesData({ markDidLoad: true });
+      if (activeTabContent === "upgrades") {
+        if (!didLoadUpgradesOnce) loadUpgradesData({ markDidLoad: true }).catch(() => { });
         return;
       }
-    })();
+    };
+
+    InteractionManager.runAfterInteractions(run);
 
     return () => {
       cancelled = true;
     };
-  }, [activeTab, didLoadItemsOnce, didLoadConstructionOnce, didLoadUpgradesOnce]);
+  }, [activeTabContent, didLoadItemsOnce, didLoadConstructionOnce, didLoadUpgradesOnce]);
 
   const pageTitle = useMemo(() => {
-    switch (activeTab) {
+    switch (activeTabUI) {
       case "dex":
         return "Paldeck";
       case "tools":
@@ -361,12 +396,12 @@ const PalworldHomeContent: React.FC<PalworldHomeContentProps> = ({ onBackToColle
       default:
         return "Palworld";
     }
-  }, [activeTab]);
+  }, [activeTabUI]);
 
   const pageSubtitle = useMemo(() => {
-    switch (activeTab) {
+    switch (activeTabUI) {
       case "dex":
-        return "Your Palworld dex — track caught, lucky, and alpha pals.";
+        return "Your Palpedia — track caught, lucky, and alpha pals.";
       case "tools":
         return "Maps, breeding, and utility tools.";
       case "items":
@@ -378,53 +413,59 @@ const PalworldHomeContent: React.FC<PalworldHomeContentProps> = ({ onBackToColle
       default:
         return "";
     }
-  }, [activeTab]);
+  }, [activeTabUI]);
 
-  const mapCards: MapCardConfig[] = [
-    {
-      id: "palpagos-world",
-      groupKey: "world",
-      onPress: () => setShowPalpagosMap(true),
-      title: "Palpagos Islands – World Map",
-      subtitle: "Full-screen map for Palworld.",
-      tagLabel: "Region",
-      tagValue: "Palpagos • World",
-      iconType: "mci",
-      iconName: "map",
-      iconColor: "#f97316",
-      iconSize: 22,
-      borderColorClass: "border-orange-700/70",
-      iconBgClass: "bg-orange-500/15 border-orange-500/50",
-      infoIconName: "map-search-outline",
-      infoText: "Explore biomes, landmarks, and key locations.",
-      badgeBgClass: "bg-orange-500/15",
-      badgeBorderClass: "border-orange-500/60",
-      badgeTextClass: "text-orange-200",
-    },
-  ];
+  const mapCards: MapCardConfig[] = useMemo(
+    () => [
+      {
+        id: "palpagos-world",
+        groupKey: "world",
+        onPress: () => setShowPalpagosMap(true),
+        title: "Palpagos Islands – World Map",
+        subtitle: "Full-screen map for Palworld.",
+        tagLabel: "Region",
+        tagValue: "Palpagos • World",
+        iconType: "mci",
+        iconName: "map",
+        iconColor: "#f97316",
+        iconSize: 22,
+        borderColorClass: "border-orange-700/70",
+        iconBgClass: "bg-orange-500/15 border-orange-500/50",
+        infoIconName: "map-search-outline",
+        infoText: "Explore biomes, landmarks, and key locations.",
+        badgeBgClass: "bg-orange-500/15",
+        badgeBorderClass: "border-orange-500/60",
+        badgeTextClass: "text-orange-200",
+      },
+    ],
+    []
+  );
 
-  const toolCards: ToolCardConfig[] = [
-    {
-      id: "palworld-breeding-calculator",
-      groupKey: "tools",
-      onPress: () => setShowBreedingCalc(true),
-      title: "Breeding Calculator",
-      subtitle: "Combine pals and discover offspring results.",
-      tagLabel: "Tool",
-      tagValue: "Palworld.gg • Breeding",
-      iconType: "mci",
-      iconName: "dna",
-      iconColor: "#f97316",
-      iconSize: 22,
-      borderColorClass: "border-orange-700/70",
-      iconBgClass: "bg-orange-500/15 border-orange-500/50",
-      infoIconName: "calculator-variant-outline",
-      infoText: "Open the full breeding calculator in-app (WebView).",
-      badgeBgClass: "bg-orange-500/15",
-      badgeBorderClass: "border-orange-500/60",
-      badgeTextClass: "text-orange-200",
-    },
-  ];
+  const toolCards: ToolCardConfig[] = useMemo(
+    () => [
+      {
+        id: "palworld-breeding-calculator",
+        groupKey: "tools",
+        onPress: () => setShowBreedingCalc(true),
+        title: "Breeding Calculator",
+        subtitle: "Combine pals and discover offspring results.",
+        tagLabel: "Tool",
+        tagValue: "Breeding",
+        iconType: "mci",
+        iconName: "dna",
+        iconColor: "#f97316",
+        iconSize: 22,
+        borderColorClass: "border-orange-700/70",
+        iconBgClass: "bg-orange-500/15 border-orange-500/50",
+        infoIconName: "calculator-variant-outline",
+        infoText: "Breeding Calculator",
+        badgeBgClass: "bg-orange-500/15",
+        badgeBorderClass: "border-orange-500/60",
+        badgeTextClass: "text-orange-200",
+      },
+    ],
+    []
+  );
 
   const filteredMapCards = useMemo(() => {
     if (!normalizedSearch) return mapCards;
@@ -498,7 +539,14 @@ const PalworldHomeContent: React.FC<PalworldHomeContentProps> = ({ onBackToColle
     missionsMain.length === 0 &&
     missionsSub.length === 0 &&
     base == null &&
-    merchantOffers.length === 0;
+    merchantOffers.length === 0 &&
+    towerBosses.length === 0 &&
+    summons.length === 0 &&
+    raids.length === 0 &&
+    dungeonPals.length === 0 &&
+    eggs.length === 0 &&
+    workSuitability.length === 0 &&
+    skillfruits.length === 0;
 
   return (
     <>
@@ -507,7 +555,24 @@ const PalworldHomeContent: React.FC<PalworldHomeContentProps> = ({ onBackToColle
         hideBackButton
         title={pageTitle}
         subtitle={pageSubtitle}
-        leftActions={<Text className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Palworld</Text>}
+        leftActions={
+          <LiquidGlass
+            glassEffectStyle="clear"
+            interactive={false}
+            tinted
+            tintColor="rgba(56,189,248,0.22)"
+            showFallbackBackground
+            style={{
+              borderRadius: 999,
+              borderWidth: 1,
+              borderColor: "rgba(148,163,184,0.14)",
+            }}
+          >
+            <View style={{ paddingHorizontal: 10, paddingVertical: 6 }}>
+              <Text className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-300">Palworld</Text>
+            </View>
+          </LiquidGlass>
+        }
         rightActions={
           <Pressable onPress={onBackToCollections} className="px-3 py-1 rounded-full bg-slate-900 border border-slate-700">
             <Text className="text-[11px] text-slate-300 font-semibold">Change Collection</Text>
@@ -522,15 +587,15 @@ const PalworldHomeContent: React.FC<PalworldHomeContentProps> = ({ onBackToColle
               value={search}
               onChangeText={setSearch}
               placeholder={
-                activeTab === "tools"
+                activeTabUI === "tools"
                   ? "Search field guide (maps, breeding…)"
-                  : activeTab === "items"
-                  ? "Search items (materials, spheres, ammo, rarity, tech…)"
-                  : activeTab === "construction"
-                  ? "Search construction (storage, foundations, furniture, tech…)"
-                  : activeTab === "upgrades"
-                  ? "Search upgrades (skills, tech, journals, missions, merchants…)"
-                  : "Search pals (name, number, element…)"
+                  : activeTabUI === "items"
+                    ? "Search items (materials, spheres, ammo, rarity, tech…)"
+                    : activeTabUI === "construction"
+                      ? "Search construction (storage, foundations, furniture, tech…)"
+                      : activeTabUI === "upgrades"
+                        ? "Search upgrades (skills, tech, journals, missions, merchants…)"
+                        : "Search pals (name, number, element…)"
               }
               placeholderTextColor="#6B7280"
               className="flex-1 ml-2 text-[13px] text-slate-100"
@@ -547,47 +612,42 @@ const PalworldHomeContent: React.FC<PalworldHomeContentProps> = ({ onBackToColle
           <View className="flex-row items-center rounded-full bg-slate-900/80 border border-slate-700 p-1 mt-2">
             <Pressable
               onPress={() => setTab("tools")}
-              className={`flex-1 rounded-full px-3 py-1.5 items-center justify-center ${
-                activeTab === "tools" ? "bg-slate-800" : ""
-              }`}
+              className={`flex-1 rounded-full px-3 py-1.5 items-center justify-center ${activeTabUI === "tools" ? "bg-slate-800" : ""
+                }`}
             >
-              <Text className={`text-[11px] font-semibold ${activeTab === "tools" ? "text-slate-50" : "text-slate-400"}`}>
+              <Text className={`text-[11px] font-semibold ${activeTabUI === "tools" ? "text-slate-50" : "text-slate-400"}`}>
                 Tools
               </Text>
             </Pressable>
 
             <Pressable
               onPress={() => setTab("items")}
-              className={`flex-1 rounded-full px-3 py-1.5 items-center justify-center ${
-                activeTab === "items" ? "bg-slate-800" : ""
-              }`}
+              className={`flex-1 rounded-full px-3 py-1.5 items-center justify-center ${activeTabUI === "items" ? "bg-slate-800" : ""
+                }`}
             >
-              <Text className={`text-[11px] font-semibold ${activeTab === "items" ? "text-slate-50" : "text-slate-400"}`}>
+              <Text className={`text-[11px] font-semibold ${activeTabUI === "items" ? "text-slate-50" : "text-slate-400"}`}>
                 Items
               </Text>
             </Pressable>
 
             <Pressable
               onPress={() => setTab("dex")}
-              className={`flex-1 rounded-full px-3 py-1.5 items-center justify-center ${
-                activeTab === "dex" ? "bg-slate-800" : ""
-              }`}
+              className={`flex-1 rounded-full px-3 py-1.5 items-center justify-center ${activeTabUI === "dex" ? "bg-slate-800" : ""
+                }`}
             >
-              <Text className={`text-[11px] font-semibold ${activeTab === "dex" ? "text-slate-50" : "text-slate-400"}`}>
-                Paldeck
+              <Text className={`text-[11px] font-semibold ${activeTabUI === "dex" ? "text-slate-50" : "text-slate-400"}`}>
+                Palpedia
               </Text>
             </Pressable>
 
             <Pressable
               onPress={() => setTab("construction")}
-              className={`flex-1 rounded-full px-3 py-1.5 items-center justify-center ${
-                activeTab === "construction" ? "bg-slate-800" : ""
-              }`}
+              className={`flex-1 rounded-full px-3 py-1.5 items-center justify-center ${activeTabUI === "construction" ? "bg-slate-800" : ""
+                }`}
             >
               <Text
-                className={`text-[11px] font-semibold ${
-                  activeTab === "construction" ? "text-slate-50" : "text-slate-400"
-                }`}
+                className={`text-[11px] font-semibold ${activeTabUI === "construction" ? "text-slate-50" : "text-slate-400"
+                  }`}
               >
                 Building
               </Text>
@@ -595,23 +655,18 @@ const PalworldHomeContent: React.FC<PalworldHomeContentProps> = ({ onBackToColle
 
             <Pressable
               onPress={() => setTab("upgrades")}
-              className={`flex-1 rounded-full px-3 py-1.5 items-center justify-center ${
-                activeTab === "upgrades" ? "bg-slate-800" : ""
-              }`}
-            >
-              <Text
-                className={`text-[11px] font-semibold ${
-                  activeTab === "upgrades" ? "text-slate-50" : "text-slate-400"
+              className={`flex-1 rounded-full px-3 py-1.5 items-center justify-center ${activeTabUI === "upgrades" ? "bg-slate-800" : ""
                 }`}
-              >
+            >
+              <Text className={`text-[11px] font-semibold ${activeTabUI === "upgrades" ? "text-slate-50" : "text-slate-400"}`}>
                 Upgrades
               </Text>
             </Pressable>
           </View>
         </View>
 
-        <View key={activeTab} className="flex-1">
-          {activeTab === "tools" && (
+        <View className="flex-1">
+          {activeTabContent === "tools" && (
             <View className="flex-1" style={{ position: "relative" }}>
               <ScrollView
                 ref={toolsScrollRef}
@@ -628,9 +683,7 @@ const PalworldHomeContent: React.FC<PalworldHomeContentProps> = ({ onBackToColle
                           <Text className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
                             Palpagos Islands
                           </Text>
-                          <Text className="text-[11px] text-slate-500 mt-0.5">
-                            World Overview
-                          </Text>
+                          <Text className="text-[11px] text-slate-500 mt-0.5">World Overview</Text>
                         </View>
                       </View>
 
@@ -649,23 +702,24 @@ const PalworldHomeContent: React.FC<PalworldHomeContentProps> = ({ onBackToColle
                           <Text className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
                             Palworld Utilities
                           </Text>
-                          <Text className="text-[11px] text-slate-500 mt-0.5">
-                            Breeding • Calculators
-                          </Text>
+                          <Text className="text-[11px] text-slate-500 mt-0.5">Breeding Calculators</Text>
                         </View>
                       </View>
 
                       {filteredToolCards.map((card) => (
-                        <MapCard key={card.id} {...card} />
+                        <MapCard
+                          key={card.id}
+                          {...card}
+                          poweredBy="Palworld.gg"
+                          badgeLabel="WEB"
+                        />
                       ))}
                     </View>
                   )}
 
                   {filteredMapCards.length === 0 && filteredToolCards.length === 0 ? (
                     <View className="mt-6 items-center">
-                      <Text className="text-sm text-slate-400 text-center px-4">
-                        No field guide items match this search yet.
-                      </Text>
+                      <Text className="text-sm text-slate-400 text-center px-4">No field guide items match this search yet.</Text>
                     </View>
                   ) : null}
                 </View>
@@ -674,7 +728,7 @@ const PalworldHomeContent: React.FC<PalworldHomeContentProps> = ({ onBackToColle
           )}
 
           {/* ITEMS TAB */}
-          {activeTab === "items" && (
+          {activeTabContent === "items" && (
             <View className="flex-1">
               {itemsLoading && itemsAreEmpty ? (
                 <View className="flex-1 items-center justify-center mt-4">
@@ -694,7 +748,7 @@ const PalworldHomeContent: React.FC<PalworldHomeContentProps> = ({ onBackToColle
                 </View>
               ) : (
                 <PalworldItemsGrid
-                  search={search}
+                  search={deferredSearch}
                   materials={materials}
                   spheres={spheres}
                   ammo={ammo}
@@ -714,7 +768,7 @@ const PalworldHomeContent: React.FC<PalworldHomeContentProps> = ({ onBackToColle
           )}
 
           {/* CONSTRUCTION TAB */}
-          {activeTab === "construction" && (
+          {activeTabContent === "construction" && (
             <View className="flex-1">
               {constructionLoading && constructionAreEmpty ? (
                 <View className="flex-1 items-center justify-center mt-4">
@@ -734,7 +788,7 @@ const PalworldHomeContent: React.FC<PalworldHomeContentProps> = ({ onBackToColle
                 </View>
               ) : (
                 <PalworldConstructionGrid
-                  search={search}
+                  search={deferredSearch}
                   storage={storage}
                   foundations={foundations}
                   furniture={furniture}
@@ -751,7 +805,7 @@ const PalworldHomeContent: React.FC<PalworldHomeContentProps> = ({ onBackToColle
           )}
 
           {/* UPGRADES TAB */}
-          {activeTab === "upgrades" && (
+          {activeTabContent === "upgrades" && (
             <View className="flex-1">
               {upgradesLoading && upgradesAreEmpty ? (
                 <View className="flex-1 items-center justify-center mt-4">
@@ -771,7 +825,7 @@ const PalworldHomeContent: React.FC<PalworldHomeContentProps> = ({ onBackToColle
                 </View>
               ) : (
                 <PalworldUpgradesGrid
-                  search={search}
+                  search={deferredSearch}
                   passiveSkills={passiveSkills}
                   technologies={technologies}
                   journals={journals}
@@ -779,13 +833,20 @@ const PalworldHomeContent: React.FC<PalworldHomeContentProps> = ({ onBackToColle
                   missionsSub={missionsSub}
                   base={base}
                   merchantOffers={merchantOffers}
+                  towerBosses={towerBosses}
+                  summons={summons}
+                  raids={raids}
+                  dungeonPals={dungeonPals}
+                  eggs={eggs}
+                  workSuitability={workSuitability}
+                  skillfruits={skillfruits}
                 />
               )}
             </View>
           )}
 
           {/* PALDECK TAB */}
-          {activeTab === "dex" && (
+          {activeTabContent === "dex" && (
             <View className="flex-1">
               {dexLoading && pals.length === 0 ? (
                 <View className="flex-1 items-center justify-center mt-4">
@@ -805,7 +866,7 @@ const PalworldHomeContent: React.FC<PalworldHomeContentProps> = ({ onBackToColle
                         setPals(list);
                       } catch (e) {
                         console.warn(e);
-                        setDexError("Failed to load Paldeck from paldb.cc");
+                        setDexError("Failed to load Paldeck");
                       } finally {
                         setDexLoading(false);
                       }
@@ -816,12 +877,7 @@ const PalworldHomeContent: React.FC<PalworldHomeContentProps> = ({ onBackToColle
                   </Pressable>
                 </View>
               ) : (
-                <PaldeckGrid
-                  pals={pals}
-                  search={search}
-                  dexFilter={dexFilter}
-                  onChangeDexFilter={setDexFilter}
-                />
+                <PaldeckGrid pals={pals} search={deferredSearch} dexFilter={dexFilter} onChangeDexFilter={setDexFilter} />
               )}
             </View>
           )}
