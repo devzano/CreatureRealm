@@ -4,7 +4,7 @@ import { View, Platform, StyleSheet } from "react-native";
 import { Tabs } from "expo-router";
 import { MaterialIcons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import Constants from 'expo-constants';
+import Constants from "expo-constants";
 
 import { BannerAd, BannerAdSize } from "react-native-google-mobile-ads";
 
@@ -22,7 +22,14 @@ function useBannerAdUnitId() {
         ? extra.admobBannerUnitIdAndroid
         : null;
 
-    const picked = Platform.OS === "ios" ? iosUnit : androidUnit;
+    const pickedReal = Platform.OS === "ios" ? iosUnit : androidUnit;
+
+    const pickedTest =
+      Platform.OS === "ios"
+        ? "ca-app-pub-3940256099942544/2934735716"
+        : "ca-app-pub-3940256099942544/6300978111";
+
+    const picked = __DEV__ ? pickedTest : pickedReal;
 
     if (!picked) {
       console.warn("[ads] Missing AdMob banner unit id");
@@ -37,15 +44,18 @@ function BottomBanner() {
   const adUnitId = useBannerAdUnitId();
 
   if (Platform.OS === "web") return null;
+  if (!adUnitId) return null;
 
   return (
     <View style={[styles.bannerWrap, { paddingBottom: insets.bottom }]}>
       <BannerAd
+        key={adUnitId}
         unitId={adUnitId}
         size={BannerAdSize.BANNER}
         requestOptions={{
           requestNonPersonalizedAdsOnly: true,
         }}
+        onAdFailedToLoad={(err) => console.warn("[ads] Banner failed:", err)}
       />
     </View>
   );
