@@ -1,4 +1,3 @@
-// server/routes/nookipediaProxy.js
 import express from "express";
 
 const router = express.Router();
@@ -7,12 +6,13 @@ const NOOKIPEDIA_BASE = "https://api.nookipedia.com";
 const NOOKIPEDIA_ACCEPT_VERSION = String("1.7.0").trim();
 
 function getApiKey() {
-  const key = String(process.env.EXPO_NOOKIPEDIA_API_KEY ?? "").trim();
-  if (!key) throw new Error("Missing EXPO_NOOKIPEDIA_API_KEY on server.");
+  const key = String(process.env.NOOKIPEDIA_API_KEY ?? "").trim();
+  if (!key) throw new Error("Missing NOOKIPEDIA_API_KEY on server.");
   return key;
 }
 
-router.get("/*", async (req, res) => {
+// Express 5-safe catch-all for everything under /nookipedia
+router.get("/:splat(*)", async (req, res) => {
   try {
     const apiKey = getApiKey();
 
@@ -30,11 +30,7 @@ router.get("/*", async (req, res) => {
     });
 
     res.status(upstream.status);
-    res.setHeader(
-      "content-type",
-      upstream.headers.get("content-type") || "application/json"
-    );
-
+    res.setHeader("content-type", upstream.headers.get("content-type") || "application/json");
     res.send(await upstream.text());
   } catch (e) {
     console.warn("[nookipedia-proxy] Error:", e);
