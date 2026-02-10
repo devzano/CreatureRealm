@@ -8,8 +8,8 @@ export type NookipediaErrorPayload = {
 };
 
 function getProxyBase(): string {
-  // EXPO_RENDER_BASE_URL=https://creaturerealm.onrender.com
-  const base = (process.env.EXPO_RENDER_BASE_URL ?? "").trim();
+  // EXPO_PUBLIC_RENDER_BASE_URL=https://creaturerealm.onrender.com
+  const base = (process.env.EXPO_PUBLIC_RENDER_BASE_URL ?? "").trim();
 
   if (!base) {
     throw new Error(

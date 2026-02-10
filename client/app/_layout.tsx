@@ -1,4 +1,4 @@
-// app/_layout.tsx
+//client/app/_layout.tsx/
 import "./global.css";
 
 import React, { useCallback, useEffect, useState } from "react";
@@ -11,12 +11,11 @@ import * as NavigationBar from "expo-navigation-bar";
 import { Asset } from "expo-asset";
 import Constants from "expo-constants";
 
-import mobileAds from "react-native-google-mobile-ads";
-
 import { ThemeProvider } from "@/context/themeContext";
 import AnimatedSplashScreen from "@/components/ui/AnimatedSplashScreen";
 import UpdateAvailableModal from "@/components/UpdateAvailableModal";
 import AppImages from "@/constants/images";
+import { initGoogleADs } from "@/lib/adHelper";
 
 SplashScreen.preventAutoHideAsync().catch(() => { });
 
@@ -60,26 +59,6 @@ function getVersioningInfo() {
     iosStoreUrl,
     androidStoreUrl,
   };
-}
-
-async function initMobileAds() {
-  if (Platform.OS === "web") return;
-
-  try {
-    await mobileAds().setRequestConfiguration({
-      testDeviceIdentifiers: [
-        "9279d05aaca0f38b5740572b17ae0ace", // iPhone 15
-      ],
-      // Optional extras you may want later:
-      // maxAdContentRating: MaxAdContentRating.PG,
-      // tagForChildDirectedTreatment: false,
-      // tagForUnderAgeOfConsent: false,
-    });
-
-    await mobileAds().initialize();
-  } catch (e) {
-    console.warn("[ads] Failed to initialize mobile ads:", e);
-  }
 }
 
 export default function RootLayout() {
@@ -128,7 +107,6 @@ export default function RootLayout() {
         await Promise.all([
           ...imageAssets,
           checkUpdates(),
-          initMobileAds(),
         ]);
       } catch (e) {
         console.warn("[prepare] Error during loading:", e);
@@ -138,6 +116,7 @@ export default function RootLayout() {
     }
 
     prepare();
+    initGoogleADs();
   }, []);
 
   useEffect(() => {

@@ -1,4 +1,4 @@
-// app/(tabs)/index.tsx
+// client/app/(tabs)/index.tsx
 import React, { useState } from "react";
 import { View, Text, Pressable, TouchableOpacity, ScrollView } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
@@ -14,7 +14,7 @@ import GlassBadge from "@/components/ui/helpers/GlassBadge";
 type SeriesId = "pokemon" | "palworld" | "animal_crossing";
 type RequestStatus = "idle" | "success" | "error";
 
-const API_BASE = (process.env.EXPO_RENDER_BASE_URL ?? "").replace(/\/+$/, "");
+const API_BASE = (process.env.EXPO_PUBLIC_RENDER_BASE_URL ?? "").replace(/\/+$/, "");
 
 async function fetchWithTimeout(input: RequestInfo, init: RequestInit, timeoutMs: number) {
   const controller = new AbortController();
