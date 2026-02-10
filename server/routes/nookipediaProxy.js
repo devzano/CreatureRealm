@@ -11,13 +11,21 @@ function getApiKey() {
   return key;
 }
 
-// Express 5-safe catch-all for everything under /nookipedia
-router.get("/:splat(*)", async (req, res) => {
+/**
+ * Catch-all proxy without path patterns (Express 5-safe).
+ * Since this router is mounted at /nookipedia, this will receive:
+ *   req.baseUrl    = "/nookipedia"
+ *   req.originalUrl= "/nookipedia/nh/art?x=y"
+ */
+router.use(async (req, res) => {
   try {
+    // Only proxy GET requests (optional safety)
+    if (req.method !== "GET") {
+      return res.status(405).json({ title: "Method Not Allowed", details: "Only GET is supported." });
+    }
+
     const apiKey = getApiKey();
 
-    // req.baseUrl is "/nookipedia"
-    // req.originalUrl is "/nookipedia/nh/art?x=y"
     const tail = req.originalUrl.slice(req.baseUrl.length); // "/nh/art?x=y"
     const url = `${NOOKIPEDIA_BASE}${tail}`;
 
