@@ -6,7 +6,7 @@ const NOOKIPEDIA_BASE = "https://api.nookipedia.com";
 const NOOKIPEDIA_ACCEPT_VERSION = String("1.7.0").trim();
 
 function getApiKey() {
-  const key = String(process.env.NOOKIPEDIA_API_KEY ?? "").trim();
+  const key = String(process.env.EXPO_NOOKIPEDIA_API_KEY ?? "").trim();
   if (!key) throw new Error("Missing NOOKIPEDIA_API_KEY on server.");
   return key;
 }
