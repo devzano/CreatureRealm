@@ -1,8 +1,4 @@
 // lib/data/animalcrossing/nookipedia.ts
-const NOOKIPEDIA_BASE = "https://api.nookipedia.com";
-
-// If you ever need to bump this, do it here.
-// (Keeping what you had.)
 const NOOKIPEDIA_ACCEPT_VERSION = String("1.7.0").trim();
 
 export type NookipediaErrorPayload = {
@@ -11,21 +7,26 @@ export type NookipediaErrorPayload = {
   [k: string]: any;
 };
 
-function getApiKey(): string {
-  const key = (process.env.EXPO_PUBLIC_NOOKIPEDIA_API_KEY ?? "").trim();
-  if (!key) {
-    throw new Error("Missing Nookipedia API key. Set EXPO_PUBLIC_NOOKIPEDIA_API_KEY in your environment.");
+function getProxyBase(): string {
+  // EXPO_RENDER_BASE_URL=https://creaturerealm.onrender.com
+  const base = (process.env.EXPO_RENDER_BASE_URL ?? "").trim();
+
+  if (!base) {
+    throw new Error(
+      "Missing Render base URL."
+    );
   }
-  return key;
+
+  return base.replace(/\/+$/, "");
 }
 
 export async function nookipediaFetchRaw(path: string) {
-  const apiKey = getApiKey();
+  const proxyBase = getProxyBase();
 
-  return fetch(`${NOOKIPEDIA_BASE}${path}`, {
+  // GET {proxyBase}/nookipedia{path}
+  return fetch(`${proxyBase}/nookipedia${path}`, {
     headers: {
       Accept: "application/json",
-      "X-API-KEY": apiKey,
       "Accept-Version": NOOKIPEDIA_ACCEPT_VERSION,
     },
   });
@@ -45,7 +46,9 @@ export async function nookipediaFetch<T>(path: string): Promise<T> {
     const detail = parsed?.details ? ` ${parsed.details}` : "";
     const title = parsed?.title ? `${parsed.title}.` : "";
 
-    throw new Error(`Nookipedia request failed (${res.status}): ${title}${detail || body || res.statusText}`);
+    throw new Error(
+      `Nookipedia request failed (${res.status}): ${title}${detail || body || res.statusText}`
+    );
   }
 
   return (await res.json()) as T;

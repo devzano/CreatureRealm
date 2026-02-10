@@ -14,7 +14,7 @@ import GlassBadge from "@/components/ui/helpers/GlassBadge";
 type SeriesId = "pokemon" | "palworld" | "animal_crossing";
 type RequestStatus = "idle" | "success" | "error";
 
-const API_BASE = (process.env.EXPO_PUBLIC_API_BASE_URL ?? "").replace(/\/+$/, "");
+const API_BASE = (process.env.EXPO_RENDER_BASE_URL ?? "").replace(/\/+$/, "");
 
 async function fetchWithTimeout(input: RequestInfo, init: RequestInit, timeoutMs: number) {
   const controller = new AbortController();

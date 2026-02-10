@@ -3,6 +3,7 @@ import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import universeRequestRouter from "./routes/creaturerealmUniverseRequest.js";
+import nookipediaProxyRouter from "./routes/nookipediaProxy.js";
 
 const app = express();
 const PORT = process.env.PORT || 8000;
@@ -13,6 +14,8 @@ app.use(express.json());
 app.get("/", (req, res) => {
   res.send("You might not be in the right place");
 });
+
+app.use("/nookipedia", nookipediaProxyRouter);
 
 app.use("/feedback", universeRequestRouter);
 

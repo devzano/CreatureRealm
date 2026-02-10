@@ -167,6 +167,8 @@ const config: ExpoConfig = {
       "https://apps.apple.com/app/creaturerealm/id6755702513",
     androidStoreUrl:
       "https://play.google.com/store/apps/details?id=com.devzano.CreatureRealm",
+
+    renderBaseUrl: "https://creaturerealm.onrender.com",
   },
 
   updates: {
