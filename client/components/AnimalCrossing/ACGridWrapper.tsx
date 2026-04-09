@@ -1,6 +1,6 @@
 // components/AnimalCrossing/ACGridWrapper.tsx
 import React from "react";
-import { View, Text, FlatList, ActivityIndicator, RefreshControl } from "react-native";
+import { View, Text, FlatList, ActivityIndicator, RefreshControl, Pressable } from "react-native";
 
 type FooterMode = "more" | "end";
 
@@ -97,11 +97,14 @@ export default function ACGridWrapper<T>(props: ACGridWrapperProps<T>) {
       <View className="flex-1 items-center justify-center mt-4 px-4">
         <Text className="text-sm text-rose-300 text-center">{errorText}</Text>
 
-        <View className="mt-3 px-3 py-2 rounded-2xl bg-slate-900 border border-slate-700">
-          <Text onPress={onRetry} className="text-[12px] text-slate-100 font-semibold">
+        <Pressable
+          onPress={onRetry}
+          className="mt-3 px-3 py-2 rounded-2xl bg-slate-900 border border-slate-700"
+        >
+          <Text className="text-[12px] text-slate-100 font-semibold">
             Retry
           </Text>
-        </View>
+        </Pressable>
       </View>
     );
   }

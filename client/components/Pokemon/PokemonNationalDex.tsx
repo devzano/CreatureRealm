@@ -1,5 +1,5 @@
 // components/Pokemon/PokemonNationalDex.tsx
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
 import { View, Text, FlatList, ActivityIndicator, Pressable } from "react-native";
 import { Image as ExpoImage } from "expo-image";
 import { useRouter } from "expo-router";
@@ -19,16 +19,26 @@ type PokemonNationalDexProps = {
   viewMode: DexViewMode; // currently only "national"
 };
 
-const PAGE_SIZE = 50;
+const PAGE_SIZE = 2000;
 
 let NATIONAL_DEX_CACHE: ListItem[] | null = null;
+
+function transformResponse(res: PokemonListResponse): ListItem[] {
+  return res.results
+    .map((p: PokemonListResult) => {
+      const id = extractPokemonIdFromUrl(p.url);
+      if (id == null) return null;
+      return { id, name: p.name };
+    })
+    .filter(Boolean) as ListItem[];
+}
 
 type DexTileProps = {
   item: ListItem;
   onPress: (name: string) => void;
 };
 
-const DexTile: React.FC<DexTileProps> = ({ item, onPress }) => {
+const DexTile: React.FC<DexTileProps> = React.memo(({ item, onPress }) => {
   const spriteUrl =
     "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/" + item.id + ".png";
 
@@ -49,7 +59,9 @@ const DexTile: React.FC<DexTileProps> = ({ item, onPress }) => {
       </View>
     </Pressable>
   );
-};
+});
+
+DexTile.displayName = "DexTile";
 
 const PokemonNationalDex: React.FC<PokemonNationalDexProps> = ({ search, from, to, viewMode }) => {
   void viewMode;
@@ -59,16 +71,8 @@ const PokemonNationalDex: React.FC<PokemonNationalDexProps> = ({ search, from, t
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const transformResponse = (res: PokemonListResponse): ListItem[] =>
-    res.results
-      .map((p: PokemonListResult) => {
-        const id = extractPokemonIdFromUrl(p.url);
-        if (id == null) return null;
-        return { id, name: p.name };
-      })
-      .filter(Boolean) as ListItem[];
-
-  const normalizedQuery = search.trim().toLowerCase();
+  const deferredSearch = useDeferredValue(search);
+  const normalizedQuery = deferredSearch.trim().toLowerCase();
 
   useEffect(() => {
     let cancelled = false;
@@ -84,21 +88,8 @@ const PokemonNationalDex: React.FC<PokemonNationalDexProps> = ({ search, from, t
         }
 
         setLoading(true);
-        let offset = 0;
-        let aggregated: ListItem[] = [];
-        let hasMore = true;
-
-        while (hasMore && !cancelled) {
-          const res = await getPokemonList(PAGE_SIZE, offset);
-          const pageItems = transformResponse(res);
-          aggregated = aggregated.concat(pageItems);
-
-          if (res.next == null) {
-            hasMore = false;
-          } else {
-            offset += PAGE_SIZE;
-          }
-        }
+        const res = await getPokemonList(PAGE_SIZE, 0);
+        const aggregated = transformResponse(res);
 
         if (cancelled) return;
 
@@ -149,14 +140,17 @@ const PokemonNationalDex: React.FC<PokemonNationalDexProps> = ({ search, from, t
     });
   }, [rangedItems, normalizedQuery]);
 
-  const handlePress = (name: string) => {
+  const handlePress = useCallback((name: string) => {
     router.push({
       pathname: "/pokemon/[id]",
       params: { id: name },
     } as any);
-  };
+  }, [router]);
 
-  const renderItem = ({ item }: { item: ListItem }) => <DexTile item={item} onPress={handlePress} />;
+  const renderItem = useCallback(
+    ({ item }: { item: ListItem }) => <DexTile item={item} onPress={handlePress} />,
+    [handlePress]
+  );
 
   if (loading && allItems.length === 0) {
     return (
@@ -190,6 +184,11 @@ const PokemonNationalDex: React.FC<PokemonNationalDexProps> = ({ search, from, t
       renderItem={renderItem}
       numColumns={3}
       contentContainerStyle={{ paddingHorizontal: 4, paddingBottom: 24 }}
+      initialNumToRender={24}
+      maxToRenderPerBatch={24}
+      windowSize={12}
+      updateCellsBatchingPeriod={32}
+      removeClippedSubviews
     />
   );
 };

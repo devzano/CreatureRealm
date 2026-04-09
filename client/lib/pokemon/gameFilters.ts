@@ -12,6 +12,8 @@ export type CreatureRealmGame = {
   versionGroups: string[];
   dlcVersionGroups?: string[];
   versionGroupId?: number;
+  manualDexSpeciesIds?: number[];
+  dexSourceNote?: string;
   coverImageUrl?: string;
   releaseYear?: number;
   platforms: string[];
@@ -701,10 +703,27 @@ export const games: CreatureRealmGame[] = [
     versionGroups: ["legends-za"],
     dlcVersionGroups: ["mega-dimension"],
     versionGroupId: 30,
+    dexSourceNote: "Pokédex membership for this game is not available from PokéAPI yet. Add a manual species roster in gameFilters.ts.",
     coverImageUrl:
       "https://static.wikia.nocookie.net/nintendo/images/1/1f/Pokemon_Legends_ZA_%28Switch%29_%28NA%29.png/revision/latest?cb=20250529005248&path-prefix=en",
     releaseYear: 2025,
-    platforms: ["Nintendo Switch"], // can tweak later if Nintendo announces a successor
+    platforms: ["Nintendo Switch"],
+  },
+  // 41 - Pokopia
+  {
+    id: "pokopia",
+    title: "Pokopia",
+    subtitle: "Pokopia Dex • Gen 1–9 era",
+    generationId: 9,
+    accentColor: ["#49D4FF", "#95E91F", "#F6A63A", "#C68BFF"],
+    backgroundColor: "#0b1120",
+    speciesCount: 303,
+    shortCode: "Pokopia",
+    versionGroups: ["pokopia"],
+    dexSourceNote: "Pokédex membership for Pokopia comes from PokopiaDex and is not available from PokéAPI.",
+    coverImageUrl: "https://static.wikia.nocookie.net/nintendo/images/7/73/Pokopia_EN_boxart.png/revision/latest?cb=20251117024049&path-prefix=en",
+    releaseYear: 2026,
+    platforms: ["Nintendo Switch 2"],
   },
 ];
 
@@ -716,35 +735,35 @@ export function getGameById(
 }
 
 // spin-offs
-  // - Colosseum
-  // {
-  //   id: "colosseum",
-  //   title: "Colosseum",
-  //   subtitle: "Orre Region • GameCube spin-off",
-  //   generationId: 3,
-  //   accentColor: ["#f97316"],
-  //   backgroundColor: "#111827",
-  //   speciesCount: 386,
-  //   shortCode: "Colosseum",
-  //   versionGroups: ["colosseum"],
-  //   versionGroupId: 12,
-  //   coverImageUrl:
-  //     "https://static.wikia.nocookie.net/nintendo/images/5/59/Pokemon_Red_%28NA%29.png/revision/latest/scale-to-width-down/1000?cb=20240413173729&path-prefix=en",
-  //   releaseYear: 1998,
-  // },
+// - Colosseum
+// {
+//   id: "colosseum",
+//   title: "Colosseum",
+//   subtitle: "Orre Region • GameCube spin-off",
+//   generationId: 3,
+//   accentColor: ["#f97316"],
+//   backgroundColor: "#111827",
+//   speciesCount: 386,
+//   shortCode: "Colosseum",
+//   versionGroups: ["colosseum"],
+//   versionGroupId: 12,
+//   coverImageUrl:
+//     "https://static.wikia.nocookie.net/nintendo/images/5/59/Pokemon_Red_%28NA%29.png/revision/latest/scale-to-width-down/1000?cb=20240413173729&path-prefix=en",
+//   releaseYear: 1998,
+// },
 
-  // - XD: Gale of Darkness
-  // {
-  //   id: "xd",
-  //   title: "XD: Gale of Darkness",
-  //   subtitle: "Orre Region • GameCube spin-off",
-  //   generationId: 3,
-  //   accentColor: ["#a855f7"],
-  //   backgroundColor: "#111827",
-  //   speciesCount: 386,
-  //   shortCode: "XD",
-  //   versionGroups: ["xd"],
-  //   versionGroupId: 13,coverImageUrl:
-  //     "https://static.wikia.nocookie.net/nintendo/images/5/59/Pokemon_Red_%28NA%29.png/revision/latest/scale-to-width-down/1000?cb=20240413173729&path-prefix=en",
-  //   releaseYear: 1998,
-  // },
+// - XD: Gale of Darkness
+// {
+//   id: "xd",
+//   title: "XD: Gale of Darkness",
+//   subtitle: "Orre Region • GameCube spin-off",
+//   generationId: 3,
+//   accentColor: ["#a855f7"],
+//   backgroundColor: "#111827",
+//   speciesCount: 386,
+//   shortCode: "XD",
+//   versionGroups: ["xd"],
+//   versionGroupId: 13,coverImageUrl:
+//     "https://static.wikia.nocookie.net/nintendo/images/5/59/Pokemon_Red_%28NA%29.png/revision/latest/scale-to-width-down/1000?cb=20240413173729&path-prefix=en",
+//   releaseYear: 1998,
+// },

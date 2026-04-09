@@ -2,7 +2,14 @@
 import "./global.css";
 
 import React, { useCallback, useEffect, useState } from "react";
-import { Linking, Platform, View } from "react-native";
+import {
+  AppState,
+  type AppStateStatus,
+  InteractionManager,
+  Linking,
+  Platform,
+  View,
+} from "react-native";
 import { Stack } from "expo-router";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import * as SplashScreen from "expo-splash-screen";
@@ -16,10 +23,17 @@ import AnimatedSplashScreen from "@/components/ui/AnimatedSplashScreen";
 import UpdateAvailableModal from "@/components/UpdateAvailableModal";
 import AppImages from "@/constants/images";
 import { initGoogleADs } from "@/lib/adHelper";
+import { warmAnimalCrossingServer } from "@/lib/animalCrossing/animalCrossingServerWarmup";
 
 SplashScreen.preventAutoHideAsync().catch(() => { });
 
 type UpdateMode = "store" | "ota" | null;
+
+const CRITICAL_BOOT_IMAGES = [AppImages.splash];
+
+const NON_BLOCKING_IMAGES = Object.values(AppImages).filter(
+  (image) => !CRITICAL_BOOT_IMAGES.includes(image)
+);
 
 function getVersioningInfo() {
   const extra = (Constants.expoConfig as any)?.extra ?? {};
@@ -100,14 +114,20 @@ export default function RootLayout() {
   useEffect(() => {
     async function prepare() {
       try {
-        const imageAssets = Object.values(AppImages).map((image) => {
+        const criticalImageAssets = CRITICAL_BOOT_IMAGES.map((image) => {
           return Asset.fromModule(image).downloadAsync();
         });
 
         await Promise.all([
-          ...imageAssets,
+          ...criticalImageAssets,
           checkUpdates(),
         ]);
+
+        InteractionManager.runAfterInteractions(() => {
+          NON_BLOCKING_IMAGES.forEach((image) => {
+            Asset.fromModule(image).downloadAsync().catch(() => { });
+          });
+        });
       } catch (e) {
         console.warn("[prepare] Error during loading:", e);
       } finally {
@@ -117,6 +137,20 @@ export default function RootLayout() {
 
     prepare();
     initGoogleADs();
+    void warmAnimalCrossingServer();
+
+    const appStateSubscription = AppState.addEventListener(
+      "change",
+      (nextAppState: AppStateStatus) => {
+        if (nextAppState === "active") {
+          void warmAnimalCrossingServer();
+        }
+      }
+    );
+
+    return () => {
+      appStateSubscription.remove();
+    };
   }, []);
 
   useEffect(() => {

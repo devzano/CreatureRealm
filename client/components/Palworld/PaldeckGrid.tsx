@@ -51,7 +51,9 @@ const PaldeckGrid: React.FC<PaldeckGridProps> = ({
   onChangeDexFilter,
 }) => {
   const router = useRouter();
-  const entries = usePalworldCollectionStore((s) => s.entries);
+  const filteredEntries = usePalworldCollectionStore((s) =>
+    dexFilter === "all" ? null : s.entries
+  );
 
   const normalizedSearch = search.trim().toLowerCase();
 
@@ -70,7 +72,7 @@ const PaldeckGrid: React.FC<PaldeckGridProps> = ({
     if (dexFilter !== "all") {
       base = base.filter((p) => {
         const dexId = palDexId(p);
-        const entry = (entries[dexId] as any) ?? EMPTY_ENTRY;
+        const entry = (filteredEntries?.[dexId] as any) ?? EMPTY_ENTRY;
 
         if (dexFilter === "caught") return !!entry.caught;
         if (dexFilter === "lucky") return !!entry.lucky;
@@ -80,7 +82,7 @@ const PaldeckGrid: React.FC<PaldeckGridProps> = ({
     }
 
     return base;
-  }, [pals, normalizedSearch, dexFilter, entries]);
+  }, [pals, normalizedSearch, dexFilter, filteredEntries]);
 
   const onOpenDetails = useCallback(
     (palId: string) => {

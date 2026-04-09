@@ -42,29 +42,55 @@ export async function fetchGameDexIds(gameId: GameId): Promise<number[]> {
   const promise = (async () => {
     const game = getGameByIdStrict(gameId);
 
+    if (Array.isArray(game.manualDexSpeciesIds) && game.manualDexSpeciesIds.length > 0) {
+      const seen = new Set<number>();
+      const manualIds = game.manualDexSpeciesIds.filter((id) => {
+        if (!Number.isInteger(id) || id <= 0 || seen.has(id)) return false;
+        seen.add(id);
+        return true;
+      });
+
+      gameDexCache[gameId] = manualIds;
+      return manualIds;
+    }
+
     // Collect pokedex names attached to this game's versionGroups,
     // but avoid "national", "updated-national", conquest, etc.
     const pokedexNames: string[] = [];
+    let validVersionGroupCount = 0;
 
     for (const vgName of game.versionGroups) {
-      const vg = await getVersionGroup(vgName);
+      try {
+        const vg = await getVersionGroup(vgName);
+        validVersionGroupCount += 1;
 
-      vg.pokedexes.forEach((pd) => {
-        if (!pd.name) return;
+        vg.pokedexes.forEach((pd) => {
+          if (!pd.name) return;
 
-        const name = pd.name;
+          const name = pd.name;
 
-        // Filter out global/side dexes that don't represent a game's main dex order
-        if (name === "national") return;
-        if (name.startsWith("updated-national")) return;
-        if (name.includes("conquest")) return;
-        if (name.includes("letsgo-gallery")) return;
+          // Filter out global/side dexes that don't represent a game's main dex order
+          if (name === "national") return;
+          if (name.startsWith("updated-national")) return;
+          if (name.includes("conquest")) return;
+          if (name.includes("letsgo-gallery")) return;
 
-        // Preserve first-seen order, avoid duplicates
-        if (!pokedexNames.includes(name)) {
-          pokedexNames.push(name);
-        }
-      });
+          // Preserve first-seen order, avoid duplicates
+          if (!pokedexNames.includes(name)) {
+            pokedexNames.push(name);
+          }
+        });
+      } catch (error) {
+        // Custom or future games may not exist in PokéAPI yet.
+        console.warn(`[gamedex] Skipping unsupported version group "${vgName}" for ${gameId}`, error);
+      }
+    }
+
+    if (validVersionGroupCount === 0) {
+      throw new Error(
+        game.dexSourceNote ??
+          `No supported dex source configured for "${game.title}". Add manualDexSpeciesIds in gameFilters.ts.`
+      );
     }
 
     // If we somehow have no pokedex names, fall back to old behavior (just in case)

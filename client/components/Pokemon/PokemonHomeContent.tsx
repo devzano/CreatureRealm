@@ -19,12 +19,27 @@ type PokemonHomeContentProps = {
 const NATIONAL_VIEW_MODE: DexViewMode = "national";
 
 type ActiveTab = "dex" | "maps" | "games";
+type GameSectionKey = `gen-${number}` | "pokopia";
+
+function getGameSectionKey(game: (typeof games)[number]): GameSectionKey {
+  return game.id === "pokopia" ? "pokopia" : `gen-${game.generationId}`;
+}
+
+function getGameSectionLabel(sectionKey: GameSectionKey): string {
+  if (sectionKey === "pokopia") return "Pokopia";
+  return `Generation ${sectionKey.replace("gen-", "")}`;
+}
+
+function getGameSectionBadge(sectionKey: GameSectionKey): string {
+  if (sectionKey === "pokopia") return "P";
+  return sectionKey.replace("gen-", "");
+}
 
 const PokemonHomeContent: React.FC<PokemonHomeContentProps> = ({ onBackToCollections }) => {
   const router = useRouter();
 
   const gamesScrollRef = useRef<ScrollView | null>(null);
-  const generationOffsetsRef = useRef<Record<number, number>>({});
+  const sectionOffsetsRef = useRef<Record<string, number>>({});
 
   const [activeTab, setActiveTab] = useState<ActiveTab>("dex");
   const [search, setSearch] = useState("");
@@ -83,21 +98,25 @@ const PokemonHomeContent: React.FC<PokemonHomeContentProps> = ({ onBackToCollect
     const map: Record<string, any[]> = {};
 
     filteredGames.forEach((game) => {
-      const genKey = String((game as any).generationId ?? "0");
+      const genKey = getGameSectionKey(game as (typeof games)[number]);
       if (!map[genKey]) map[genKey] = [];
       map[genKey].push(game);
     });
 
     return Object.entries(map)
-      .sort((a, b) => Number(a[0]) - Number(b[0]))
-      .map(([gen, sectionGames]) => ({
-        generation: Number(gen),
+      .sort((a, b) => {
+        if (a[0] === "pokopia") return -1;
+        if (b[0] === "pokopia") return 1;
+        return Number(a[0].replace("gen-", "")) - Number(b[0].replace("gen-", ""));
+      })
+      .map(([sectionKey, sectionGames]) => ({
+        sectionKey: sectionKey as GameSectionKey,
         games: sectionGames,
       }));
   }, [filteredGames]);
 
-  const scrollToGeneration = (generation: number) => {
-    const y = generationOffsetsRef.current[generation];
+  const scrollToSection = (sectionKey: GameSectionKey) => {
+    const y = sectionOffsetsRef.current[sectionKey];
     if (y != null && gamesScrollRef.current) {
       gamesScrollRef.current.scrollTo({ y: Math.max(y - 40, 0), animated: true });
     }
@@ -205,16 +224,16 @@ const PokemonHomeContent: React.FC<PokemonHomeContentProps> = ({ onBackToCollect
               ) : (
                 generationSections.map((section) => (
                   <View
-                    key={section.generation}
+                    key={section.sectionKey}
                     onLayout={(e) => {
-                      generationOffsetsRef.current[section.generation] = e.nativeEvent.layout.y;
+                      sectionOffsetsRef.current[section.sectionKey] = e.nativeEvent.layout.y;
                     }}
                     className="mb-2"
                   >
                     <View className="flex-row items-center mb-1 px-1 mt-2">
                       <View className="w-1.5 h-5 rounded-full mr-2 bg-slate-700" />
                       <Text className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-                        Generation {section.generation}
+                        {getGameSectionLabel(section.sectionKey)}
                       </Text>
                     </View>
 
@@ -273,7 +292,7 @@ const PokemonHomeContent: React.FC<PokemonHomeContentProps> = ({ onBackToCollect
 
                             <View className="flex-1">
                               <Text className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-                                Gen {game.generationId}
+                                {game.id === "pokopia" ? "Pokopia" : `Gen ${game.generationId}`}
                               </Text>
                               <Text className="text-[15px] font-semibold text-slate-50 mt-0.5">{game.title}</Text>
                               {game.subtitle ? <Text className="text-[12px] text-slate-400 mt-0.5">{game.subtitle}</Text> : null}
@@ -294,7 +313,15 @@ const PokemonHomeContent: React.FC<PokemonHomeContentProps> = ({ onBackToCollect
                               <View className="flex-row items-center">
                                 <View className="w-1.5 h-6 rounded-full mr-2" style={{ backgroundColor: accent }} />
                                 <Text className="text-[11px] text-slate-400">
-                                  Generation <Text className="text-slate-200 font-semibold">{game.generationId}</Text>
+                                  {game.id === "pokopia" ? (
+                                    <>
+                                      <Text className="text-slate-200 font-semibold">Pokopia</Text>
+                                    </>
+                                  ) : (
+                                    <>
+                                      Generation <Text className="text-slate-200 font-semibold">{game.generationId}</Text>
+                                    </>
+                                  )}
                                   {speciesCount ? (
                                     <>
                                       {" • "}
@@ -340,11 +367,11 @@ const PokemonHomeContent: React.FC<PokemonHomeContentProps> = ({ onBackToCollect
               >
                 {generationSections.map((section) => (
                   <Pressable
-                    key={section.generation}
-                    onPress={() => scrollToGeneration(section.generation)}
+                    key={section.sectionKey}
+                    onPress={() => scrollToSection(section.sectionKey)}
                     style={{ paddingVertical: 4, paddingHorizontal: 6, alignItems: "center" }}
                   >
-                    <Text className="text-[13px] text-slate-400">{section.generation}</Text>
+                    <Text className="text-[13px] text-slate-400">{getGameSectionBadge(section.sectionKey)}</Text>
                   </Pressable>
                 ))}
               </View>

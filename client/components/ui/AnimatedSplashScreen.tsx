@@ -2,7 +2,6 @@ import { useEffect, useRef } from "react";
 import { Animated, StyleSheet, View, Easing, ImageBackground } from "react-native";
 import * as SplashScreen from "expo-splash-screen";
 import AppImages from "@/constants/images";
-import { useTheme } from "@/context/themeContext";
 
 interface AnimatedSplashScreenProps {
   onAnimationFinish: () => void;
@@ -11,8 +10,6 @@ interface AnimatedSplashScreenProps {
 export default function AnimatedSplashScreen({
   onAnimationFinish,
 }: AnimatedSplashScreenProps) {
-  const { isDarkMode } = useTheme();
-
   const logoOpacity = useRef(new Animated.Value(1)).current;
   const containerOpacity = useRef(new Animated.Value(1)).current;
   const hasAnimatedRef = useRef(false);
