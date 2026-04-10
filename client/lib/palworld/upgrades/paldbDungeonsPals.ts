@@ -77,27 +77,70 @@ export type DungeonWithPals = {
   treasure: DungeonTreasureRow[];
 };
 
-export async function fetchDungeonIndex(): Promise<DungeonIndexItem[]> {
-  const res = await fetch(DUNGEONS_INDEX_URL, {
-    method: "GET",
-    headers: { Accept: "text/html" },
-  });
+const INDEX_TTL = 1000 * 60 * 10;
+const DETAIL_TTL = 1000 * 60 * 10;
+let dungeonIndexCache: DungeonIndexItem[] | null = null;
+let dungeonIndexCacheAt = 0;
+let dungeonIndexPending: Promise<DungeonIndexItem[]> | null = null;
+const dungeonDetailCache = new Map<string, { at: number; data: DungeonDetail }>();
+const dungeonDetailPending = new Map<string, Promise<DungeonDetail>>();
 
-  if (!res.ok) throw new Error(`fetchDungeonIndex failed: ${res.status} ${res.statusText}`);
-  const html = await res.text();
-  return parseDungeonIndexFromHtml(html);
+export async function fetchDungeonIndex(opts?: { force?: boolean }): Promise<DungeonIndexItem[]> {
+  const force = !!opts?.force;
+  const now = Date.now();
+  if (!force && dungeonIndexCache && now - dungeonIndexCacheAt < INDEX_TTL) return dungeonIndexCache;
+  if (!force && dungeonIndexPending) return dungeonIndexPending;
+
+  const request = (async () => {
+    const res = await fetch(DUNGEONS_INDEX_URL, {
+      method: "GET",
+      headers: { Accept: "text/html" },
+    });
+
+    if (!res.ok) throw new Error(`fetchDungeonIndex failed: ${res.status} ${res.statusText}`);
+    const html = await res.text();
+    const parsed = parseDungeonIndexFromHtml(html);
+    dungeonIndexCache = parsed;
+    dungeonIndexCacheAt = Date.now();
+    return parsed;
+  })();
+
+  dungeonIndexPending = request;
+  try {
+    return await request;
+  } finally {
+    if (dungeonIndexPending === request) dungeonIndexPending = null;
+  }
 }
 
 export async function fetchDungeonDetail(slug: string): Promise<DungeonDetail> {
   const s = (slug ?? "").trim();
   if (!s) throw new Error(`fetchDungeonDetail: missing slug`);
 
-  const url = absUrl(`/en/${s}`);
-  const res = await fetch(url, { method: "GET", headers: { Accept: "text/html" } });
+  const now = Date.now();
+  const cached = dungeonDetailCache.get(s);
+  if (cached && now - cached.at < DETAIL_TTL) return cached.data;
 
-  if (!res.ok) throw new Error(`fetchDungeonDetail(${slug}) failed: ${res.status} ${res.statusText}`);
-  const html = await res.text();
-  return parseDungeonDetailFromHtml(s, html);
+  const pending = dungeonDetailPending.get(s);
+  if (pending) return pending;
+
+  const request = (async () => {
+    const url = absUrl(`/en/${s}`);
+    const res = await fetch(url, { method: "GET", headers: { Accept: "text/html" } });
+
+    if (!res.ok) throw new Error(`fetchDungeonDetail(${slug}) failed: ${res.status} ${res.statusText}`);
+    const html = await res.text();
+    const parsed = parseDungeonDetailFromHtml(s, html);
+    dungeonDetailCache.set(s, { at: Date.now(), data: parsed });
+    return parsed;
+  })();
+
+  dungeonDetailPending.set(s, request);
+  try {
+    return await request;
+  } finally {
+    if (dungeonDetailPending.get(s) === request) dungeonDetailPending.delete(s);
+  }
 }
 
 export async function fetchAllDungeonDetails(opts?: {

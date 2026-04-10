@@ -38,6 +38,7 @@ type PalworldConstructionGridProps = {
   otherConstruction: OtherIndexItem[];
 
   search: string;
+  isLoading?: boolean;
 };
 
 type CategoryKey =
@@ -119,6 +120,7 @@ const PalworldConstructionGrid: React.FC<PalworldConstructionGridProps> = ({
   palConstruction,
   otherConstruction,
   search,
+  isLoading = false,
 }) => {
   const normalizedSearch = (search ?? "").trim().toLowerCase();
 
@@ -460,6 +462,8 @@ const PalworldConstructionGrid: React.FC<PalworldConstructionGridProps> = ({
       totalShown={totalShown}
       totalAll={totalAll}
       categories={categories}
+      isLoading={isLoading}
+      loadingLabel="Loading construction categories…"
       reorderEnabled={reorderEnabled}
       defaultOrder={DEFAULT_CATEGORY_ORDER}
       order={effectiveOrder}

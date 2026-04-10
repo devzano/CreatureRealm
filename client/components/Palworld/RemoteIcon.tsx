@@ -99,7 +99,7 @@ const RemoteIcon: React.FC<RemoteIconProps> = ({
       style={mergedStyle}
       contentFit={contentFit}
       transition={120}
-      cachePolicy="disk"
+      cachePolicy="memory-disk"
       recyclingKey={activeUri}
       onError={handleError}
     />

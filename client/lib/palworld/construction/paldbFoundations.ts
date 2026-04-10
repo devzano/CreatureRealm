@@ -41,6 +41,14 @@ export type FoundationsDetail = FoundationsIndexItem & {
   treant: TreantNode | null;
 };
 
+const INDEX_TTL = 1000 * 60 * 10;
+const DETAIL_TTL = 1000 * 60 * 10;
+let foundationsListCache: FoundationsIndexItem[] | null = null;
+let foundationsListCacheAt = 0;
+let foundationsListPending: Promise<FoundationsIndexItem[]> | null = null;
+const foundationsDetailCache = new Map<string, { at: number; data: FoundationsDetail }>();
+const foundationsDetailPending = new Map<string, Promise<FoundationsDetail>>();
+
 const BASE_EN = "https://paldb.cc/en";
 
 function normalizeSlug(slugOrHref: string) {
@@ -331,59 +339,94 @@ function parseCardListPage(html: string): FoundationsIndexItem[] {
 // Public API
 // -----------------------------
 
-export async function fetchFoundationsList(): Promise<FoundationsIndexItem[]> {
-  const res = await fetch(foundationsUrl(), {
-    method: "GET",
-    headers: {
-      "accept-language": "en-US,en;q=0.9",
-    },
-  });
+export async function fetchFoundationsList(opts?: { force?: boolean }): Promise<FoundationsIndexItem[]> {
+  const force = !!opts?.force;
+  const now = Date.now();
+  if (!force && foundationsListCache && now - foundationsListCacheAt < INDEX_TTL) return foundationsListCache;
+  if (!force && foundationsListPending) return foundationsListPending;
 
-  if (!res.ok) throw new Error(`PalDB Foundations list failed: ${res.status}`);
-  const html = await res.text();
-  return parseCardListPage(html);
+  const request = (async () => {
+    const res = await fetch(foundationsUrl(), {
+      method: "GET",
+      headers: {
+        "accept-language": "en-US,en;q=0.9",
+      },
+    });
+
+    if (!res.ok) throw new Error(`PalDB Foundations list failed: ${res.status}`);
+    const html = await res.text();
+    const parsed = parseCardListPage(html);
+    foundationsListCache = parsed;
+    foundationsListCacheAt = Date.now();
+    return parsed;
+  })();
+
+  foundationsListPending = request;
+  try {
+    return await request;
+  } finally {
+    if (foundationsListPending === request) foundationsListPending = null;
+  }
 }
 
 export async function fetchFoundationsDetail(slug: string): Promise<FoundationsDetail> {
   const s = cleanKey(slug);
   if (!s) throw new Error("fetchFoundationsDetail: missing slug");
 
-  // 1) List page (quick recipe + tech + desc + icon)
-  const list = await fetchFoundationsList();
-  const fromList = list.find((x) => x.slug === s) ?? null;
+  const now = Date.now();
+  const cached = foundationsDetailCache.get(s);
+  if (cached && now - cached.at < DETAIL_TTL) return cached.data;
 
-  // 2) Detail page (treant dependency tree)
-  const url = normalizeDetailHref(s) ?? foundationsDetailUrl(s);
+  const pending = foundationsDetailPending.get(s);
+  if (pending) return pending;
 
-  const res = await fetch(url, {
-    method: "GET",
-    headers: { "accept-language": "en-US,en;q=0.9" },
-  });
+  const request = (async () => {
+    const list = await fetchFoundationsList();
+    const fromList = list.find((x) => x.slug === s) ?? null;
 
-  if (!res.ok) {
-    if (fromList) return { ...fromList, treant: null };
-    throw new Error(`PalDB Foundations detail failed: ${res.status}`);
+    const url = normalizeDetailHref(s) ?? foundationsDetailUrl(s);
+
+    const res = await fetch(url, {
+      method: "GET",
+      headers: { "accept-language": "en-US,en;q=0.9" },
+    });
+
+    let detail: FoundationsDetail;
+    if (!res.ok) {
+      if (fromList) {
+        detail = { ...fromList, treant: null };
+      } else {
+        throw new Error(`PalDB Foundations detail failed: ${res.status}`);
+      }
+    } else {
+      const html = await res.text();
+      const treant = parseTreantTreeFromPage(html);
+
+      detail = fromList
+        ? {
+            ...fromList,
+            treant,
+          }
+        : {
+            slug: s,
+            name: cleanKey(s.replace(/_/g, " ")),
+            iconUrl: null,
+            categoryText: "Foundations",
+            technologyLevel: null,
+            description: null,
+            recipe: [],
+            treant,
+          };
+    }
+
+    foundationsDetailCache.set(s, { at: Date.now(), data: detail });
+    return detail;
+  })();
+
+  foundationsDetailPending.set(s, request);
+  try {
+    return await request;
+  } finally {
+    if (foundationsDetailPending.get(s) === request) foundationsDetailPending.delete(s);
   }
-
-  const html = await res.text();
-  const treant = parseTreantTreeFromPage(html);
-
-  if (fromList) {
-    return {
-      ...fromList,
-      treant,
-    };
-  }
-
-  // minimal fallback if it wasn’t found in list for some reason
-  return {
-    slug: s,
-    name: cleanKey(s.replace(/_/g, " ")),
-    iconUrl: null,
-    categoryText: "Foundations",
-    technologyLevel: null,
-    description: null,
-    recipe: [],
-    treant,
-  };
 }

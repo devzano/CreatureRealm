@@ -45,6 +45,14 @@ export type StorageDetail = StorageIndexItem & {
   treant: TreantNode | null;
 };
 
+const INDEX_TTL = 1000 * 60 * 10;
+const DETAIL_TTL = 1000 * 60 * 10;
+let storageListCache: StorageIndexItem[] | null = null;
+let storageListCacheAt = 0;
+let storageListPending: Promise<StorageIndexItem[]> | null = null;
+const storageDetailCache = new Map<string, { at: number; data: StorageDetail }>();
+const storageDetailPending = new Map<string, Promise<StorageDetail>>();
+
 function normalizeSlug(slugOrHref: string) {
   const raw = cleanKey(String(slugOrHref ?? ""));
   if (!raw) return null;
@@ -357,63 +365,99 @@ function parseCardListPage(html: string): StorageIndexItem[] {
 // Public API
 // -----------------------------
 
-export async function fetchStorageList(): Promise<StorageIndexItem[]> {
-  const res = await fetch(storageUrl(), {
-    method: "GET",
-    headers: {
-      "accept-language": "en-US,en;q=0.9",
-    },
-  });
+export async function fetchStorageList(opts?: { force?: boolean }): Promise<StorageIndexItem[]> {
+  const force = !!opts?.force;
+  const now = Date.now();
+  if (!force && storageListCache && now - storageListCacheAt < INDEX_TTL) return storageListCache;
+  if (!force && storageListPending) return storageListPending;
 
-  if (!res.ok) throw new Error(`PalDB Storage list failed: ${res.status}`);
-  const html = await res.text();
-  return parseCardListPage(html);
+  const request = (async () => {
+    const res = await fetch(storageUrl(), {
+      method: "GET",
+      headers: {
+        "accept-language": "en-US,en;q=0.9",
+      },
+    });
+
+    if (!res.ok) throw new Error(`PalDB Storage list failed: ${res.status}`);
+    const html = await res.text();
+    const parsed = parseCardListPage(html);
+    storageListCache = parsed;
+    storageListCacheAt = Date.now();
+    return parsed;
+  })();
+
+  storageListPending = request;
+  try {
+    return await request;
+  } finally {
+    if (storageListPending === request) storageListPending = null;
+  }
 }
 
 export async function fetchStorageDetail(slug: string): Promise<StorageDetail> {
   const s = cleanKey(slug);
   if (!s) throw new Error("fetchStorageDetail: missing slug");
 
-  const list = await fetchStorageList();
-  const fromList = list.find((x) => x.slug === s) ?? null;
+  const now = Date.now();
+  const cached = storageDetailCache.get(s);
+  if (cached && now - cached.at < DETAIL_TTL) return cached.data;
 
-  const url = normalizeDetailHref(s) ?? storageDetailUrl(s);
+  const pending = storageDetailPending.get(s);
+  if (pending) return pending;
 
-  const res = await fetch(url, {
-    method: "GET",
-    headers: { "accept-language": "en-US,en;q=0.9" },
-  });
+  const request = (async () => {
+    const list = await fetchStorageList();
+    const fromList = list.find((x) => x.slug === s) ?? null;
 
-  if (!res.ok) {
-    if (fromList) {
-      return {
-        ...fromList,
-        treant: null,
-      };
+    const url = normalizeDetailHref(s) ?? storageDetailUrl(s);
+
+    const res = await fetch(url, {
+      method: "GET",
+      headers: { "accept-language": "en-US,en;q=0.9" },
+    });
+
+    let detail: StorageDetail;
+    if (!res.ok) {
+      if (fromList) {
+        detail = {
+          ...fromList,
+          treant: null,
+        };
+      } else {
+        throw new Error(`PalDB Storage detail failed: ${res.status}`);
+      }
+    } else {
+      const html = await res.text();
+      const treant = parseTreantTreeFromPage(html);
+
+      detail = fromList
+        ? {
+            ...fromList,
+            treant,
+          }
+        : {
+            slug: s,
+            name: cleanKey(s.replace(/_/g, " ")),
+            iconUrl: null,
+            categoryText: "Storage",
+            technologyLevel: null,
+            slots: null,
+            workSuitability: null,
+            description: null,
+            recipe: [],
+            treant,
+          };
     }
-    throw new Error(`PalDB Storage detail failed: ${res.status}`);
+
+    storageDetailCache.set(s, { at: Date.now(), data: detail });
+    return detail;
+  })();
+
+  storageDetailPending.set(s, request);
+  try {
+    return await request;
+  } finally {
+    if (storageDetailPending.get(s) === request) storageDetailPending.delete(s);
   }
-
-  const html = await res.text();
-  const treant = parseTreantTreeFromPage(html);
-
-  if (fromList) {
-    return {
-      ...fromList,
-      treant,
-    };
-  }
-
-  return {
-    slug: s,
-    name: cleanKey(s.replace(/_/g, " ")),
-    iconUrl: null,
-    categoryText: "Storage",
-    technologyLevel: null,
-    slots: null,
-    workSuitability: null,
-    description: null,
-    recipe: [],
-    treant,
-  };
 }

@@ -5,6 +5,7 @@ import { Ionicons } from "@expo/vector-icons";
 
 import BottomSheetModal from "@/components/ui/BottomSheetModal";
 import { POKOPIA_COLORS } from "./config";
+import { getPokopiaFavoriteTheme } from "./favoritePresentation";
 import {
   fetchPokopiaFavoriteDetail,
   type PokopiaFavoriteDetail,
@@ -63,6 +64,7 @@ export default function PokopiaFavoriteDetailSheet({
   }, [favoriteSlug, visible]);
 
   const title = detail?.name ?? favoriteLabel ?? "Favorite";
+  const theme = getPokopiaFavoriteTheme(title, favoriteSlug ? `/pokedex/favorites/${favoriteSlug}` : null);
 
   return (
     <BottomSheetModal
@@ -80,7 +82,14 @@ export default function PokopiaFavoriteDetailSheet({
             <Text className="text-slate-50 text-[16px] font-semibold" numberOfLines={2}>
               {title}
             </Text>
-            <Text className="text-slate-400 text-[12px] mt-0.5">Pokopia Favorite</Text>
+            <View
+              className="self-start mt-1 rounded-full border px-2.5 py-1"
+              style={{ backgroundColor: theme.bg, borderColor: theme.border }}
+            >
+              <Text className="text-[11px] font-semibold" style={{ color: theme.text }}>
+                {favoriteSlug?.includes("flavor") ? "Pokopia Flavor" : "Pokopia Favorite"}
+              </Text>
+            </View>
           </View>
 
           <Pressable

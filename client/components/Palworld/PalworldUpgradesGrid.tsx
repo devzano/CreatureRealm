@@ -47,6 +47,7 @@ type PalworldUpgradesGridProps = {
   workSuitability: WorkSuitabilityItem[];
   skillfruits: SkillFruitOrchardRow[];
   search: string;
+  isLoading?: boolean;
 };
 
 type PreviewItem = { name: string; };
@@ -219,6 +220,7 @@ const PalworldUpgradesGrid: React.FC<PalworldUpgradesGridProps> = ({
   workSuitability,
   skillfruits,
   search,
+  isLoading = false,
 }) => {
   const normalizedSearch = (search ?? "").trim().toLowerCase();
 
@@ -675,6 +677,8 @@ const PalworldUpgradesGrid: React.FC<PalworldUpgradesGridProps> = ({
       totalShown={totalShown}
       totalAll={totalAll}
       categories={categories}
+      isLoading={isLoading}
+      loadingLabel="Loading upgrade categories…"
       reorderEnabled={reorderEnabled}
       defaultOrder={DEFAULT_CATEGORY_ORDER}
       order={effectiveOrder}

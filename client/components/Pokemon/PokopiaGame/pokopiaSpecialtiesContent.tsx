@@ -6,6 +6,7 @@ import { Ionicons } from "@expo/vector-icons";
 import type { PokopiaSpecialtyDetail } from "@/lib/pokemon/pokopia/specialtyDetail";
 import type { PokopiaSpecialty } from "@/lib/pokemon/pokopia/specialties";
 import BottomSheetModal from "@/components/ui/BottomSheetModal";
+import { PokopiaEmptyState, PokopiaLoadingState } from "./PokopiaContentStates";
 
 type Props = {
   specialties: PokopiaSpecialty[];
@@ -58,15 +59,17 @@ export default function PokopiaSpecialtiesContent({
   return (
     <View className="flex-1 px-2 pt-4">
       {specialtiesLoading ? (
-        <View className="items-center justify-center mt-6">
-          <ActivityIndicator />
-          <Text className="mt-2 text-sm text-slate-300">Loading Pokopia specialties…</Text>
-        </View>
+        <PokopiaLoadingState label="Loading Pokopia specialties…" />
       ) : specialtiesError ? (
         <View className="rounded-3xl border border-rose-500/30 bg-rose-500/10 px-4 py-4">
           <Text className="text-sm font-semibold text-rose-200">Specialties unavailable</Text>
           <Text className="mt-1 text-[12px] leading-5 text-rose-100/90">{specialtiesError}</Text>
         </View>
+      ) : !specialties.length ? (
+        <PokopiaEmptyState
+          title="No specialties to show"
+          message="There are no Pokopia specialties available right now."
+        />
       ) : (
         <View className="flex-row flex-wrap -mx-1">
           {specialties.map((specialty) => (

@@ -63,6 +63,8 @@ export type PalworldDashboardGridProps<K extends string> = {
   totalShown: number;
   totalAll: number;
   categories: DashboardCategory<K>[];
+  isLoading?: boolean;
+  loadingLabel?: string;
   reorderEnabled?: boolean;
   order?: K[];
   onOrderChange?: (order: K[]) => void;
@@ -76,6 +78,8 @@ export default function PalworldDashboardGrid<K extends string>(props: PalworldD
     totalShown,
     totalAll,
     categories,
+    isLoading = false,
+    loadingLabel = "Loading…",
     reorderEnabled = false,
     order,
     onOrderChange,
@@ -253,7 +257,11 @@ export default function PalworldDashboardGrid<K extends string>(props: PalworldD
     return (
       <View>
         {renderCategoryHeader(cat.title, cat.subtitle, cat.shown, cat.total)}
-        {isEmpty ? (
+        {isEmpty && isLoading ? (
+          <View className="px-4">
+            <LoadingState label={loadingLabel} />
+          </View>
+        ) : isEmpty ? (
           <View className="px-4">
             <EmptyState
               title={`No ${cat.title.toLowerCase()} found`}
@@ -345,6 +353,12 @@ export default function PalworldDashboardGrid<K extends string>(props: PalworldD
                 Search: “{(search ?? "").trim()}”
               </Text>
             )}
+            {isLoading && (
+              <View className="mt-2 flex-row items-center">
+                <ActivityIndicator size="small" />
+                <Text className="text-[11px] text-white/55 ml-2">{loadingLabel}</Text>
+              </View>
+            )}
 
             <View className="mt-2">
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
@@ -401,7 +415,9 @@ export default function PalworldDashboardGrid<K extends string>(props: PalworldD
           <View>{renderSingleCategory()}</View>
         ) : (
           <View className="px-4 pt-4">
-            {visibleCards.length === 0 ? (
+            {visibleCards.length === 0 && isLoading ? (
+              <LoadingState label={loadingLabel} />
+            ) : visibleCards.length === 0 ? (
               <EmptyState title="No results" subtitle={normalizedSearch ? "Try a different search." : "No items available."} />
             ) : (
               <>
@@ -429,6 +445,8 @@ export default function PalworldDashboardGrid<K extends string>(props: PalworldD
                           topNames={topNames}
                           hasMore={hasMore}
                           moreCount={c.shown - previewMax}
+                          isLoading={isLoading && c.shown === 0 && c.total === 0}
+                          loadingLabel={loadingLabel}
                         />
                       </Pressable>
                     );
@@ -574,8 +592,10 @@ function DashboardCard(props: {
   topNames: string[];
   hasMore: boolean;
   moreCount: number;
+  isLoading?: boolean;
+  loadingLabel?: string;
 }) {
-  const { title, subtitle, shown, topNames, hasMore, moreCount } = props;
+  const { title, subtitle, shown, topNames, hasMore, moreCount, isLoading = false, loadingLabel = "Loading…" } = props;
 
   return (
     <View className="p-3">
@@ -591,7 +611,12 @@ function DashboardCard(props: {
       </Text>
 
       <View className="mt-3">
-        {topNames.length === 0 ? (
+        {isLoading ? (
+          <View className="flex-row items-center">
+            <ActivityIndicator size="small" />
+            <Text className="text-[11px] text-white/45 ml-2">{loadingLabel}</Text>
+          </View>
+        ) : topNames.length === 0 ? (
           <Text className="text-[11px] text-white/35">Nothing here yet</Text>
         ) : (
           <View style={{ gap: 4 }}>
@@ -641,6 +666,16 @@ function EmptyState(props: { title: string; subtitle?: string }) {
     <View className="rounded-3xl border border-white/10 bg-white/[0.03] px-4 py-4">
       <Text className="text-[12px] text-white/80 font-semibold">{title}</Text>
       {!!subtitle && <Text className="text-[11px] text-white/45 mt-1">{subtitle}</Text>}
+    </View>
+  );
+}
+
+function LoadingState(props: { label: string }) {
+  const { label } = props;
+  return (
+    <View className="rounded-3xl border border-white/10 bg-white/[0.03] px-4 py-5 flex-row items-center">
+      <ActivityIndicator size="small" />
+      <Text className="text-[12px] text-white/70 font-semibold ml-3">{label}</Text>
     </View>
   );
 }

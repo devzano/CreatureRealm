@@ -6,6 +6,7 @@ import { Ionicons } from "@expo/vector-icons";
 import type { PokopiaBuildingDetail } from "@/lib/pokemon/pokopia/buildingDetail";
 import type { PokopiaBuilding } from "@/lib/pokemon/pokopia/buildings";
 import BottomSheetModal from "@/components/ui/BottomSheetModal";
+import { PokopiaEmptyState, PokopiaLoadingState } from "./PokopiaContentStates";
 
 type Props = {
   buildings: PokopiaBuilding[];
@@ -69,15 +70,17 @@ export default function PokopiaBuildingsContent({
   return (
     <View className="flex-1 px-2 pt-4">
       {buildingsLoading ? (
-        <View className="items-center justify-center mt-6">
-          <ActivityIndicator />
-          <Text className="mt-2 text-sm text-slate-300">Loading Pokopia buildings…</Text>
-        </View>
+        <PokopiaLoadingState label="Loading Pokopia buildings…" />
       ) : buildingsError ? (
         <View className="rounded-3xl border border-rose-500/30 bg-rose-500/10 px-4 py-4">
           <Text className="text-sm font-semibold text-rose-200">Buildings unavailable</Text>
           <Text className="mt-1 text-[12px] leading-5 text-rose-100/90">{buildingsError}</Text>
         </View>
+      ) : !buildings.length ? (
+        <PokopiaEmptyState
+          title="No buildings to show"
+          message="There are no Pokopia buildings available right now."
+        />
       ) : (
         <View className="flex-row flex-wrap -mx-1">
           {buildings.map((building) => (

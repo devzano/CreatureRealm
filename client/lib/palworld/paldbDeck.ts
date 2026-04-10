@@ -11,6 +11,11 @@ export type PalListItem = {
   elements?: string[]; // from element tooltip(s) or element chips
 };
 
+const LIST_TTL = 1000 * 60 * 10;
+let palListCache: PalListItem[] | null = null;
+let palListCacheAt = 0;
+let palListPending: Promise<PalListItem[]> | null = null;
+
 export function parsePalListHtml(html: string): PalListItem[] {
   const startIdx = html.indexOf('id="Pal"');
   const slice = startIdx >= 0 ? html.slice(startIdx) : html;
@@ -153,14 +158,33 @@ export function parsePalListHtml(html: string): PalListItem[] {
   });
 }
 
-export async function fetchPalList(): Promise<PalListItem[]> {
-  const res = await fetch(`${BASE}/en/Pals`, {
-    headers: {
-      Accept: "text/html",
-      "Accept-Language": "en-US,en;q=0.9",
-    },
-  });
+export async function fetchPalList(opts?: { force?: boolean }): Promise<PalListItem[]> {
+  const force = !!opts?.force;
+  const now = Date.now();
+  if (!force && palListCache && now - palListCacheAt < LIST_TTL) return palListCache;
+  if (!force && palListPending) return palListPending;
 
-  const html = await res.text();
-  return parsePalListHtml(html);
+  const request = (async () => {
+    const res = await fetch(`${BASE}/en/Pals`, {
+      headers: {
+        Accept: "text/html",
+        "Accept-Language": "en-US,en;q=0.9",
+      },
+    });
+
+    if (!res.ok) throw new Error(`fetchPalList failed: ${res.status} ${res.statusText}`);
+
+    const html = await res.text();
+    const parsed = parsePalListHtml(html);
+    palListCache = parsed;
+    palListCacheAt = Date.now();
+    return parsed;
+  })();
+
+  palListPending = request;
+  try {
+    return await request;
+  } finally {
+    if (palListPending === request) palListPending = null;
+  }
 }

@@ -1,5 +1,5 @@
 // components/Palworld/PaldeckGrid.tsx
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useMemo } from "react";
 import { View, Text, FlatList, Pressable } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
@@ -235,11 +235,6 @@ const PalDexTile: React.FC<PalDexTileProps> = React.memo(({ pal, onOpen }) => {
     String(dexId ?? "").trim();
   const displayNum = numLabel ? `#${numLabel}` : "";
 
-  const [iconUri, setIconUri] = useState<string | null>(pal.iconUrl ?? null);
-  useEffect(() => {
-    setIconUri(pal.iconUrl ?? null);
-  }, [pal.iconUrl]);
-
   const entry = usePalworldCollectionStore((s) => {
     return (s.entries[dexId] as any) ?? EMPTY_ENTRY;
   });
@@ -326,7 +321,7 @@ const PalDexTile: React.FC<PalDexTileProps> = React.memo(({ pal, onOpen }) => {
     <View className="w-1/3 p-1">
       <View className="rounded-3xl p-3 border mb-1 bg-slate-900/80 border-slate-700 items-center">
         <Pressable onPress={goDetails} className="items-center">
-          <RemoteIcon uri={iconUri} size={60} roundedClassName="rounded-2xl" />
+          <RemoteIcon uri={pal.iconUrl ?? null} size={60} roundedClassName="rounded-2xl" />
 
           {!!displayNum && (
             <Text className="text-[11px] text-slate-400 mt-1">{displayNum}</Text>

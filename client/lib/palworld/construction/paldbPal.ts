@@ -39,6 +39,14 @@ export type PalDetail = PalConstructionIndexItem & {
   treant: TreantNode | null;
 };
 
+const INDEX_TTL = 1000 * 60 * 10;
+const DETAIL_TTL = 1000 * 60 * 10;
+let palConstructionListCache: PalConstructionIndexItem[] | null = null;
+let palConstructionListCacheAt = 0;
+let palConstructionListPending: Promise<PalConstructionIndexItem[]> | null = null;
+const palConstructionDetailCache = new Map<string, { at: number; data: PalDetail }>();
+const palConstructionDetailPending = new Map<string, Promise<PalDetail>>();
+
 const BASE_EN = "https://paldb.cc/en";
 
 function normalizeSlug(slugOrHref: string) {
@@ -309,51 +317,89 @@ function parseCardListPage(html: string): PalConstructionIndexItem[] {
 // Public API
 // -----------------------------
 
-export async function fetchPalConstructionList(): Promise<PalConstructionIndexItem[]> {
-  const res = await fetch(palUrl(), {
-    method: "GET",
-    headers: { "accept-language": "en-US,en;q=0.9" },
-  });
+export async function fetchPalConstructionList(opts?: { force?: boolean }): Promise<PalConstructionIndexItem[]> {
+  const force = !!opts?.force;
+  const now = Date.now();
+  if (!force && palConstructionListCache && now - palConstructionListCacheAt < INDEX_TTL) return palConstructionListCache;
+  if (!force && palConstructionListPending) return palConstructionListPending;
 
-  if (!res.ok) throw new Error(`PalDB Pal list failed: ${res.status}`);
-  const html = await res.text();
-  return parseCardListPage(html);
+  const request = (async () => {
+    const res = await fetch(palUrl(), {
+      method: "GET",
+      headers: { "accept-language": "en-US,en;q=0.9" },
+    });
+
+    if (!res.ok) throw new Error(`PalDB Pal list failed: ${res.status}`);
+    const html = await res.text();
+    const parsed = parseCardListPage(html);
+    palConstructionListCache = parsed;
+    palConstructionListCacheAt = Date.now();
+    return parsed;
+  })();
+
+  palConstructionListPending = request;
+  try {
+    return await request;
+  } finally {
+    if (palConstructionListPending === request) palConstructionListPending = null;
+  }
 }
 
 export async function fetchPalDetail(slug: string): Promise<PalDetail> {
   const s = cleanKey(slug);
   if (!s) throw new Error("fetchPalDetail: missing slug");
 
-  const list = await fetchPalConstructionList();
-  const fromList = list.find((x) => x.slug === s) ?? null;
+  const now = Date.now();
+  const cached = palConstructionDetailCache.get(s);
+  if (cached && now - cached.at < DETAIL_TTL) return cached.data;
 
-  const url = normalizeDetailHref(s) ?? palDetailUrl(s);
+  const pending = palConstructionDetailPending.get(s);
+  if (pending) return pending;
 
-  const res = await fetch(url, {
-    method: "GET",
-    headers: { "accept-language": "en-US,en;q=0.9" },
-  });
+  const request = (async () => {
+    const list = await fetchPalConstructionList();
+    const fromList = list.find((x) => x.slug === s) ?? null;
 
-  if (!res.ok) {
-    if (fromList) return { ...fromList, treant: null };
-    throw new Error(`PalDB Pal detail failed: ${res.status}`);
+    const url = normalizeDetailHref(s) ?? palDetailUrl(s);
+
+    const res = await fetch(url, {
+      method: "GET",
+      headers: { "accept-language": "en-US,en;q=0.9" },
+    });
+
+    let detail: PalDetail;
+    if (!res.ok) {
+      if (fromList) {
+        detail = { ...fromList, treant: null };
+      } else {
+        throw new Error(`PalDB Pal detail failed: ${res.status}`);
+      }
+    } else {
+      const html = await res.text();
+      const treant = parseTreantTreeFromPage(html);
+
+      detail = fromList
+        ? { ...fromList, treant }
+        : {
+            slug: s,
+            name: cleanKey(s.replace(/_/g, " ")),
+            iconUrl: null,
+            categoryText: "Pal",
+            technologyLevel: null,
+            description: null,
+            recipe: [],
+            treant,
+          };
+    }
+
+    palConstructionDetailCache.set(s, { at: Date.now(), data: detail });
+    return detail;
+  })();
+
+  palConstructionDetailPending.set(s, request);
+  try {
+    return await request;
+  } finally {
+    if (palConstructionDetailPending.get(s) === request) palConstructionDetailPending.delete(s);
   }
-
-  const html = await res.text();
-  const treant = parseTreantTreeFromPage(html);
-
-  if (fromList) {
-    return { ...fromList, treant };
-  }
-
-  return {
-    slug: s,
-    name: cleanKey(s.replace(/_/g, " ")),
-    iconUrl: null,
-    categoryText: "Pal",
-    technologyLevel: null,
-    description: null,
-    recipe: [],
-    treant,
-  };
 }

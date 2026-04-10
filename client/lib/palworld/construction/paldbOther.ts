@@ -39,6 +39,14 @@ export type OtherDetail = OtherIndexItem & {
   treant: TreantNode | null;
 };
 
+const INDEX_TTL = 1000 * 60 * 10;
+const DETAIL_TTL = 1000 * 60 * 10;
+let otherListCache: OtherIndexItem[] | null = null;
+let otherListCacheAt = 0;
+let otherListPending: Promise<OtherIndexItem[]> | null = null;
+const otherDetailCache = new Map<string, { at: number; data: OtherDetail }>();
+const otherDetailPending = new Map<string, Promise<OtherDetail>>();
+
 const BASE_EN = "https://paldb.cc/en";
 
 function normalizeSlug(slugOrHref: string) {
@@ -309,51 +317,89 @@ function parseCardListPage(html: string): OtherIndexItem[] {
 // Public API
 // -----------------------------
 
-export async function fetchOtherList(): Promise<OtherIndexItem[]> {
-  const res = await fetch(otherUrl(), {
-    method: "GET",
-    headers: { "accept-language": "en-US,en;q=0.9" },
-  });
+export async function fetchOtherList(opts?: { force?: boolean }): Promise<OtherIndexItem[]> {
+  const force = !!opts?.force;
+  const now = Date.now();
+  if (!force && otherListCache && now - otherListCacheAt < INDEX_TTL) return otherListCache;
+  if (!force && otherListPending) return otherListPending;
 
-  if (!res.ok) throw new Error(`PalDB Other list failed: ${res.status}`);
-  const html = await res.text();
-  return parseCardListPage(html);
+  const request = (async () => {
+    const res = await fetch(otherUrl(), {
+      method: "GET",
+      headers: { "accept-language": "en-US,en;q=0.9" },
+    });
+
+    if (!res.ok) throw new Error(`PalDB Other list failed: ${res.status}`);
+    const html = await res.text();
+    const parsed = parseCardListPage(html);
+    otherListCache = parsed;
+    otherListCacheAt = Date.now();
+    return parsed;
+  })();
+
+  otherListPending = request;
+  try {
+    return await request;
+  } finally {
+    if (otherListPending === request) otherListPending = null;
+  }
 }
 
 export async function fetchOtherDetail(slug: string): Promise<OtherDetail> {
   const s = cleanKey(slug);
   if (!s) throw new Error("fetchOtherDetail: missing slug");
 
-  const list = await fetchOtherList();
-  const fromList = list.find((x) => x.slug === s) ?? null;
+  const now = Date.now();
+  const cached = otherDetailCache.get(s);
+  if (cached && now - cached.at < DETAIL_TTL) return cached.data;
 
-  const url = normalizeDetailHref(s) ?? otherDetailUrl(s);
+  const pending = otherDetailPending.get(s);
+  if (pending) return pending;
 
-  const res = await fetch(url, {
-    method: "GET",
-    headers: { "accept-language": "en-US,en;q=0.9" },
-  });
+  const request = (async () => {
+    const list = await fetchOtherList();
+    const fromList = list.find((x) => x.slug === s) ?? null;
 
-  if (!res.ok) {
-    if (fromList) return { ...fromList, treant: null };
-    throw new Error(`PalDB Other detail failed: ${res.status}`);
+    const url = normalizeDetailHref(s) ?? otherDetailUrl(s);
+
+    const res = await fetch(url, {
+      method: "GET",
+      headers: { "accept-language": "en-US,en;q=0.9" },
+    });
+
+    let detail: OtherDetail;
+    if (!res.ok) {
+      if (fromList) {
+        detail = { ...fromList, treant: null };
+      } else {
+        throw new Error(`PalDB Other detail failed: ${res.status}`);
+      }
+    } else {
+      const html = await res.text();
+      const treant = parseTreantTreeFromPage(html);
+
+      detail = fromList
+        ? { ...fromList, treant }
+        : {
+            slug: s,
+            name: cleanKey(s.replace(/_/g, " ")),
+            iconUrl: null,
+            categoryText: "Other",
+            technologyLevel: null,
+            description: null,
+            recipe: [],
+            treant,
+          };
+    }
+
+    otherDetailCache.set(s, { at: Date.now(), data: detail });
+    return detail;
+  })();
+
+  otherDetailPending.set(s, request);
+  try {
+    return await request;
+  } finally {
+    if (otherDetailPending.get(s) === request) otherDetailPending.delete(s);
   }
-
-  const html = await res.text();
-  const treant = parseTreantTreeFromPage(html);
-
-  if (fromList) {
-    return { ...fromList, treant };
-  }
-
-  return {
-    slug: s,
-    name: cleanKey(s.replace(/_/g, " ")),
-    iconUrl: null,
-    categoryText: "Other",
-    technologyLevel: null,
-    description: null,
-    recipe: [],
-    treant,
-  };
 }

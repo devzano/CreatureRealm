@@ -58,6 +58,11 @@ export type MountIndex = {
   all: Array<GroundMountRow | FlyingMountRow | WaterMountRow>;
 };
 
+const INDEX_TTL = 1000 * 60 * 10;
+let mountIndexCache: MountIndex | null = null;
+let mountIndexCacheAt = 0;
+let mountIndexPending: Promise<MountIndex> | null = null;
+
 // -----------------------------
 // Small helpers (match your style)
 // -----------------------------
@@ -239,10 +244,27 @@ export function parseMountIndex(pageHtml: string): MountIndex {
   return { ground, flying, water, all };
 }
 
-export async function fetchMountIndex(): Promise<MountIndex> {
-  const url = absUrl("/en/Mounts");
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`fetchMountIndex failed: ${res.status} ${res.statusText}`);
-  const html = await res.text();
-  return parseMountIndex(html);
+export async function fetchMountIndex(opts?: { force?: boolean }): Promise<MountIndex> {
+  const force = !!opts?.force;
+  const now = Date.now();
+  if (!force && mountIndexCache && now - mountIndexCacheAt < INDEX_TTL) return mountIndexCache;
+  if (!force && mountIndexPending) return mountIndexPending;
+
+  const request = (async () => {
+    const url = absUrl("/en/Mounts");
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`fetchMountIndex failed: ${res.status} ${res.statusText}`);
+    const html = await res.text();
+    const parsed = parseMountIndex(html);
+    mountIndexCache = parsed;
+    mountIndexCacheAt = Date.now();
+    return parsed;
+  })();
+
+  mountIndexPending = request;
+  try {
+    return await request;
+  } finally {
+    if (mountIndexPending === request) mountIndexPending = null;
+  }
 }

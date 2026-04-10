@@ -44,6 +44,14 @@ export type LightingDetail = LightingIndexItem & {
   treant: TreantNode | null;
 };
 
+const INDEX_TTL = 1000 * 60 * 10;
+const DETAIL_TTL = 1000 * 60 * 10;
+let lightingListCache: LightingIndexItem[] | null = null;
+let lightingListCacheAt = 0;
+let lightingListPending: Promise<LightingIndexItem[]> | null = null;
+const lightingDetailCache = new Map<string, { at: number; data: LightingDetail }>();
+const lightingDetailPending = new Map<string, Promise<LightingDetail>>();
+
 const BASE_EN = "https://paldb.cc/en";
 
 function normalizeSlug(slugOrHref: string) {
@@ -330,47 +338,87 @@ function parseCardListPage(html: string): LightingIndexItem[] {
 // Public API
 // -----------------------------
 
-export async function fetchLightingList(): Promise<LightingIndexItem[]> {
-  const res = await fetch(lightingUrl(), {
-    method: "GET",
-    headers: { "accept-language": "en-US,en;q=0.9" },
-  });
+export async function fetchLightingList(opts?: { force?: boolean }): Promise<LightingIndexItem[]> {
+  const force = !!opts?.force;
+  const now = Date.now();
+  if (!force && lightingListCache && now - lightingListCacheAt < INDEX_TTL) return lightingListCache;
+  if (!force && lightingListPending) return lightingListPending;
 
-  if (!res.ok) throw new Error(`PalDB Lighting list failed: ${res.status}`);
-  const html = await res.text();
-  return parseCardListPage(html);
+  const request = (async () => {
+    const res = await fetch(lightingUrl(), {
+      method: "GET",
+      headers: { "accept-language": "en-US,en;q=0.9" },
+    });
+
+    if (!res.ok) throw new Error(`PalDB Lighting list failed: ${res.status}`);
+    const html = await res.text();
+    const parsed = parseCardListPage(html);
+    lightingListCache = parsed;
+    lightingListCacheAt = Date.now();
+    return parsed;
+  })();
+
+  lightingListPending = request;
+  try {
+    return await request;
+  } finally {
+    if (lightingListPending === request) lightingListPending = null;
+  }
 }
 
 export async function fetchLightingDetail(slug: string): Promise<LightingDetail> {
   const s = cleanKey(slug);
   if (!s) throw new Error("fetchLightingDetail: missing slug");
 
-  const list = await fetchLightingList();
-  const fromList = list.find((x) => x.slug === s) ?? null;
+  const now = Date.now();
+  const cached = lightingDetailCache.get(s);
+  if (cached && now - cached.at < DETAIL_TTL) return cached.data;
 
-  const url = normalizeDetailHref(s) ?? lightingDetailUrl(s);
-  const res = await fetch(url, { method: "GET", headers: { "accept-language": "en-US,en;q=0.9" } });
+  const pending = lightingDetailPending.get(s);
+  if (pending) return pending;
 
-  if (!res.ok) {
-    if (fromList) return { ...fromList, treant: null };
-    throw new Error(`PalDB Lighting detail failed: ${res.status}`);
+  const request = (async () => {
+    const list = await fetchLightingList();
+    const fromList = list.find((x) => x.slug === s) ?? null;
+
+    const url = normalizeDetailHref(s) ?? lightingDetailUrl(s);
+    const res = await fetch(url, { method: "GET", headers: { "accept-language": "en-US,en;q=0.9" } });
+
+    let detail: LightingDetail;
+    if (!res.ok) {
+      if (fromList) {
+        detail = { ...fromList, treant: null };
+      } else {
+        throw new Error(`PalDB Lighting detail failed: ${res.status}`);
+      }
+    } else {
+      const html = await res.text();
+      const treant = parseTreantTreeFromPage(html);
+
+      detail = fromList
+        ? { ...fromList, treant }
+        : {
+            slug: s,
+            name: cleanKey(s.replace(/_/g, " ")),
+            iconUrl: null,
+            categoryText: "Lighting",
+            technologyLevel: null,
+            consumption: null,
+            workSuitability: null,
+            description: null,
+            recipe: [],
+            treant,
+          };
+    }
+
+    lightingDetailCache.set(s, { at: Date.now(), data: detail });
+    return detail;
+  })();
+
+  lightingDetailPending.set(s, request);
+  try {
+    return await request;
+  } finally {
+    if (lightingDetailPending.get(s) === request) lightingDetailPending.delete(s);
   }
-
-  const html = await res.text();
-  const treant = parseTreantTreeFromPage(html);
-
-  if (fromList) return { ...fromList, treant };
-
-  return {
-    slug: s,
-    name: cleanKey(s.replace(/_/g, " ")),
-    iconUrl: null,
-    categoryText: "Lighting",
-    technologyLevel: null,
-    consumption: null,
-    workSuitability: null,
-    description: null,
-    recipe: [],
-    treant,
-  };
 }

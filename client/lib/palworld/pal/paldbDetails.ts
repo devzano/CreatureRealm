@@ -99,6 +99,9 @@ export type PalDetail = {
 };
 
 const DEBUG_PALDB = true;
+const DETAIL_TTL = 1000 * 60 * 10;
+const _detailCache = new Map<string, { at: number; data: PalDetail }>();
+const _detailPending = new Map<string, Promise<PalDetail>>();
 
 function extractCardBodies(html: string) {
   const cards: Array<{ title: string; chunk: string; }> = [];
@@ -1253,12 +1256,34 @@ export function parsePalDetailHtml(html: string, slug: string): PalDetail {
 }
 
 export async function fetchPalDetail(slug: string): Promise<PalDetail> {
+  const key = cleanKey(slug);
+  if (!key) throw new Error("fetchPalDetail: missing slug");
+
+  const now = Date.now();
+  const cached = _detailCache.get(key);
+  if (cached && now - cached.at < DETAIL_TTL) return cached.data;
+
+  const pending = _detailPending.get(key);
+  if (pending) return pending;
+
   const url = `${BASE}/en/${encodeURIComponent(slug)}`;
+  const request = (async () => {
+    const res = await fetch(url, {
+      headers: { Accept: "text/html", "Accept-Language": "en-US,en;q=0.9" },
+    });
 
-  const res = await fetch(url, {
-    headers: { Accept: "text/html", "Accept-Language": "en-US,en;q=0.9" },
-  });
+    if (!res.ok) throw new Error(`fetchPalDetail failed: ${res.status} ${res.statusText}`);
 
-  const html = await res.text();
-  return parsePalDetailHtml(html, slug);
+    const html = await res.text();
+    const parsed = parsePalDetailHtml(html, slug);
+    _detailCache.set(key, { at: Date.now(), data: parsed });
+    return parsed;
+  })();
+
+  _detailPending.set(key, request);
+  try {
+    return await request;
+  } finally {
+    if (_detailPending.get(key) === request) _detailPending.delete(key);
+  }
 }

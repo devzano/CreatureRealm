@@ -45,6 +45,14 @@ export type ProductionDetail = ProductionIndexItem & {
   treant: TreantNode | null;
 };
 
+const INDEX_TTL = 1000 * 60 * 10;
+const DETAIL_TTL = 1000 * 60 * 10;
+let productionListCache: ProductionIndexItem[] | null = null;
+let productionListCacheAt = 0;
+let productionListPending: Promise<ProductionIndexItem[]> | null = null;
+const productionDetailCache = new Map<string, { at: number; data: ProductionDetail }>();
+const productionDetailPending = new Map<string, Promise<ProductionDetail>>();
+
 const BASE_EN = "https://paldb.cc/en";
 
 function normalizeSlug(slugOrHref: string) {
@@ -360,42 +368,82 @@ function parseCardListPage(html: string): ProductionIndexItem[] {
 // Public API
 // -----------------------------
 
-export async function fetchProductionList(): Promise<ProductionIndexItem[]> {
-  const res = await fetch(productionUrl(), { method: "GET", headers: { "accept-language": "en-US,en;q=0.9" } });
-  if (!res.ok) throw new Error(`PalDB Production list failed: ${res.status}`);
-  const html = await res.text();
-  return parseCardListPage(html);
+export async function fetchProductionList(opts?: { force?: boolean }): Promise<ProductionIndexItem[]> {
+  const force = !!opts?.force;
+  const now = Date.now();
+  if (!force && productionListCache && now - productionListCacheAt < INDEX_TTL) return productionListCache;
+  if (!force && productionListPending) return productionListPending;
+
+  const request = (async () => {
+    const res = await fetch(productionUrl(), { method: "GET", headers: { "accept-language": "en-US,en;q=0.9" } });
+    if (!res.ok) throw new Error(`PalDB Production list failed: ${res.status}`);
+    const html = await res.text();
+    const parsed = parseCardListPage(html);
+    productionListCache = parsed;
+    productionListCacheAt = Date.now();
+    return parsed;
+  })();
+
+  productionListPending = request;
+  try {
+    return await request;
+  } finally {
+    if (productionListPending === request) productionListPending = null;
+  }
 }
 
 export async function fetchProductionDetail(slug: string): Promise<ProductionDetail> {
   const s = cleanKey(slug);
   if (!s) throw new Error("fetchProductionDetail: missing slug");
 
-  const list = await fetchProductionList();
-  const fromList = list.find((x) => x.slug === s) ?? null;
+  const now = Date.now();
+  const cached = productionDetailCache.get(s);
+  if (cached && now - cached.at < DETAIL_TTL) return cached.data;
 
-  const url = normalizeDetailHref(s) ?? productionDetailUrl(s);
-  const res = await fetch(url, { method: "GET", headers: { "accept-language": "en-US,en;q=0.9" } });
+  const pending = productionDetailPending.get(s);
+  if (pending) return pending;
 
-  if (!res.ok) {
-    if (fromList) return { ...fromList, treant: null };
-    throw new Error(`PalDB Production detail failed: ${res.status}`);
+  const request = (async () => {
+    const list = await fetchProductionList();
+    const fromList = list.find((x) => x.slug === s) ?? null;
+
+    const url = normalizeDetailHref(s) ?? productionDetailUrl(s);
+    const res = await fetch(url, { method: "GET", headers: { "accept-language": "en-US,en;q=0.9" } });
+
+    let detail: ProductionDetail;
+    if (!res.ok) {
+      if (fromList) {
+        detail = { ...fromList, treant: null };
+      } else {
+        throw new Error(`PalDB Production detail failed: ${res.status}`);
+      }
+    } else {
+      const html = await res.text();
+      const treant = parseTreantTreeFromPage(html);
+
+      detail = fromList
+        ? { ...fromList, treant }
+        : {
+            slug: s,
+            name: cleanKey(s.replace(/_/g, " ")),
+            iconUrl: null,
+            categoryText: "Production",
+            technologyLevel: null,
+            workSuitability: null,
+            description: null,
+            recipe: [],
+            treant,
+          };
+    }
+
+    productionDetailCache.set(s, { at: Date.now(), data: detail });
+    return detail;
+  })();
+
+  productionDetailPending.set(s, request);
+  try {
+    return await request;
+  } finally {
+    if (productionDetailPending.get(s) === request) productionDetailPending.delete(s);
   }
-
-  const html = await res.text();
-  const treant = parseTreantTreeFromPage(html);
-
-  if (fromList) return { ...fromList, treant };
-
-  return {
-    slug: s,
-    name: cleanKey(s.replace(/_/g, " ")),
-    iconUrl: null,
-    categoryText: "Production",
-    technologyLevel: null,
-    workSuitability: null,
-    description: null,
-    recipe: [],
-    treant,
-  };
 }

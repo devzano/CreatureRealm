@@ -7,6 +7,7 @@ import PageWrapper from "@/components/PageWrapper";
 import MapCard from "@/components/MapCard";
 import { PalpagosIslandsMapModal } from "./PalworldMap";
 import PalworldBreedingCalculatorModal from "./PalworldBreedingCalculatorModal";
+import PalworldUpdatesSheet from "./PalworldUpdatesSheet";
 
 import PaldeckGrid, { type PalDexFilter } from "@/components/Palworld/PaldeckGrid";
 import PalworldItemsGrid from "@/components/Palworld/PalworldItemsGrid";
@@ -51,6 +52,14 @@ import { fetchLightingList, type LightingIndexItem } from "@/lib/palworld/constr
 import { fetchProductionList, type ProductionIndexItem } from "@/lib/palworld/construction/paldbProduction";
 import { fetchPalConstructionList, type PalConstructionIndexItem } from "@/lib/palworld/construction/paldbPal";
 import { fetchOtherList, type OtherIndexItem } from "@/lib/palworld/construction/paldbOther";
+import {
+  fetchPaldbHomeUpdates,
+  fetchPaldbUpdateDetail,
+  type PaldbHomeUpdates,
+  type PaldbUpdateCategory,
+  type PaldbUpdateDetail,
+  type PaldbUpdateListItem,
+} from "@/lib/palworld/paldbUpdates";
 
 type PalworldHomeContentProps = {
   onBackToCollections: () => void;
@@ -84,6 +93,19 @@ const PalworldHomeContent: React.FC<PalworldHomeContentProps> = ({ onBackToColle
   const [dexFilter, setDexFilter] = useState<PalDexFilter>("all");
   const [showPalpagosMap, setShowPalpagosMap] = useState(false);
   const [showBreedingCalc, setShowBreedingCalc] = useState(false);
+  const [showPaldbUpdatesSheet, setShowPaldbUpdatesSheet] = useState(false);
+  const [selectedPaldbCategory, setSelectedPaldbCategory] = useState<PaldbUpdateCategory | null>(null);
+  const [selectedPaldbItem, setSelectedPaldbItem] = useState<PaldbUpdateListItem | null>(null);
+  const [selectedPaldbDetail, setSelectedPaldbDetail] = useState<PaldbUpdateDetail | null>(null);
+  const [paldbUpdatesLoading, setPaldbUpdatesLoading] = useState(false);
+  const [paldbUpdatesError, setPaldbUpdatesError] = useState<string | null>(null);
+  const [paldbUpdatesDetailLoading, setPaldbUpdatesDetailLoading] = useState(false);
+  const [paldbUpdatesDetailError, setPaldbUpdatesDetailError] = useState<string | null>(null);
+  const [paldbUpdates, setPaldbUpdates] = useState<PaldbHomeUpdates>({
+    versionChanges: [],
+    contentUpdates: [],
+    patchNotes: [],
+  });
 
   const tabRef = useRef<ActiveTab>("dex");
   useEffect(() => {
@@ -154,6 +176,7 @@ const PalworldHomeContent: React.FC<PalworldHomeContentProps> = ({ onBackToColle
   const [didLoadItemsOnce, setDidLoadItemsOnce] = useState(false);
   const [didLoadConstructionOnce, setDidLoadConstructionOnce] = useState(false);
   const [didLoadUpgradesOnce, setDidLoadUpgradesOnce] = useState(false);
+  const [didLoadPaldbUpdatesOnce, setDidLoadPaldbUpdatesOnce] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -178,7 +201,6 @@ const PalworldHomeContent: React.FC<PalworldHomeContentProps> = ({ onBackToColle
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function loadItemsData(opts?: { markDidLoad?: boolean; }) {
@@ -248,40 +270,29 @@ const PalworldHomeContent: React.FC<PalworldHomeContentProps> = ({ onBackToColle
       setConstructionError(null);
       setConstructionLoading(true);
 
-      const [
-        storageList,
-        foundationsList,
-        furnitureList,
-        defensesList,
-        foodList,
-        infrastructureList,
-        lightingList,
-        productionList,
-        palConstructionList,
-        otherConstructionList,
-      ] = await Promise.all([
-        fetchStorageList(),
-        fetchFoundationsList(),
-        fetchFurnitureList(),
-        fetchDefensesList(),
-        fetchFoodList(),
-        fetchInfrastructureList(),
-        fetchLightingList(),
-        fetchProductionList(),
-        fetchPalConstructionList(),
-        fetchOtherList(),
-      ]);
+      const jobs = [
+        fetchStorageList().then((list) => setStorage(list ?? [])),
+        fetchFoundationsList().then((list) => setFoundations(list ?? [])),
+        fetchFurnitureList().then((list) => setFurniture(list ?? [])),
+        fetchDefensesList().then((list) => setDefenses(list ?? [])),
+        fetchFoodList().then((list) => setFood(list ?? [])),
+        fetchInfrastructureList().then((list) => setInfrastructure(list ?? [])),
+        fetchLightingList().then((list) => setLighting(list ?? [])),
+        fetchProductionList().then((list) => setProduction(list ?? [])),
+        fetchPalConstructionList().then((list) => setPalConstruction(list ?? [])),
+        fetchOtherList().then((list) => setOtherConstruction(list ?? [])),
+      ] as const;
 
-      setStorage(storageList ?? []);
-      setFoundations(foundationsList ?? []);
-      setFurniture(furnitureList ?? []);
-      setDefenses(defensesList ?? []);
-      setFood(foodList ?? []);
-      setInfrastructure(infrastructureList ?? []);
-      setLighting(lightingList ?? []);
-      setProduction(productionList ?? []);
-      setPalConstruction(palConstructionList ?? []);
-      setOtherConstruction(otherConstructionList ?? []);
+      const settled = await Promise.allSettled(jobs);
+      const failures = settled.filter((result) => result.status === "rejected");
+
+      if (failures.length === jobs.length) {
+        throw new Error("All construction sources failed");
+      }
+
+      if (failures.length > 0) {
+        console.warn("Some paldb construction sources failed:", failures);
+      }
 
       if (markDidLoad) setDidLoadConstructionOnce(true);
     } catch (e) {
@@ -352,6 +363,70 @@ const PalworldHomeContent: React.FC<PalworldHomeContentProps> = ({ onBackToColle
     }
   }
 
+  const loadPaldbUpdatesData = useCallback(async (opts?: { markDidLoad?: boolean; force?: boolean }) => {
+    const markDidLoad = opts?.markDidLoad ?? true;
+
+    try {
+      setPaldbUpdatesError(null);
+      setPaldbUpdatesLoading(true);
+
+      const next = await fetchPaldbHomeUpdates({ force: !!opts?.force });
+      setPaldbUpdates(next);
+
+      if (markDidLoad) setDidLoadPaldbUpdatesOnce(true);
+    } catch (e) {
+      console.warn("Failed to fetch paldb home updates:", e);
+      setPaldbUpdatesError("Failed to load PalDB updates from paldb.cc");
+    } finally {
+      setPaldbUpdatesLoading(false);
+    }
+  }, []);
+
+  const openPaldbCategory = useCallback(
+    async (category: PaldbUpdateCategory) => {
+      setSelectedPaldbCategory(category);
+      setSelectedPaldbItem(null);
+      setSelectedPaldbDetail(null);
+      setPaldbUpdatesDetailError(null);
+      setShowPaldbUpdatesSheet(true);
+
+      if (!didLoadPaldbUpdatesOnce && !paldbUpdatesLoading) {
+        await loadPaldbUpdatesData({ markDidLoad: true }).catch(() => { });
+      }
+    },
+    [didLoadPaldbUpdatesOnce, loadPaldbUpdatesData, paldbUpdatesLoading]
+  );
+
+  const closePaldbSheet = useCallback(() => {
+    setShowPaldbUpdatesSheet(false);
+    setSelectedPaldbCategory(null);
+    setSelectedPaldbItem(null);
+    setSelectedPaldbDetail(null);
+    setPaldbUpdatesDetailError(null);
+    setPaldbUpdatesDetailLoading(false);
+  }, []);
+
+  const handleSelectPaldbItem = useCallback(async (item: PaldbUpdateListItem) => {
+    setSelectedPaldbItem(item);
+    setSelectedPaldbDetail(item.prefetchedDetail ?? null);
+    setPaldbUpdatesDetailError(null);
+
+    if (!item.url || !item.url.startsWith("https://paldb.cc/")) {
+      return;
+    }
+
+    try {
+      setPaldbUpdatesDetailLoading(true);
+      const detail = await fetchPaldbUpdateDetail(item);
+      setSelectedPaldbDetail(detail);
+    } catch (e) {
+      console.warn("Failed to fetch paldb update detail:", e);
+      setPaldbUpdatesDetailError("Failed to load the full update detail.");
+    } finally {
+      setPaldbUpdatesDetailLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -372,6 +447,10 @@ const PalworldHomeContent: React.FC<PalworldHomeContentProps> = ({ onBackToColle
         if (!didLoadUpgradesOnce) loadUpgradesData({ markDidLoad: true }).catch(() => { });
         return;
       }
+
+      if (activeTabContent === "tools") {
+        if (!didLoadPaldbUpdatesOnce) loadPaldbUpdatesData({ markDidLoad: true }).catch(() => { });
+      }
     };
 
     InteractionManager.runAfterInteractions(run);
@@ -379,7 +458,7 @@ const PalworldHomeContent: React.FC<PalworldHomeContentProps> = ({ onBackToColle
     return () => {
       cancelled = true;
     };
-  }, [activeTabContent, didLoadItemsOnce, didLoadConstructionOnce, didLoadUpgradesOnce]);
+  }, [activeTabContent, didLoadItemsOnce, didLoadConstructionOnce, didLoadPaldbUpdatesOnce, didLoadUpgradesOnce, loadPaldbUpdatesData]);
 
   const pageTitle = useMemo(() => {
     switch (activeTabUI) {
@@ -463,8 +542,83 @@ const PalworldHomeContent: React.FC<PalworldHomeContentProps> = ({ onBackToColle
         badgeBorderClass: "border-orange-500/60",
         badgeTextClass: "text-orange-200",
       },
+      {
+        id: "palworld-version-changes",
+        groupKey: "tools",
+        onPress: () => openPaldbCategory("versionChanges"),
+        title: "Version Changes",
+        subtitle: "Core version notes, balance adjustments, and fixes.",
+        tagLabel: "Updates",
+        tagValue:
+          paldbUpdatesLoading && paldbUpdates.versionChanges.length === 0
+            ? "Syncing…"
+            : `${paldbUpdates.versionChanges.length} entries`,
+        iconType: "mci",
+        iconName: "history",
+        iconColor: "#fb923c",
+        iconSize: 22,
+        borderColorClass: "border-amber-700/70",
+        iconBgClass: "bg-amber-500/15 border-amber-500/50",
+        infoIconName: "file-document-edit-outline",
+        infoText: paldbUpdates.versionChanges[0]?.title ?? "Latest version changes from paldb.cc",
+        badgeBgClass: "bg-amber-500/15",
+        badgeBorderClass: "border-amber-500/60",
+        badgeTextClass: "text-amber-200",
+        poweredBy: "PalDB.cc",
+        badgeLabel: "WEB UPDATES",
+      },
+      {
+        id: "palworld-content-updates",
+        groupKey: "tools",
+        onPress: () => openPaldbCategory("contentUpdates"),
+        title: "Content Updates",
+        subtitle: "Major feature drops, collabs, and expansion updates.",
+        tagLabel: "Updates",
+        tagValue:
+          paldbUpdatesLoading && paldbUpdates.contentUpdates.length === 0
+            ? "Syncing…"
+            : `${paldbUpdates.contentUpdates.length} entries`,
+        iconType: "mci",
+        iconName: "rocket-launch-outline",
+        iconColor: "#f59e0b",
+        iconSize: 22,
+        borderColorClass: "border-yellow-700/70",
+        iconBgClass: "bg-yellow-500/15 border-yellow-500/50",
+        infoIconName: "new-box",
+        infoText: paldbUpdates.contentUpdates[0]?.title ?? "Major content drops from paldb.cc",
+        badgeBgClass: "bg-yellow-500/15",
+        badgeBorderClass: "border-yellow-500/60",
+        badgeTextClass: "text-yellow-200",
+        poweredBy: "PalDB.cc",
+        badgeLabel: "WEB UPDATES",
+      },
+      {
+        id: "palworld-patch-notes",
+        groupKey: "tools",
+        onPress: () => openPaldbCategory("patchNotes"),
+        title: "Patch Notes",
+        subtitle: "Recent patch updates, patch news, and post-release fixes.",
+        tagLabel: "Updates",
+        tagValue:
+          paldbUpdatesLoading && paldbUpdates.patchNotes.length === 0
+            ? "Syncing…"
+            : `${paldbUpdates.patchNotes.length} entries`,
+        iconType: "mci",
+        iconName: "newspaper-variant-outline",
+        iconColor: "#f97316",
+        iconSize: 22,
+        borderColorClass: "border-orange-700/70",
+        iconBgClass: "bg-orange-500/15 border-orange-500/50",
+        infoIconName: "wrench-cog-outline",
+        infoText: paldbUpdates.patchNotes[0]?.title ?? "Patch note archive from paldb.cc",
+        badgeBgClass: "bg-orange-500/15",
+        badgeBorderClass: "border-orange-500/60",
+        badgeTextClass: "text-orange-200",
+        poweredBy: "PalDB.cc",
+        badgeLabel: "WEB UPDATES",
+      },
     ],
-    []
+    [openPaldbCategory, paldbUpdates, paldbUpdatesLoading]
   );
 
   const filteredMapCards = useMemo(() => {
@@ -749,6 +903,7 @@ const PalworldHomeContent: React.FC<PalworldHomeContentProps> = ({ onBackToColle
               ) : (
                 <PalworldItemsGrid
                   search={deferredSearch}
+                  isLoading={itemsLoading}
                   materials={materials}
                   spheres={spheres}
                   ammo={ammo}
@@ -789,6 +944,7 @@ const PalworldHomeContent: React.FC<PalworldHomeContentProps> = ({ onBackToColle
               ) : (
                 <PalworldConstructionGrid
                   search={deferredSearch}
+                  isLoading={constructionLoading}
                   storage={storage}
                   foundations={foundations}
                   furniture={furniture}
@@ -826,6 +982,7 @@ const PalworldHomeContent: React.FC<PalworldHomeContentProps> = ({ onBackToColle
               ) : (
                 <PalworldUpgradesGrid
                   search={deferredSearch}
+                  isLoading={upgradesLoading}
                   passiveSkills={passiveSkills}
                   technologies={technologies}
                   journals={journals}
@@ -886,6 +1043,40 @@ const PalworldHomeContent: React.FC<PalworldHomeContentProps> = ({ onBackToColle
 
       <PalpagosIslandsMapModal visible={showPalpagosMap} onClose={() => setShowPalpagosMap(false)} />
       <PalworldBreedingCalculatorModal visible={showBreedingCalc} onClose={() => setShowBreedingCalc(false)} />
+      <PalworldUpdatesSheet
+        visible={showPaldbUpdatesSheet}
+        category={selectedPaldbCategory}
+        items={
+          selectedPaldbCategory === "versionChanges"
+            ? paldbUpdates.versionChanges
+            : selectedPaldbCategory === "contentUpdates"
+              ? paldbUpdates.contentUpdates
+              : selectedPaldbCategory === "patchNotes"
+                ? paldbUpdates.patchNotes
+                : []
+        }
+        loading={paldbUpdatesLoading}
+        error={paldbUpdatesError}
+        selectedItem={selectedPaldbItem}
+        selectedDetail={selectedPaldbDetail}
+        detailLoading={paldbUpdatesDetailLoading}
+        detailError={paldbUpdatesDetailError}
+        onClose={closePaldbSheet}
+        onSelectItem={handleSelectPaldbItem}
+        onBackToList={() => {
+          setSelectedPaldbItem(null);
+          setSelectedPaldbDetail(null);
+          setPaldbUpdatesDetailError(null);
+          setPaldbUpdatesDetailLoading(false);
+        }}
+        onRetryCategory={() => {
+          loadPaldbUpdatesData({ markDidLoad: true, force: true }).catch(() => { });
+        }}
+        onRetryDetail={() => {
+          if (!selectedPaldbItem) return;
+          handleSelectPaldbItem(selectedPaldbItem).catch(() => { });
+        }}
+      />
     </>
   );
 };

@@ -3,6 +3,8 @@ import type { PokopiaPlannerZoneId } from "@/store/pokopiaPlannerStore";
 export type PokopiaSection =
   | "dex"
   | "habitats"
+  | "favorites"
+  | "food"
   | "items"
   | "recipes"
   | "abilities"
@@ -64,6 +66,12 @@ export type PokopiaSectionCard = {
   count: number;
 };
 
+export type PokopiaFavoriteListItem = {
+  slug: string;
+  label: string;
+  href: string;
+};
+
 export type PokopiaInfoCard = {
   id: Exclude<PokopiaInfoSection, "overview">;
   title: string;
@@ -100,6 +108,8 @@ export const POKOPIA_COLORS = {
 export const POKOPIA_SECTION_CARDS: PokopiaSectionCard[] = [
   { id: "dex", title: "Pokédex", subtitle: "Track Pokopia roster progress.", count: 303 },
   { id: "habitats", title: "Habitats", subtitle: "Explore habitat and encounter data.", count: 212 },
+  { id: "favorites", title: "Favorites", subtitle: "Browse Pokemon likes and item themes.", count: 43 },
+  { id: "food", title: "Food", subtitle: "Browse flavors and food items.", count: 6 },
   { id: "items", title: "Items", subtitle: "Reference Pokopia item data.", count: 1208 },
   { id: "recipes", title: "Recipes", subtitle: "Review cooking and crafting recipes.", count: 714 },
   { id: "abilities", title: "Abilities", subtitle: "Look up Pokopia ability systems.", count: 8 },
@@ -217,3 +227,63 @@ export const POKOPIA_PLANNER_ZONES: PokopiaPlannerZoneMeta[] = [
     iconUrl: "https://pokopiadex.com/images/icons/palette-town.png",
   },
 ];
+
+export const POKOPIA_FAVORITES: PokopiaFavoriteListItem[] = [
+  "Blocky stuff",
+  "Cleanliness",
+  "Colorful stuff",
+  "Complicated stuff",
+  "Construction",
+  "Containers",
+  "Cute stuff",
+  "Electronics",
+  "Exercise",
+  "Fabric",
+  "Garbage",
+  "Gatherings",
+  "Glass stuff",
+  "Group Activities",
+  "Hard stuff",
+  "Healing",
+  "Letters and words",
+  "Looks like food",
+  "Lots of dirt",
+  "Lots of fire",
+  "Lots of nature",
+  "Lots of water",
+  "Luxury",
+  "Metal stuff",
+  "Nice breezes",
+  "Noisy stuff",
+  "Ocean vibes",
+  "Play spaces",
+  "Pretty flowers",
+  "Rides",
+  "Round stuff",
+  "Sharp stuff",
+  "Shiny stuff",
+  "Slender objects",
+  "Soft stuff",
+  "Spinning stuff",
+  "Spooky stuff",
+  "Stone stuff",
+  "Strange stuff",
+  "Symbols",
+  "Watching stuff",
+  "Wobbly stuff",
+  "Wooden stuff",
+].map((label) => {
+  const slug = label
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/&/g, " and ")
+    .replace(/[^a-zA-Z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .toLowerCase();
+
+  return {
+    slug,
+    label,
+    href: `https://pokopiadex.com/pokedex/favorites/${slug}`,
+  };
+});

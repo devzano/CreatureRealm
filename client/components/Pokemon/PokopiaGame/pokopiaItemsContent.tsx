@@ -5,7 +5,10 @@ import { Ionicons } from "@expo/vector-icons";
 
 import type { ItemCategoryFilter } from "./config";
 import { ITEM_CATEGORY_FILTERS } from "./config";
-import PokopiaFavoriteDetailSheet from "./pokopiaFavoriteDetailSheet";
+import PokopiaFavoriteChip from "./PokopiaFavoriteChip";
+import PokopiaFavoriteDetailSheet from "./PokopiaFavoriteDetailSheet";
+import PokopiaItemVariantStrip from "./PokopiaItemVariantStrip";
+import { PokopiaEmptyState, PokopiaLoadingState } from "./PokopiaContentStates";
 import type { PokopiaItemDetail } from "@/lib/pokemon/pokopia/itemDetail";
 import { resolveFavoriteSlug } from "@/lib/pokemon/pokopia/favoriteUtils";
 import type { PokopiaItem } from "@/lib/pokemon/pokopia/items";
@@ -73,7 +76,10 @@ export default function PokopiaItemsContent({
   const openFavoriteSheet = useCallback((label: string) => {
     setSelectedFavoriteLabel(label);
     setSelectedFavoriteSlug(resolveFavoriteSlug(label));
-    setFavoriteSheetVisible(true);
+    setSheetVisible(false);
+    setTimeout(() => {
+      setFavoriteSheetVisible(true);
+    }, 120);
   }, []);
 
   const closeFavoriteSheet = useCallback(() => {
@@ -119,15 +125,17 @@ export default function PokopiaItemsContent({
       </View>
 
       {pokopiaItemsLoading ? (
-        <View className="items-center justify-center mt-6">
-          <ActivityIndicator />
-          <Text className="mt-2 text-sm text-slate-300">Loading Pokopia items…</Text>
-        </View>
+        <PokopiaLoadingState label="Loading Pokopia items…" />
       ) : pokopiaItemsError ? (
         <View className="rounded-3xl border border-rose-500/30 bg-rose-500/10 px-4 py-4">
           <Text className="text-sm font-semibold text-rose-200">Items unavailable</Text>
           <Text className="mt-1 text-[12px] leading-5 text-rose-100/90">{pokopiaItemsError}</Text>
         </View>
+      ) : !filteredPokopiaItems.length ? (
+        <PokopiaEmptyState
+          title="No items to show"
+          message="Try a different category or search term."
+        />
       ) : (
         <View className="flex-row flex-wrap -mx-1">
           {filteredPokopiaItems.map((item) => (
@@ -180,7 +188,7 @@ export default function PokopiaItemsContent({
               {displayItem?.imageUrl ? (
                 <View className="w-14 h-14 rounded-2xl overflow-hidden bg-slate-900 border border-slate-700 p-1">
                   <ExpoImage
-                    source={{ uri: displayItem.imageUrl }}
+                    source={{ uri: selectedItemDetail?.imageUrl || displayItem.imageUrl }}
                     style={{ width: "100%", height: "100%" }}
                     contentFit="contain"
                     transition={120}
@@ -244,6 +252,8 @@ export default function PokopiaItemsContent({
             </View>
           ) : selectedItemDetail ? (
             <>
+              <PokopiaItemVariantStrip variants={selectedItemDetail.variantImages} />
+
               {selectedItemDetail.description ? (
                 <View className="rounded-3xl bg-slate-950 border border-slate-800 px-4 py-3 mb-4">
                   <Text className="text-[13px] leading-5 text-slate-300">
@@ -277,13 +287,11 @@ export default function PokopiaItemsContent({
                   </Text>
                   <View className="flex-row flex-wrap">
                     {selectedItemDetail.favoriteTags.map((tag) => (
-                      <Pressable
+                      <PokopiaFavoriteChip
                         key={`favorite-${tag}`}
+                        label={tag}
                         onPress={() => openFavoriteSheet(tag)}
-                        className="px-2.5 py-1 rounded-full mr-2 mb-2 bg-slate-900 border border-slate-700"
-                      >
-                        <Text className="text-[11px] text-slate-200">{tag}</Text>
-                      </Pressable>
+                      />
                     ))}
                   </View>
                 </View>

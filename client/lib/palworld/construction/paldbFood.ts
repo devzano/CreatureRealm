@@ -48,6 +48,14 @@ export type FoodDetail = FoodIndexItem & {
   treant: TreantNode | null;
 };
 
+const INDEX_TTL = 1000 * 60 * 10;
+const DETAIL_TTL = 1000 * 60 * 10;
+let foodListCache: FoodIndexItem[] | null = null;
+let foodListCacheAt = 0;
+let foodListPending: Promise<FoodIndexItem[]> | null = null;
+const foodDetailCache = new Map<string, { at: number; data: FoodDetail }>();
+const foodDetailPending = new Map<string, Promise<FoodDetail>>();
+
 const BASE_EN = "https://paldb.cc/en";
 
 function normalizeSlug(slugOrHref: string) {
@@ -392,57 +400,93 @@ function parseCardListPage(html: string): FoodIndexItem[] {
 // Public API
 // -----------------------------
 
-export async function fetchFoodList(): Promise<FoodIndexItem[]> {
-  const res = await fetch(foodUrl(), {
-    method: "GET",
-    headers: {
-      "accept-language": "en-US,en;q=0.9",
-    },
-  });
+export async function fetchFoodList(opts?: { force?: boolean }): Promise<FoodIndexItem[]> {
+  const force = !!opts?.force;
+  const now = Date.now();
+  if (!force && foodListCache && now - foodListCacheAt < INDEX_TTL) return foodListCache;
+  if (!force && foodListPending) return foodListPending;
 
-  if (!res.ok) throw new Error(`PalDB Food list failed: ${res.status}`);
-  const html = await res.text();
-  return parseCardListPage(html);
+  const request = (async () => {
+    const res = await fetch(foodUrl(), {
+      method: "GET",
+      headers: {
+        "accept-language": "en-US,en;q=0.9",
+      },
+    });
+
+    if (!res.ok) throw new Error(`PalDB Food list failed: ${res.status}`);
+    const html = await res.text();
+    const parsed = parseCardListPage(html);
+    foodListCache = parsed;
+    foodListCacheAt = Date.now();
+    return parsed;
+  })();
+
+  foodListPending = request;
+  try {
+    return await request;
+  } finally {
+    if (foodListPending === request) foodListPending = null;
+  }
 }
 
 export async function fetchFoodDetail(slug: string): Promise<FoodDetail> {
   const s = cleanKey(slug);
   if (!s) throw new Error("fetchFoodDetail: missing slug");
 
-  const list = await fetchFoodList();
-  const fromList = list.find((x) => x.slug === s) ?? null;
+  const now = Date.now();
+  const cached = foodDetailCache.get(s);
+  if (cached && now - cached.at < DETAIL_TTL) return cached.data;
 
-  const url = normalizeDetailHref(s) ?? foodDetailUrl(s);
+  const pending = foodDetailPending.get(s);
+  if (pending) return pending;
 
-  const res = await fetch(url, {
-    method: "GET",
-    headers: { "accept-language": "en-US,en;q=0.9" },
-  });
+  const request = (async () => {
+    const list = await fetchFoodList();
+    const fromList = list.find((x) => x.slug === s) ?? null;
 
-  if (!res.ok) {
-    if (fromList) {
-      return { ...fromList, treant: null };
+    const url = normalizeDetailHref(s) ?? foodDetailUrl(s);
+
+    const res = await fetch(url, {
+      method: "GET",
+      headers: { "accept-language": "en-US,en;q=0.9" },
+    });
+
+    let detail: FoodDetail;
+    if (!res.ok) {
+      if (fromList) {
+        detail = { ...fromList, treant: null };
+      } else {
+        throw new Error(`PalDB Food detail failed: ${res.status}`);
+      }
+    } else {
+      const html = await res.text();
+      const treant = parseTreantTreeFromPage(html);
+
+      detail = fromList
+        ? { ...fromList, treant }
+        : {
+            slug: s,
+            name: cleanKey(s.replace(/_/g, " ")),
+            iconUrl: null,
+            categoryText: "Food",
+            technologyLevel: null,
+            workSuitability: null,
+            san: null,
+            description: null,
+            recipe: [],
+            treant,
+          };
     }
-    throw new Error(`PalDB Food detail failed: ${res.status}`);
+
+    foodDetailCache.set(s, { at: Date.now(), data: detail });
+    return detail;
+  })();
+
+  foodDetailPending.set(s, request);
+  try {
+    return await request;
+  } finally {
+    if (foodDetailPending.get(s) === request) foodDetailPending.delete(s);
   }
-
-  const html = await res.text();
-  const treant = parseTreantTreeFromPage(html);
-
-  if (fromList) {
-    return { ...fromList, treant };
-  }
-
-  return {
-    slug: s,
-    name: cleanKey(s.replace(/_/g, " ")),
-    iconUrl: null,
-    categoryText: "Food",
-    technologyLevel: null,
-    workSuitability: null,
-    san: null,
-    description: null,
-    recipe: [],
-    treant,
-  };
 }

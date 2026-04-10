@@ -7,6 +7,7 @@ import BottomSheetModal from "@/components/ui/BottomSheetModal";
 import { POKOPIA_COLORS } from "./config";
 import type { PokopiaHabitatDetail } from "@/lib/pokemon/pokopia/habitatDetail";
 import type { PokopiaHabitat } from "@/lib/pokemon/pokopia/habitats";
+import { PokopiaEmptyState, PokopiaLoadingState } from "./PokopiaContentStates";
 
 type Props = {
   habitats: PokopiaHabitat[];
@@ -68,15 +69,17 @@ export default function PokopiaHabitatsContent({
   return (
     <View className="flex-1 px-2 pt-4">
       {habitatsLoading ? (
-        <View className="items-center justify-center mt-6">
-          <ActivityIndicator />
-          <Text className="mt-2 text-sm text-slate-300">Loading Pokopia habitats…</Text>
-        </View>
+        <PokopiaLoadingState label="Loading Pokopia habitats…" />
       ) : habitatsError ? (
         <View className="rounded-3xl border border-rose-500/30 bg-rose-500/10 px-4 py-4">
           <Text className="text-sm font-semibold text-rose-200">Habitats unavailable</Text>
           <Text className="mt-1 text-[12px] leading-5 text-rose-100/90">{habitatsError}</Text>
         </View>
+      ) : !groupedHabitats.some(({ items }) => items.length) ? (
+        <PokopiaEmptyState
+          title="No habitats to show"
+          message="There are no Pokopia habitats available right now."
+        />
       ) : (
         groupedHabitats.map(({ groupLabel, items }) => {
           if (!items.length) return null;

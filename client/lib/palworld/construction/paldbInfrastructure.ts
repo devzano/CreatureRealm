@@ -46,6 +46,14 @@ export type InfrastructureDetail = InfrastructureIndexItem & {
   treant: TreantNode | null;
 };
 
+const INDEX_TTL = 1000 * 60 * 10;
+const DETAIL_TTL = 1000 * 60 * 10;
+let infrastructureListCache: InfrastructureIndexItem[] | null = null;
+let infrastructureListCacheAt = 0;
+let infrastructureListPending: Promise<InfrastructureIndexItem[]> | null = null;
+const infrastructureDetailCache = new Map<string, { at: number; data: InfrastructureDetail }>();
+const infrastructureDetailPending = new Map<string, Promise<InfrastructureDetail>>();
+
 const BASE_EN = "https://paldb.cc/en";
 
 function normalizeSlug(slugOrHref: string) {
@@ -363,50 +371,88 @@ function parseCardListPage(html: string): InfrastructureIndexItem[] {
 // Public API
 // -----------------------------
 
-export async function fetchInfrastructureList(): Promise<InfrastructureIndexItem[]> {
-  const res = await fetch(infrastructureUrl(), {
-    method: "GET",
-    headers: { "accept-language": "en-US,en;q=0.9" },
-  });
+export async function fetchInfrastructureList(opts?: { force?: boolean }): Promise<InfrastructureIndexItem[]> {
+  const force = !!opts?.force;
+  const now = Date.now();
+  if (!force && infrastructureListCache && now - infrastructureListCacheAt < INDEX_TTL) return infrastructureListCache;
+  if (!force && infrastructureListPending) return infrastructureListPending;
 
-  if (!res.ok) throw new Error(`PalDB Infrastructure list failed: ${res.status}`);
-  const html = await res.text();
-  return parseCardListPage(html);
+  const request = (async () => {
+    const res = await fetch(infrastructureUrl(), {
+      method: "GET",
+      headers: { "accept-language": "en-US,en;q=0.9" },
+    });
+
+    if (!res.ok) throw new Error(`PalDB Infrastructure list failed: ${res.status}`);
+    const html = await res.text();
+    const parsed = parseCardListPage(html);
+    infrastructureListCache = parsed;
+    infrastructureListCacheAt = Date.now();
+    return parsed;
+  })();
+
+  infrastructureListPending = request;
+  try {
+    return await request;
+  } finally {
+    if (infrastructureListPending === request) infrastructureListPending = null;
+  }
 }
 
 export async function fetchInfrastructureDetail(slug: string): Promise<InfrastructureDetail> {
   const s = cleanKey(slug);
   if (!s) throw new Error("fetchInfrastructureDetail: missing slug");
 
-  // 1) list page
-  const list = await fetchInfrastructureList();
-  const fromList = list.find((x) => x.slug === s) ?? null;
+  const now = Date.now();
+  const cached = infrastructureDetailCache.get(s);
+  if (cached && now - cached.at < DETAIL_TTL) return cached.data;
 
-  // 2) detail page for treant
-  const url = normalizeDetailHref(s) ?? infrastructureDetailUrl(s);
-  const res = await fetch(url, { method: "GET", headers: { "accept-language": "en-US,en;q=0.9" } });
+  const pending = infrastructureDetailPending.get(s);
+  if (pending) return pending;
 
-  if (!res.ok) {
-    if (fromList) return { ...fromList, treant: null };
-    throw new Error(`PalDB Infrastructure detail failed: ${res.status}`);
+  const request = (async () => {
+    const list = await fetchInfrastructureList();
+    const fromList = list.find((x) => x.slug === s) ?? null;
+
+    const url = normalizeDetailHref(s) ?? infrastructureDetailUrl(s);
+    const res = await fetch(url, { method: "GET", headers: { "accept-language": "en-US,en;q=0.9" } });
+
+    let detail: InfrastructureDetail;
+    if (!res.ok) {
+      if (fromList) {
+        detail = { ...fromList, treant: null };
+      } else {
+        throw new Error(`PalDB Infrastructure detail failed: ${res.status}`);
+      }
+    } else {
+      const html = await res.text();
+      const treant = parseTreantTreeFromPage(html);
+
+      detail = fromList
+        ? { ...fromList, treant }
+        : {
+            slug: s,
+            name: cleanKey(s.replace(/_/g, " ")),
+            iconUrl: null,
+            categoryText: "Infrastructure",
+            technologyLevel: null,
+            healing: null,
+            san: null,
+            workSuitability: null,
+            description: null,
+            recipe: [],
+            treant,
+          };
+    }
+
+    infrastructureDetailCache.set(s, { at: Date.now(), data: detail });
+    return detail;
+  })();
+
+  infrastructureDetailPending.set(s, request);
+  try {
+    return await request;
+  } finally {
+    if (infrastructureDetailPending.get(s) === request) infrastructureDetailPending.delete(s);
   }
-
-  const html = await res.text();
-  const treant = parseTreantTreeFromPage(html);
-
-  if (fromList) return { ...fromList, treant };
-
-  return {
-    slug: s,
-    name: cleanKey(s.replace(/_/g, " ")),
-    iconUrl: null,
-    categoryText: "Infrastructure",
-    technologyLevel: null,
-    healing: null,
-    san: null,
-    workSuitability: null,
-    description: null,
-    recipe: [],
-    treant,
-  };
 }

@@ -28,7 +28,8 @@ import { capitalize, humanizeSlug } from "@/components/Pokemon/PokemonDetails/he
 import { usePokemonDetailData } from "@/components/Pokemon/PokemonDetails/helpers/usePokemonDetailData";
 import { useSpeciesDexSlots } from "@/components/Pokemon/PokemonDetails/helpers/useSpeciesDexSlots";
 import PokemonOverviewSection from "@/components/Pokemon/PokemonDetails/PokemonOverviewSection";
-import PokopiaFavoriteDetailSheet from "@/components/Pokemon/PokopiaGame/pokopiaFavoriteDetailSheet";
+import PokopiaFavoriteChip from "@/components/Pokemon/PokopiaGame/PokopiaFavoriteChip";
+import PokopiaFavoriteDetailSheet from "@/components/Pokemon/PokopiaGame/PokopiaFavoriteDetailSheet";
 import { POKOPIA_COLORS } from "@/components/Pokemon/PokopiaGame/config";
 
 type RouteParams = {
@@ -697,13 +698,12 @@ function PokopiaPokemonDetailScreen({
                   ? detail.favoriteLinks
                   : detail.favorites.map((value) => ({ label: value, href: undefined as string | undefined }))
               ).map((entry) => (
-                <Pressable
+                <PokopiaFavoriteChip
                   key={`${entry.label}-${entry.href ?? ""}`}
+                  label={entry.label}
+                  href={entry.href}
                   onPress={() => openFavoriteSheet(entry.label, entry.href)}
-                  className="mr-2 mb-2 rounded-full bg-slate-900 border border-slate-700 px-3 py-1.5"
-                >
-                  <Text className="text-[11px] font-semibold text-slate-100">{entry.label}</Text>
-                </Pressable>
+                />
               ))}
             </View>
           </View>

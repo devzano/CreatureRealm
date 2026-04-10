@@ -5,7 +5,10 @@ import { Ionicons } from "@expo/vector-icons";
 
 import type { CollectibleCategoryFilter, CollectibleSubcategoryFilter } from "./config";
 import { COLLECTIBLE_CATEGORY_FILTERS, POKOPIA_COLORS } from "./config";
-import PokopiaFavoriteDetailSheet from "./pokopiaFavoriteDetailSheet";
+import PokopiaFavoriteChip from "./PokopiaFavoriteChip";
+import PokopiaFavoriteDetailSheet from "./PokopiaFavoriteDetailSheet";
+import PokopiaItemVariantStrip from "./PokopiaItemVariantStrip";
+import { PokopiaEmptyState, PokopiaLoadingState } from "./PokopiaContentStates";
 import type { PokopiaCollectibleDetail } from "@/lib/pokemon/pokopia/collectibleDetail";
 import { resolveFavoriteSlug } from "@/lib/pokemon/pokopia/favoriteUtils";
 import type { PokopiaCollectible } from "@/lib/pokemon/pokopia/collectibles";
@@ -83,7 +86,10 @@ export default function PokopiaCollectiblesContent({
   const openFavoriteSheet = useCallback((label: string) => {
     setSelectedFavoriteLabel(label);
     setSelectedFavoriteSlug(resolveFavoriteSlug(label));
-    setFavoriteSheetVisible(true);
+    setSheetVisible(false);
+    setTimeout(() => {
+      setFavoriteSheetVisible(true);
+    }, 120);
   }, []);
 
   const closeFavoriteSheet = useCallback(() => {
@@ -167,15 +173,17 @@ export default function PokopiaCollectiblesContent({
       </View>
 
       {collectiblesLoading ? (
-        <View className="items-center justify-center mt-6">
-          <ActivityIndicator />
-          <Text className="mt-2 text-sm text-slate-300">Loading Pokopia collectibles…</Text>
-        </View>
+        <PokopiaLoadingState label="Loading Pokopia collectibles…" />
       ) : collectiblesError ? (
         <View className="rounded-3xl border border-rose-500/30 bg-rose-500/10 px-4 py-4">
           <Text className="text-sm font-semibold text-rose-200">Collectibles unavailable</Text>
           <Text className="mt-1 text-[12px] leading-5 text-rose-100/90">{collectiblesError}</Text>
         </View>
+      ) : !filteredCollectibles.length ? (
+        <PokopiaEmptyState
+          title="No collectibles to show"
+          message="Try a different category, subcategory, or search term."
+        />
       ) : (
         <View className="flex-row flex-wrap -mx-1">
           {filteredCollectibles.map((collectible) => (
@@ -233,7 +241,10 @@ export default function PokopiaCollectiblesContent({
               {displayCollectible?.imageUrl ? (
                 <View className="w-14 h-14 rounded-2xl overflow-hidden bg-slate-900 border border-slate-700 p-1">
                   <ExpoImage
-                    source={{ uri: displayCollectible.imageUrl }}
+                    source={{
+                      uri:
+                        selectedCollectibleItemDetail?.imageUrl || displayCollectible.imageUrl,
+                    }}
                     style={{ width: "100%", height: "100%" }}
                     contentFit="contain"
                     transition={120}
@@ -273,6 +284,8 @@ export default function PokopiaCollectiblesContent({
             </View>
           ) : selectedCollectibleItemDetail ? (
             <>
+              <PokopiaItemVariantStrip variants={selectedCollectibleItemDetail.variantImages} />
+
               {selectedCollectibleItemDetail.description ? (
                 <View className="rounded-3xl bg-slate-950 border border-slate-800 px-4 py-3 mb-4">
                   <Text className="text-[13px] leading-5 text-slate-300">
@@ -319,13 +332,7 @@ export default function PokopiaCollectiblesContent({
                   </Text>
                   <View className="flex-row flex-wrap">
                     {selectedCollectibleItemDetail.favoriteTags.map((tag) => (
-                      <Pressable
-                        key={tag}
-                        onPress={() => openFavoriteSheet(tag)}
-                        className="px-2.5 py-1 rounded-full mr-2 mb-2 bg-slate-900 border border-slate-700"
-                      >
-                        <Text className="text-[11px] text-slate-200">{tag}</Text>
-                      </Pressable>
+                      <PokopiaFavoriteChip key={tag} label={tag} onPress={() => openFavoriteSheet(tag)} />
                     ))}
                   </View>
                 </View>

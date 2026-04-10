@@ -1,5 +1,7 @@
-import { ActivityIndicator, Pressable, Text, View } from "react-native";
+import React, { useCallback, useRef, useState } from "react";
+import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
 import { Image as ExpoImage } from "expo-image";
+import { Ionicons } from "@expo/vector-icons";
 
 import type { PokopiaCloudIslandsPage } from "@/lib/pokemon/pokopia/cloudIslands";
 import type { PokopiaDreamIslandDetail } from "@/lib/pokemon/pokopia/dreamIslandDetail";
@@ -8,8 +10,9 @@ import type { PokopiaEventDetail } from "@/lib/pokemon/pokopia/eventDetail";
 import type { PokopiaEventsPage } from "@/lib/pokemon/pokopia/events";
 import type { PokopiaGuideDetail } from "@/lib/pokemon/pokopia/guideDetail";
 import type { PokopiaGuidesPage } from "@/lib/pokemon/pokopia/guides";
-
-import { POKOPIA_INFO_CARDS, type PokopiaInfoSection } from "./config";
+import type { PokopiaInfoSection } from "./config";
+import BottomSheetModal from "@/components/ui/BottomSheetModal";
+import { PokopiaEmptyState, PokopiaLoadingState } from "./PokopiaContentStates";
 
 type Props = {
   selectedInfoSection: PokopiaInfoSection;
@@ -46,12 +49,43 @@ type Props = {
   onClearGuide: () => void;
 };
 
-function SectionError({ title, message }: { title: string; message: string }) {
+function SectionError({ title, message }: { title: string; message: string; }) {
   return (
-    <View className="rounded-3xl border border-rose-500/30 bg-rose-500/10 px-4 py-4">
+    <View className="rounded-3xl border border-rose-500/30 bg-rose-500/10 px-4 py-4 mb-3">
       <Text className="text-sm font-semibold text-rose-200">{title}</Text>
       <Text className="mt-1 text-[12px] leading-5 text-rose-100/90">{message}</Text>
     </View>
+  );
+}
+
+function SectionHeader({
+  label,
+  count,
+  expanded,
+  onToggle,
+}: {
+  label: string;
+  count?: number | null;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onToggle}
+      className="flex-row items-center justify-between px-1 mb-3"
+    >
+      <View className="flex-row items-baseline gap-2">
+        <Text className="text-[16px] font-black text-white">{label}</Text>
+        {count != null ? (
+          <Text className="text-[12px] text-slate-400">
+            {count} {count === 1 ? "entry" : "entries"}
+          </Text>
+        ) : null}
+      </View>
+      <Text className="text-slate-400 text-[13px] font-bold">
+        {expanded ? "▲" : "▼"}
+      </Text>
+    </Pressable>
   );
 }
 
@@ -80,8 +114,6 @@ function DetailBlockText({
 }
 
 export default function PokopiaInfoContent({
-  selectedInfoSection,
-  onSelectInfoSection,
   cloudIslandsPage,
   cloudIslandsLoading,
   cloudIslandsError,
@@ -113,406 +145,902 @@ export default function PokopiaInfoContent({
   onSelectGuide,
   onClearGuide,
 }: Props) {
-  const renderIslandsSection = () => (
-    <>
-      {selectedDreamIslandSlug ? (
-        <View className="mb-4">
-          <Pressable
-            onPress={onClearDreamIsland}
-            className="self-start mb-3 px-3 py-2 rounded-2xl border border-slate-700 bg-slate-900/80"
-          >
-            <Text className="text-[12px] font-semibold text-slate-100">Back to Islands</Text>
-          </Pressable>
+  const [islandsExpanded, setIslandsExpanded] = useState(true);
+  const [eventsExpanded, setEventsExpanded] = useState(true);
+  const [guidesExpanded, setGuidesExpanded] = useState(true);
+  const [sheetVisible, setSheetVisible] = useState(false);
+  const [sheetContentType, setSheetContentType] = useState<"dream" | "cloud" | "event" | "guide" | null>(null);
+  const [selectedCloudIslandSlug, setSelectedCloudIslandSlug] = useState<string | null>(null);
+  const [selectedCloudIslandPreview, setSelectedCloudIslandPreview] = useState<
+    PokopiaCloudIslandsPage["islands"][number] | null
+  >(null);
+  const [selectedDreamIslandPreview, setSelectedDreamIslandPreview] = useState<
+    PokopiaDreamIslandsPage["islands"][number] | null
+  >(null);
+  const [selectedEventPreview, setSelectedEventPreview] = useState<
+    PokopiaEventsPage["entries"][number] | null
+  >(null);
+  const [selectedGuidePreview, setSelectedGuidePreview] = useState<
+    PokopiaGuidesPage["entries"][number] | null
+  >(null);
+  const lastCloudIslandRef = useRef<PokopiaCloudIslandsPage["islands"][number] | null>(null);
+  const lastDreamIslandRef = useRef<PokopiaDreamIslandsPage["islands"][number] | null>(null);
+  const lastEventRef = useRef<PokopiaEventsPage["entries"][number] | null>(null);
+  const lastGuideRef = useRef<PokopiaGuidesPage["entries"][number] | null>(null);
 
-          {selectedDreamIslandLoading ? (
-            <View className="items-center justify-center mt-6">
-              <ActivityIndicator />
-              <Text className="mt-2 text-sm text-slate-300">Loading dream island detail…</Text>
-            </View>
-          ) : selectedDreamIslandError ? (
-            <SectionError title="Dream island unavailable" message={selectedDreamIslandError} />
-          ) : selectedDreamIslandDetail ? (
-            <View className="rounded-3xl bg-slate-950 p-4 border border-slate-800">
-              <View className="w-full rounded-2xl overflow-hidden bg-[#3b2a1d] border border-[#6f4a24] mb-4" style={{ aspectRatio: 16 / 9 }}>
-                {selectedDreamIslandDetail.imageUrl ? (
-                  <ExpoImage source={{ uri: selectedDreamIslandDetail.imageUrl }} style={{ width: "100%", height: "100%" }} contentFit="cover" transition={120} />
-                ) : (
-                  <View className="flex-1 items-center justify-center">
-                    <Text className="text-5xl text-[#d9b8a2]">?</Text>
+  const totalIslands =
+    (dreamIslandsPage?.islands.length ?? 0) +
+    (cloudIslandsPage?.islands.length ?? 0);
+
+  const selectedCloudIsland =
+    cloudIslandsPage?.islands.find((item) => item.slug === selectedCloudIslandSlug) ?? null;
+
+  const displayCloudIsland =
+    selectedCloudIsland ?? selectedCloudIslandPreview ?? lastCloudIslandRef.current;
+  const displayDreamIsland =
+    selectedDreamIslandPreview ?? lastDreamIslandRef.current;
+  const displayEvent =
+    selectedEventPreview ?? lastEventRef.current;
+  const displayGuide =
+    selectedGuidePreview ?? lastGuideRef.current;
+
+  const openDreamIslandSheet = useCallback(
+    (island: PokopiaDreamIslandsPage["islands"][number]) => {
+      lastDreamIslandRef.current = island;
+      setSelectedDreamIslandPreview(island);
+      setSheetContentType("dream");
+      setSheetVisible(true);
+      onSelectDreamIsland(island.slug);
+    },
+    [onSelectDreamIsland]
+  );
+
+  const openCloudIslandSheet = useCallback(
+    (island: PokopiaCloudIslandsPage["islands"][number]) => {
+      lastCloudIslandRef.current = island;
+      setSelectedCloudIslandPreview(island);
+      setSelectedCloudIslandSlug(island.slug);
+      setSheetContentType("cloud");
+      setSheetVisible(true);
+    },
+    []
+  );
+
+  const openEventSheet = useCallback(
+    (event: PokopiaEventsPage["entries"][number]) => {
+      lastEventRef.current = event;
+      setSelectedEventPreview(event);
+      setSheetContentType("event");
+      setSheetVisible(true);
+      onSelectEvent(event.slug);
+    },
+    [onSelectEvent]
+  );
+
+  const openGuideSheet = useCallback(
+    (guide: PokopiaGuidesPage["entries"][number]) => {
+      lastGuideRef.current = guide;
+      setSelectedGuidePreview(guide);
+      setSheetContentType("guide");
+      setSheetVisible(true);
+      onSelectGuide(guide.slug);
+    },
+    [onSelectGuide]
+  );
+
+  const closeIslandSheet = useCallback(() => {
+    setSheetVisible(false);
+    setSheetContentType(null);
+    setSelectedCloudIslandSlug(null);
+    setSelectedCloudIslandPreview(null);
+    setSelectedDreamIslandPreview(null);
+    setSelectedEventPreview(null);
+    setSelectedGuidePreview(null);
+    onClearDreamIsland();
+    onClearEvent();
+    onClearGuide();
+  }, [onClearDreamIsland, onClearEvent, onClearGuide]);
+
+
+
+  // ─── All Sections ──────────────────────────────────────────────────────────
+  return (
+    <View className="flex-1 px-2 pt-4">
+
+      {/* ── Islands ── */}
+      <View className="mb-2">
+        <SectionHeader
+          label="Islands"
+          count={totalIslands || null}
+          expanded={islandsExpanded}
+          onToggle={() => setIslandsExpanded((v) => !v)}
+        />
+
+        {islandsExpanded ? (
+          dreamIslandsLoading || cloudIslandsLoading ? (
+            <PokopiaLoadingState label="Loading islands…" />
+          ) : dreamIslandsError || cloudIslandsError ? (
+            <SectionError
+              title="Islands unavailable"
+              message={dreamIslandsError || cloudIslandsError || "Failed to load islands."}
+            />
+          ) : !totalIslands ? (
+            <PokopiaEmptyState title="No islands" message="No Pokopia islands available right now." />
+          ) : (
+            <>
+              {(dreamIslandsPage?.islands.length ?? 0) > 0 ? (
+                <>
+                  <Text className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400 mb-2 px-1">
+                    Dream Islands
+                  </Text>
+                  <View className="flex-row flex-wrap -mx-1">
+                    {dreamIslandsPage!.islands.map((island) => (
+                      <View key={island.slug} className="w-1/2 px-1 mb-2">
+                        <Pressable
+                          onPress={() => openDreamIslandSheet(island)}
+                          className="overflow-hidden rounded-[26px] border border-white/10 bg-[#111827]"
+                        >
+                          <View style={{ aspectRatio: 16 / 11 }} className="relative bg-slate-900">
+                            {island.imageUrl ? (
+                              <ExpoImage
+                                source={{ uri: island.imageUrl }}
+                                style={{ width: "100%", height: "100%" }}
+                                contentFit="cover"
+                                transition={120}
+                              />
+                            ) : (
+                              <View className="flex-1 items-center justify-center bg-slate-800">
+                                <Text className="text-4xl text-slate-500">?</Text>
+                              </View>
+                            )}
+
+                            <View className="absolute inset-0 bg-black/25" />
+
+                            <View className="absolute left-3 right-3 top-3 flex-row items-start justify-between gap-2">
+                              <View className="rounded-full border border-white/15 bg-black/35 px-2.5 py-1">
+                                <Text className="text-[9px] font-black uppercase tracking-[0.2em] text-white">
+                                  Dream
+                                </Text>
+                              </View>
+
+                              <View className="rounded-full border border-sky-300/20 bg-sky-400/15 px-2.5 py-1">
+                                <Text className="text-[10px] font-semibold text-sky-100">
+                                  {island.materials.length + island.dolls.length}
+                                </Text>
+                              </View>
+                            </View>
+
+                            <View className="absolute bottom-0 left-0 right-0 px-3 pb-3 pt-8">
+                              <View className="rounded-[20px] border border-white/10 bg-black/40 px-3 py-2.5">
+                                <Text className="text-[18px] font-black text-white" numberOfLines={2}>
+                                  {island.name}
+                                </Text>
+                              </View>
+                            </View>
+                          </View>
+                        </Pressable>
+                      </View>
+                    ))}
                   </View>
-                )}
-              </View>
-
-              <Text className="text-[24px] font-semibold text-slate-50">{selectedDreamIslandDetail.name}</Text>
-              {selectedDreamIslandDetail.description ? (
-                <Text className="text-[13px] leading-6 text-slate-300 mt-3 mb-5">{selectedDreamIslandDetail.description}</Text>
+                </>
               ) : null}
 
-              <Text className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#d49361] mb-3">Primary Materials</Text>
-              <View className="flex-row flex-wrap mb-5">
-                {selectedDreamIslandDetail.materials.map((item) => (
-                  <View key={`detail-material-${item.slug}`} className="w-1/3 pr-2 mb-2">
-                    <View className="rounded-2xl bg-[#4d2d14] border border-[#8f5a2b] px-2 py-3 items-center min-h-[112px]">
-                      <View className="w-12 h-12 mb-2">
-                        <ExpoImage source={{ uri: item.imageUrl }} style={{ width: "100%", height: "100%" }} contentFit="contain" transition={120} />
-                      </View>
-                      <Text className="text-[11px] text-[#f4e5d7] text-center font-medium">{item.name}</Text>
-                    </View>
-                  </View>
-                ))}
-              </View>
+              {(cloudIslandsPage?.islands.length ?? 0) > 0 ? (
+                <>
+                  <Text className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400 mb-2 px-1 mt-1">
+                    Cloud Islands
+                  </Text>
+                  <View className="flex-row flex-wrap -mx-1">
+                    {cloudIslandsPage!.islands.map((island) => (
+                      <View key={island.slug} className="w-1/2 px-1 mb-2">
+                        <Pressable
+                          onPress={() => openCloudIslandSheet(island)}
+                          className="overflow-hidden rounded-[26px] border border-white/10 bg-[#0f172a]"
+                        >
+                          <View style={{ aspectRatio: 16 / 11 }} className="relative bg-slate-900">
+                            {island.imageUrl ? (
+                              <ExpoImage
+                                source={{ uri: island.imageUrl }}
+                                style={{ width: "100%", height: "100%" }}
+                                contentFit="cover"
+                                transition={120}
+                              />
+                            ) : (
+                              <View className="flex-1 items-center justify-center bg-slate-800">
+                                <Text className="text-4xl text-slate-500">☁️</Text>
+                              </View>
+                            )}
 
-              <Text className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#d49361] mb-3">Dolls</Text>
-              <View className="flex-row flex-wrap">
-                {selectedDreamIslandDetail.dolls.map((item) => (
-                  <View key={`detail-doll-${item.slug}`} className="w-1/3 pr-2 mb-2">
-                    <View className="rounded-2xl bg-[#4d2d14] border border-[#8f5a2b] px-2 py-3 items-center min-h-[128px]">
-                      <View className="w-12 h-12 mb-2">
-                        <ExpoImage source={{ uri: item.imageUrl }} style={{ width: "100%", height: "100%" }} contentFit="contain" transition={120} />
+                            <View className="absolute inset-0 bg-black/20" />
+
+                            <View className="absolute left-3 right-3 top-3 flex-row items-start justify-between gap-2">
+                              <View className="rounded-full border border-white/15 bg-black/35 px-2.5 py-1">
+                                <Text className="text-[9px] font-black uppercase tracking-[0.2em] text-white">
+                                  Cloud
+                                </Text>
+                              </View>
+
+                              {island.likes ? (
+                                <View className="rounded-full border border-sky-300/20 bg-sky-400/15 px-2.5 py-1">
+                                  <Text className="text-[10px] font-semibold text-sky-100">
+                                    ♡ {island.likes}
+                                  </Text>
+                                </View>
+                              ) : null}
+                            </View>
+
+                            <View className="absolute bottom-0 left-0 right-0 px-3 pb-3 pt-8">
+                              <View className="rounded-[20px] border border-white/10 bg-black/40 px-3 py-2.5">
+                                <Text className="text-[18px] font-black text-white" numberOfLines={2}>
+                                  {island.name}
+                                </Text>
+                                {island.code ? (
+                                  <Text className="mt-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-sky-100" numberOfLines={1}>
+                                    {island.code}
+                                  </Text>
+                                ) : null}
+                              </View>
+                            </View>
+                          </View>
+                        </Pressable>
                       </View>
-                      <Text className="text-[11px] text-[#f4e5d7] text-center font-medium">{item.name}</Text>
-                      {item.badge ? (
-                        <View className="mt-2 rounded-full px-2 py-1" style={{ backgroundColor: item.badge === "Guaranteed" ? "#c8741f" : "#7b6c66" }}>
-                          <Text className="text-[10px] font-semibold text-white">{item.badge}</Text>
+                    ))}
+                  </View>
+                </>
+              ) : null}
+            </>
+          )
+        ) : null}
+      </View>
+
+      {/* ── Events ── */}
+      <View className="mb-2">
+        <SectionHeader
+          label="Events"
+          count={eventsPage?.entries.length ?? null}
+          expanded={eventsExpanded}
+          onToggle={() => setEventsExpanded((v) => !v)}
+        />
+
+        {eventsExpanded ? (
+          eventsLoading ? (
+            <PokopiaLoadingState label="Loading events…" />
+          ) : eventsError ? (
+            <SectionError title="Events unavailable" message={eventsError} />
+          ) : !eventsPage?.entries.length ? (
+            <PokopiaEmptyState title="No events" message="No Pokopia events available right now." />
+          ) : (
+            <View className="flex-row flex-wrap -mx-1">
+              {eventsPage.entries.map((entry) => (
+                <View key={entry.slug} className="w-1/2 px-1 mb-2">
+                  <Pressable
+                    onPress={() => openEventSheet(entry)}
+                    className="overflow-hidden rounded-[26px] border border-fuchsia-400/15 bg-[#140f1e]"
+                  >
+                    <View style={{ aspectRatio: 16 / 11 }} className="relative bg-slate-900">
+                      {entry.imageUrl ? (
+                        <ExpoImage
+                          source={{ uri: entry.imageUrl }}
+                          style={{ width: "100%", height: "100%" }}
+                          contentFit="cover"
+                          transition={120}
+                        />
+                      ) : (
+                        <View className="flex-1 items-center justify-center bg-slate-800">
+                          <Text className="text-4xl text-slate-500">★</Text>
                         </View>
-                      ) : null}
+                      )}
+
+                      <View className="absolute inset-0 bg-black/30" />
+
+                      <View className="absolute left-3 right-3 top-3 flex-row items-start justify-between gap-2">
+                        <View className="rounded-full border border-white/15 bg-black/35 px-2.5 py-1">
+                          <Text className="text-[9px] font-black uppercase tracking-[0.2em] text-white">
+                            Event
+                          </Text>
+                        </View>
+
+                        {entry.dateLabel ? (
+                          <View className="rounded-full border border-fuchsia-300/20 bg-fuchsia-400/15 px-2.5 py-1">
+                            <Text className="text-[10px] font-semibold text-fuchsia-100" numberOfLines={1}>
+                              {entry.dateLabel}
+                            </Text>
+                          </View>
+                        ) : null}
+                      </View>
+
+                      <View className="absolute bottom-0 left-0 right-0 px-3 pb-3 pt-8">
+                        <View className="rounded-[20px] border border-white/10 bg-black/40 px-3 py-2.5">
+                          <Text className="text-[16px] font-extrabold leading-5 text-slate-100" numberOfLines={2}>
+                            {entry.title}
+                          </Text>
+                        </View>
+                      </View>
                     </View>
-                  </View>
-                ))}
-              </View>
-            </View>
-          ) : null}
-        </View>
-      ) : null}
 
-      {!selectedDreamIslandSlug ? (
-        <View className="rounded-3xl border border-slate-800 bg-slate-950/90 p-4 mb-4">
-          <Text className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Islands</Text>
-          <Text className="text-lg font-bold text-slate-50 mt-1">Dream & Cloud Islands</Text>
-          <Text className="text-sm text-slate-300 mt-1">
-            Explore both Dream Islands and Cloud Islands in the same in-app Pokopia flow.
-          </Text>
-          {[dreamIslandsPage?.countLabel, cloudIslandsPage?.countLabel].filter(Boolean).length ? (
-            <Text className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400 mt-3">
-              {[dreamIslandsPage?.countLabel, cloudIslandsPage?.countLabel].filter(Boolean).join(" · ")}
-            </Text>
-          ) : null}
-        </View>
-      ) : null}
-
-      {!selectedDreamIslandSlug && (dreamIslandsLoading || cloudIslandsLoading) ? (
-        <View className="items-center justify-center mt-6">
-          <ActivityIndicator />
-          <Text className="mt-2 text-sm text-slate-300">Loading islands…</Text>
-        </View>
-      ) : !selectedDreamIslandSlug && (dreamIslandsError || cloudIslandsError) ? (
-        <SectionError title="Islands unavailable" message={dreamIslandsError || cloudIslandsError || "Failed to load islands."} />
-      ) : !selectedDreamIslandSlug ? (
-        <>
-          <Text className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400 mb-2 px-1">
-            Dream Islands
-          </Text>
-          {dreamIslandsPage?.islands.map((island) => (
-            <Pressable key={island.slug} onPress={() => onSelectDreamIsland(island.slug)} className="rounded-3xl bg-slate-950 p-4 border mb-4 border-slate-800">
-            <View className="w-full rounded-2xl overflow-hidden bg-[#3b2a1d] border border-[#6f4a24] mb-4" style={{ aspectRatio: 16 / 9 }}>
-              {island.imageUrl ? (
-                <ExpoImage source={{ uri: island.imageUrl }} style={{ width: "100%", height: "100%" }} contentFit="cover" transition={120} />
-              ) : (
-                <View className="flex-1 items-center justify-center">
-                  <Text className="text-5xl text-[#d9b8a2]">?</Text>
-                </View>
-              )}
-            </View>
-
-            <Text className="text-[22px] font-semibold text-slate-50 mb-4">{island.name}</Text>
-
-            <Text className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#d49361] mb-3">Primary Materials</Text>
-            <View className="flex-row flex-wrap mb-5">
-              {island.materials.map((item) => (
-                <View key={`${island.slug}-material-${item.slug}`} className="w-1/3 pr-2 mb-2">
-                  <View className="rounded-2xl bg-[#4d2d14] border border-[#8f5a2b] px-2 py-3 items-center min-h-[112px]">
-                    <View className="w-12 h-12 mb-2">
-                      <ExpoImage source={{ uri: item.imageUrl }} style={{ width: "100%", height: "100%" }} contentFit="contain" transition={120} />
+                    <View className="p-3">
+                      <View className="min-h-[92px] rounded-[20px] border border-fuchsia-400/15 bg-fuchsia-400/8 p-2.5">
+                        <Text className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-fuchsia-200">
+                          Overview
+                        </Text>
+                        {entry.summary ? (
+                          <Text className="text-[12px] leading-5 text-slate-200" numberOfLines={4}>
+                            {entry.summary}
+                          </Text>
+                        ) : (
+                          <Text className="text-[12px] leading-5 text-slate-400">
+                            Tap to explore event details.
+                          </Text>
+                        )}
+                      </View>
                     </View>
-                    <Text className="text-[11px] text-[#f4e5d7] text-center font-medium">{item.name}</Text>
-                  </View>
+                  </Pressable>
                 </View>
               ))}
             </View>
+          )
+        ) : null}
+      </View>
 
-            <Text className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#d49361] mb-3">Dolls</Text>
-            <View className="flex-row flex-wrap">
-              {island.dolls.map((item) => (
-                <View key={`${island.slug}-doll-${item.slug}`} className="w-1/3 pr-2 mb-2">
-                  <View className="rounded-2xl bg-[#4d2d14] border border-[#8f5a2b] px-2 py-3 items-center min-h-[128px]">
-                    <View className="w-12 h-12 mb-2">
-                      <ExpoImage source={{ uri: item.imageUrl }} style={{ width: "100%", height: "100%" }} contentFit="contain" transition={120} />
+      {/* ── Guides ── */}
+      <View className="mb-4">
+        <SectionHeader
+          label="Guides"
+          count={guidesPage?.entries.length ?? null}
+          expanded={guidesExpanded}
+          onToggle={() => setGuidesExpanded((v) => !v)}
+        />
+
+        {guidesExpanded ? (
+          guidesLoading ? (
+            <PokopiaLoadingState label="Loading guides…" />
+          ) : guidesError ? (
+            <SectionError title="Guides unavailable" message={guidesError} />
+          ) : !guidesPage?.entries.length ? (
+            <PokopiaEmptyState title="No guides" message="No Pokopia guides available right now." />
+          ) : (
+            <View className="flex-row flex-wrap -mx-1">
+              {guidesPage.entries.map((entry) => (
+                <View key={entry.slug} className="w-1/2 px-1 mb-2">
+                  <Pressable
+                    onPress={() => openGuideSheet(entry)}
+                    className="overflow-hidden rounded-[26px] border border-cyan-400/15 bg-[#0d1720]"
+                  >
+                    <View style={{ aspectRatio: 16 / 11 }} className="relative overflow-hidden bg-[#10202b]">
+                      <View className="absolute inset-0 bg-[#10202b]" />
+                      <View className="absolute -top-8 -right-8 h-28 w-28 rounded-full bg-cyan-400/18" />
+                      <View className="absolute top-10 -left-6 h-20 w-20 rounded-full bg-sky-400/14" />
+                      <View className="absolute bottom-3 right-8 h-16 w-16 rounded-full bg-teal-300/10" />
+                      <View className="absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-cyan-300/10 to-transparent" />
+                      <View className="absolute inset-x-0 bottom-0 h-24 bg-black/20" />
+
+                      <View className="absolute left-3 right-3 top-3 flex-row items-start justify-between gap-2">
+                        <View className="rounded-full border border-white/15 bg-black/35 px-2.5 py-1">
+                          <Text className="text-[9px] font-black uppercase tracking-[0.2em] text-white">
+                            Guide
+                          </Text>
+                        </View>
+
+                        {entry.dateLabel ? (
+                          <View className="rounded-full border border-cyan-300/20 bg-cyan-400/15 px-2.5 py-1">
+                            <Text className="text-[10px] font-semibold text-cyan-100" numberOfLines={1}>
+                              {entry.dateLabel}
+                            </Text>
+                          </View>
+                        ) : null}
+                      </View>
+
+                      <View className="absolute bottom-0 left-0 right-0 px-3 pb-3 pt-8">
+                        <View className="rounded-[20px] border border-white/10 bg-black/30 px-3 py-2.5">
+                          <Text className="text-[16px] font-extrabold leading-5 text-slate-100" numberOfLines={2}>
+                            {entry.title}
+                          </Text>
+                        </View>
+                      </View>
                     </View>
-                    <Text className="text-[11px] text-[#f4e5d7] text-center font-medium">{item.name}</Text>
-                    {item.badge ? (
-                      <View className="mt-2 rounded-full px-2 py-1" style={{ backgroundColor: item.badge === "Guaranteed" ? "#c8741f" : "#7b6c66" }}>
-                        <Text className="text-[10px] font-semibold text-white">{item.badge}</Text>
+
+                    <View className="p-3">
+                      <View className="min-h-[92px] rounded-[20px] border border-cyan-400/15 bg-cyan-400/8 p-2.5">
+                        <Text className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-cyan-200">
+                          Summary
+                        </Text>
+                        {entry.summary ? (
+                          <Text className="text-[12px] leading-5 text-slate-200" numberOfLines={4}>
+                            {entry.summary}
+                          </Text>
+                        ) : (
+                          <Text className="text-[12px] leading-5 text-slate-400">
+                            Tap to read the guide.
+                          </Text>
+                        )}
+                      </View>
+                    </View>
+                  </Pressable>
+                </View>
+              ))}
+            </View>
+          )
+        ) : null}
+      </View>
+
+      <BottomSheetModal
+        visible={sheetVisible}
+        onRequestClose={closeIslandSheet}
+        sheetStyle={{ maxHeight: "92%", minHeight: 420, paddingBottom: 10 }}
+      >
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          bounces
+          contentContainerStyle={{ paddingBottom: 32 }}
+        >
+          <View className="flex-row items-center justify-between mb-4">
+            <View className="flex-1 pr-3">
+              <Text className="text-slate-50 text-[16px] font-semibold" numberOfLines={2}>
+                {sheetContentType === "dream"
+                  ? displayDreamIsland?.name ?? selectedDreamIslandDetail?.name ?? "Dream Island"
+                  : sheetContentType === "cloud"
+                    ? displayCloudIsland?.name ?? "Cloud Island"
+                    : sheetContentType === "event"
+                      ? displayEvent?.title ?? selectedEventDetail?.title ?? "Event"
+                      : displayGuide?.title ?? selectedGuideDetail?.title ?? "Guide"}
+              </Text>
+              <Text className="text-slate-400 text-[12px] mt-0.5" numberOfLines={2}>
+                {sheetContentType === "dream"
+                  ? "Dream Island details"
+                  : sheetContentType === "cloud"
+                    ? "Cloud Island details"
+                    : sheetContentType === "event"
+                      ? "Event details"
+                      : "Guide details"}
+              </Text>
+            </View>
+
+            <Pressable
+              onPress={closeIslandSheet}
+              className="h-10 w-10 items-center justify-center rounded-full border border-slate-700 bg-slate-900"
+            >
+              <Ionicons name="close" size={20} color="white" />
+            </Pressable>
+          </View>
+
+          {sheetContentType === "dream" ? (
+            selectedDreamIslandLoading ? (
+              <View className="items-center justify-center py-8">
+                <ActivityIndicator />
+                <Text className="mt-2 text-sm text-slate-300">Loading dream island…</Text>
+              </View>
+            ) : selectedDreamIslandError ? (
+              <View className="rounded-3xl border border-rose-500/30 bg-rose-500/10 px-4 py-4 mb-4">
+                <Text className="text-sm font-semibold text-rose-200">Dream island unavailable</Text>
+                <Text className="mt-1 text-[12px] leading-5 text-rose-100/90">
+                  {selectedDreamIslandError}
+                </Text>
+              </View>
+            ) : selectedDreamIslandDetail ? (
+              <View className="overflow-hidden rounded-[30px] border border-white/10 bg-[#111827]">
+                <View style={{ aspectRatio: 16 / 10 }} className="relative bg-slate-900">
+                  {selectedDreamIslandDetail.imageUrl ? (
+                    <ExpoImage
+                      source={{ uri: selectedDreamIslandDetail.imageUrl }}
+                      style={{ width: "100%", height: "100%" }}
+                      contentFit="cover"
+                      transition={120}
+                    />
+                  ) : (
+                    <View className="flex-1 items-center justify-center bg-slate-800">
+                      <Text className="text-5xl text-slate-500">?</Text>
+                    </View>
+                  )}
+
+                  <View className="absolute inset-0 bg-black/25" />
+
+                  <View className="absolute left-4 right-4 top-4 flex-row items-start justify-between gap-2">
+                    <View className="rounded-full border border-white/15 bg-black/35 px-3 py-1.5">
+                      <Text className="text-[10px] font-black uppercase tracking-[0.22em] text-white">
+                        Dream Island
+                      </Text>
+                    </View>
+
+                    <View className="rounded-full border border-sky-300/20 bg-sky-400/15 px-3 py-1.5">
+                      <Text className="text-[11px] font-semibold text-sky-100">
+                        {selectedDreamIslandDetail.materials.length + selectedDreamIslandDetail.dolls.length} collectibles
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View className="absolute bottom-0 left-0 right-0 px-4 pb-4 pt-10">
+                    <View className="rounded-[24px] border border-white/10 bg-black/40 px-4 py-3">
+                      <Text className="text-[24px] font-black text-white">
+                        {selectedDreamIslandDetail.name}
+                      </Text>
+                      {selectedDreamIslandDetail.description ? (
+                        <Text className="mt-1 text-[12px] leading-5 text-slate-200">
+                          {selectedDreamIslandDetail.description}
+                        </Text>
+                      ) : null}
+                    </View>
+                  </View>
+                </View>
+
+                <View className="p-4">
+                  <View className="rounded-[24px] border border-emerald-400/15 bg-emerald-400/8 p-3 mb-3">
+                    <View className="mb-3 flex-row items-center justify-between">
+                      <Text className="text-[11px] font-black uppercase tracking-[0.18em] text-emerald-200">
+                        Materials
+                      </Text>
+                      <Text className="text-[11px] text-slate-400">
+                        {selectedDreamIslandDetail.materials.length} total
+                      </Text>
+                    </View>
+
+                    <View className="flex-row flex-wrap -mx-1">
+                      {selectedDreamIslandDetail.materials.map((item) => (
+                        <View key={`detail-material-${item.slug}`} className="w-1/3 px-1 mb-2">
+                          <View className="min-h-[108px] items-center rounded-[20px] border border-white/10 bg-white/5 px-2 py-3">
+                            <View className="mb-2 h-11 w-11 items-center justify-center rounded-2xl bg-black/20">
+                              <ExpoImage
+                                source={{ uri: item.imageUrl }}
+                                style={{ width: 30, height: 30 }}
+                                contentFit="contain"
+                                transition={120}
+                              />
+                            </View>
+                            <Text className="text-center text-[11px] font-semibold leading-4 text-slate-100">
+                              {item.name}
+                            </Text>
+                          </View>
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+
+                  <View className="rounded-[24px] border border-amber-400/15 bg-amber-400/8 p-3">
+                    <View className="mb-3 flex-row items-center justify-between">
+                      <Text className="text-[11px] font-black uppercase tracking-[0.18em] text-amber-200">
+                        Dolls
+                      </Text>
+                      <Text className="text-[11px] text-slate-400">
+                        {selectedDreamIslandDetail.dolls.length} total
+                      </Text>
+                    </View>
+
+                    <View className="flex-row flex-wrap -mx-1">
+                      {selectedDreamIslandDetail.dolls.map((item) => (
+                        <View key={`detail-doll-${item.slug}`} className="w-1/3 px-1 mb-2">
+                          <View className="min-h-[126px] items-center rounded-[20px] border border-white/10 bg-white/5 px-2 py-3">
+                            <View className="mb-2 h-11 w-11 items-center justify-center rounded-2xl bg-black/20">
+                              <ExpoImage
+                                source={{ uri: item.imageUrl }}
+                                style={{ width: 30, height: 30 }}
+                                contentFit="contain"
+                                transition={120}
+                              />
+                            </View>
+                            <Text className="text-center text-[11px] font-semibold leading-4 text-slate-100">
+                              {item.name}
+                            </Text>
+                            {item.badge ? (
+                              <View className="mt-2 rounded-full bg-amber-400/15 px-2.5 py-1 border border-amber-300/15">
+                                <Text className="text-[9px] font-semibold text-amber-100" numberOfLines={1}>
+                                  {item.badge}
+                                </Text>
+                              </View>
+                            ) : null}
+                          </View>
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+                </View>
+              </View>
+            ) : null
+          ) : sheetContentType === "cloud" ? (
+            displayCloudIsland ? (
+              <View className="overflow-hidden rounded-[30px] border border-white/10 bg-[#0f172a]">
+                <View style={{ aspectRatio: 16 / 10 }} className="relative bg-slate-900">
+                  {displayCloudIsland.imageUrl ? (
+                    <ExpoImage
+                      source={{ uri: displayCloudIsland.imageUrl }}
+                      style={{ width: "100%", height: "100%" }}
+                      contentFit="cover"
+                      transition={120}
+                    />
+                  ) : (
+                    <View className="flex-1 items-center justify-center bg-slate-800">
+                      <Text className="text-5xl text-slate-500">☁️</Text>
+                    </View>
+                  )}
+
+                  <View className="absolute inset-0 bg-black/20" />
+
+                  <View className="absolute left-4 right-4 top-4 flex-row items-start justify-between gap-2">
+                    <View className="rounded-full border border-white/15 bg-black/35 px-3 py-1.5">
+                      <Text className="text-[10px] font-black uppercase tracking-[0.22em] text-white">
+                        Cloud Island
+                      </Text>
+                    </View>
+
+                    {displayCloudIsland.likes ? (
+                      <View className="rounded-full border border-sky-300/20 bg-sky-400/15 px-3 py-1.5">
+                        <Text className="text-[11px] font-semibold text-sky-100">
+                          ♡ {displayCloudIsland.likes}
+                        </Text>
                       </View>
                     ) : null}
                   </View>
+
+                  <View className="absolute bottom-0 left-0 right-0 px-4 pb-4 pt-10">
+                    <View className="rounded-[24px] border border-white/10 bg-black/40 px-4 py-3">
+                      <Text className="text-[24px] font-black text-white">
+                        {displayCloudIsland.name}
+                      </Text>
+                      {displayCloudIsland.code ? (
+                        <Text className="mt-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-sky-100">
+                          {displayCloudIsland.code}
+                        </Text>
+                      ) : null}
+                    </View>
+                  </View>
                 </View>
-                ))}
-              </View>
-            </Pressable>
-          ))}
 
-          <Text className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400 mb-2 px-1 mt-1">
-            Cloud Islands
-          </Text>
-          {cloudIslandsPage?.islands.map((island) => (
-            <View key={island.slug} className="rounded-3xl bg-slate-950 p-4 border mb-4 border-slate-800">
-              <View className="w-full rounded-2xl overflow-hidden bg-slate-900 border border-slate-700 mb-4" style={{ aspectRatio: 16 / 9 }}>
-                {island.imageUrl ? (
-                  <ExpoImage source={{ uri: island.imageUrl }} style={{ width: "100%", height: "100%" }} contentFit="cover" transition={120} />
-                ) : null}
-              </View>
+                <View className="p-4">
+                  <View className="rounded-[24px] border border-sky-400/15 bg-sky-400/8 p-3">
+                    <View className="mb-3 flex-row items-center justify-between">
+                      <Text className="text-[11px] font-black uppercase tracking-[0.18em] text-sky-200">
+                        Tags
+                      </Text>
+                      <Text className="text-[11px] text-slate-400">
+                        {displayCloudIsland.tags?.length ?? 0} total
+                      </Text>
+                    </View>
 
-              <Text className="text-[22px] font-semibold text-slate-50">{island.name}</Text>
-              {island.code ? (
-                <Text className="text-[13px] font-semibold tracking-[0.18em] text-amber-300 mt-2">
-                  {island.code}
+                    {displayCloudIsland.tags?.length ? (
+                      <View className="flex-row flex-wrap">
+                        {displayCloudIsland.tags.map((tag) => (
+                          <View
+                            key={`detail-cloud-${displayCloudIsland.slug}-${tag}`}
+                            className="mr-2 mb-2 rounded-full border border-white/10 bg-white/5 px-3 py-2"
+                          >
+                            <Text className="text-[11px] font-semibold text-slate-100">
+                              {tag}
+                            </Text>
+                          </View>
+                        ))}
+                      </View>
+                    ) : (
+                      <Text className="text-[12px] leading-5 text-slate-400">
+                        No tags available for this island.
+                      </Text>
+                    )}
+                  </View>
+                </View>
+              </View>
+            ) : (
+              <PokopiaEmptyState
+                title="Cloud island unavailable"
+                message="That cloud island could not be found right now."
+              />
+            )
+          ) : sheetContentType === "event" ? (
+            selectedEventLoading ? (
+              <View className="items-center justify-center py-8">
+                <ActivityIndicator />
+                <Text className="mt-2 text-sm text-slate-300">Loading event…</Text>
+              </View>
+            ) : selectedEventError ? (
+              <View className="rounded-3xl border border-rose-500/30 bg-rose-500/10 px-4 py-4 mb-4">
+                <Text className="text-sm font-semibold text-rose-200">Event unavailable</Text>
+                <Text className="mt-1 text-[12px] leading-5 text-rose-100/90">
+                  {selectedEventError}
                 </Text>
-              ) : null}
-
-              {island.tags.length ? (
-                <View className="flex-row flex-wrap mt-3">
-                  {island.tags.map((tag) => (
-                    <View
-                      key={`${island.slug}-${tag}`}
-                      className="px-2.5 py-1 rounded-full mr-2 mb-2 bg-slate-900 border border-slate-700"
-                    >
-                      <Text className="text-[11px] text-slate-200">{tag}</Text>
-                    </View>
-                  ))}
-                </View>
-              ) : null}
-
-              {island.likes ? (
-                <Text className="text-[11px] text-slate-400 mt-1">♡ {island.likes}</Text>
-              ) : null}
-            </View>
-          ))}
-        </>
-      ) : null}
-    </>
-  );
-
-  const renderEventsSection = () => (
-    <>
-      {selectedEventSlug ? (
-        <View className="mb-4">
-          <Pressable
-            onPress={onClearEvent}
-            className="self-start mb-3 px-3 py-2 rounded-2xl border border-slate-700 bg-slate-900/80"
-          >
-            <Text className="text-[12px] font-semibold text-slate-100">Back to Events</Text>
-          </Pressable>
-
-          {selectedEventLoading ? (
-            <View className="items-center justify-center mt-6">
-              <ActivityIndicator />
-              <Text className="mt-2 text-sm text-slate-300">Loading event detail…</Text>
-            </View>
-          ) : selectedEventError ? (
-            <SectionError title="Event unavailable" message={selectedEventError} />
-          ) : selectedEventDetail ? (
-            <View className="rounded-3xl bg-slate-950 p-4 border border-slate-800">
-              <Text className="text-[24px] font-semibold text-slate-50">{selectedEventDetail.title}</Text>
-              {selectedEventDetail.dateLabel ? (
-                <Text className="text-[12px] text-slate-400 mt-2">{selectedEventDetail.dateLabel}</Text>
-              ) : null}
-              {selectedEventDetail.heroImageUrl ? (
-                <View className="w-full rounded-2xl overflow-hidden bg-slate-900 mt-4" style={{ aspectRatio: 16 / 9 }}>
-                  <ExpoImage source={{ uri: selectedEventDetail.heroImageUrl }} style={{ width: "100%", height: "100%" }} contentFit="cover" transition={120} />
-                </View>
-              ) : null}
-              <View className="mt-4">
-                {selectedEventDetail.blocks.map((block, index) =>
-                  block.type === "image" ? (
-                    <View key={`event-image-${index}`} className="w-full rounded-2xl overflow-hidden bg-slate-900 mb-4" style={{ aspectRatio: 16 / 9 }}>
-                      <ExpoImage source={{ uri: block.imageUrl }} style={{ width: "100%", height: "100%" }} contentFit="cover" transition={120} />
-                    </View>
+              </View>
+            ) : selectedEventDetail ? (
+              <View className="overflow-hidden rounded-[30px] border border-white/10 bg-[#140f1e]">
+                <View style={{ aspectRatio: 16 / 10 }} className="relative bg-slate-900">
+                  {selectedEventDetail.heroImageUrl ? (
+                    <ExpoImage
+                      source={{ uri: selectedEventDetail.heroImageUrl }}
+                      style={{ width: "100%", height: "100%" }}
+                      contentFit="cover"
+                      transition={120}
+                    />
+                  ) : displayEvent?.imageUrl ? (
+                    <ExpoImage
+                      source={{ uri: displayEvent.imageUrl }}
+                      style={{ width: "100%", height: "100%" }}
+                      contentFit="cover"
+                      transition={120}
+                    />
                   ) : (
-                    <DetailBlockText key={`event-block-${index}`} type={block.type} text={block.text} />
-                  )
-                )}
-              </View>
-            </View>
-          ) : null}
-        </View>
-      ) : null}
-
-      {!selectedEventSlug ? (
-        <View className="rounded-3xl border border-slate-800 bg-slate-950/90 p-4 mb-4">
-          <Text className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Events</Text>
-          <Text className="text-lg font-bold text-slate-50 mt-1">{eventsPage?.title || "Events"}</Text>
-          <Text className="text-sm text-slate-300 mt-1">
-            {eventsPage?.description || "Guides and database information for limited-time events in Pokemon Pokopia."}
-          </Text>
-        </View>
-      ) : null}
-
-      {!selectedEventSlug && eventsLoading ? (
-        <View className="items-center justify-center mt-6">
-          <ActivityIndicator />
-          <Text className="mt-2 text-sm text-slate-300">Loading events…</Text>
-        </View>
-      ) : !selectedEventSlug && eventsError ? (
-        <SectionError title="Events unavailable" message={eventsError} />
-      ) : !selectedEventSlug ? (
-        eventsPage?.entries.map((entry) => (
-          <Pressable key={entry.slug} onPress={() => onSelectEvent(entry.slug)} className="rounded-3xl bg-slate-950 p-0 border mb-4 border-slate-800 overflow-hidden">
-            {entry.imageUrl ? (
-              <View className="w-full bg-slate-900" style={{ aspectRatio: 16 / 9 }}>
-                <ExpoImage source={{ uri: entry.imageUrl }} style={{ width: "100%", height: "100%" }} contentFit="cover" transition={120} />
-              </View>
-            ) : null}
-            <View className="p-4">
-              {entry.dateLabel ? (
-                <Text className="text-[12px] text-slate-400 mb-2">{entry.dateLabel}</Text>
-              ) : null}
-              <Text className="text-[22px] font-semibold text-slate-50 leading-7">{entry.title}</Text>
-              {entry.summary ? (
-                <Text className="text-[13px] leading-6 text-slate-300 mt-3">{entry.summary}</Text>
-              ) : null}
-              <Text className="text-[12px] font-semibold text-sky-300 mt-4">View event →</Text>
-            </View>
-          </Pressable>
-        ))
-      ) : null}
-    </>
-  );
-
-  const renderGuidesSection = () => (
-    <>
-      {selectedGuideSlug ? (
-        <View className="mb-4">
-          <Pressable
-            onPress={onClearGuide}
-            className="self-start mb-3 px-3 py-2 rounded-2xl border border-slate-700 bg-slate-900/80"
-          >
-            <Text className="text-[12px] font-semibold text-slate-100">Back to Guides</Text>
-          </Pressable>
-
-          {selectedGuideLoading ? (
-            <View className="items-center justify-center mt-6">
-              <ActivityIndicator />
-              <Text className="mt-2 text-sm text-slate-300">Loading guide detail…</Text>
-            </View>
-          ) : selectedGuideError ? (
-            <SectionError title="Guide unavailable" message={selectedGuideError} />
-          ) : selectedGuideDetail ? (
-            <View className="rounded-3xl bg-slate-950 p-4 border border-slate-800">
-              <Text className="text-[24px] font-semibold text-slate-50">{selectedGuideDetail.title}</Text>
-              {selectedGuideDetail.dateLabel ? (
-                <Text className="text-[12px] text-slate-400 mt-2">{selectedGuideDetail.dateLabel}</Text>
-              ) : null}
-              <View className="mt-4">
-                {selectedGuideDetail.blocks.map((block, index) =>
-                  block.type === "image" ? (
-                    <View key={`guide-image-${index}`} className="w-full rounded-2xl overflow-hidden bg-slate-900 mb-4" style={{ aspectRatio: 16 / 9 }}>
-                      <ExpoImage source={{ uri: block.imageUrl }} style={{ width: "100%", height: "100%" }} contentFit="cover" transition={120} />
+                    <View className="flex-1 items-center justify-center bg-slate-800">
+                      <Text className="text-5xl text-slate-500">★</Text>
                     </View>
-                  ) : (
-                    <DetailBlockText key={`guide-block-${index}`} type={block.type} text={block.text} />
-                  )
-                )}
+                  )}
+
+                  <View className="absolute inset-0 bg-black/30" />
+
+                  <View className="absolute left-4 right-4 top-4 flex-row items-start justify-between gap-2">
+                    <View className="rounded-full border border-white/15 bg-black/35 px-3 py-1.5">
+                      <Text className="text-[10px] font-black uppercase tracking-[0.22em] text-white">
+                        Event
+                      </Text>
+                    </View>
+
+                    {selectedEventDetail.dateLabel ? (
+                      <View className="rounded-full border border-fuchsia-300/20 bg-fuchsia-400/15 px-3 py-1.5">
+                        <Text className="text-[10px] font-semibold text-fuchsia-100">
+                          {selectedEventDetail.dateLabel}
+                        </Text>
+                      </View>
+                    ) : null}
+                  </View>
+
+                  <View className="absolute bottom-0 left-0 right-0 px-4 pb-4 pt-10">
+                    <View className="rounded-[24px] border border-white/10 bg-black/40 px-4 py-3">
+                      <Text className="text-[24px] font-black text-white">
+                        {selectedEventDetail.title}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+
+                <View className="p-4">
+                  {selectedEventDetail.blocks.map((block, index) =>
+                    block.type === "image" ? (
+                      <View
+                        key={`event-image-${index}`}
+                        className="w-full overflow-hidden rounded-[24px] border border-white/10 bg-slate-900 mb-3"
+                        style={{ aspectRatio: 16 / 9 }}
+                      >
+                        <ExpoImage
+                          source={{ uri: block.imageUrl }}
+                          style={{ width: "100%", height: "100%" }}
+                          contentFit="cover"
+                          transition={120}
+                        />
+                      </View>
+                    ) : block.type === "heading" ? (
+                      <View
+                        key={`event-block-${index}`}
+                        className="mb-3 rounded-[22px] border border-fuchsia-400/15 bg-fuchsia-400/8 px-4 py-3"
+                      >
+                        <Text className="text-[18px] font-black text-fuchsia-100">
+                          {block.text}
+                        </Text>
+                      </View>
+                    ) : block.type === "subheading" ? (
+                      <Text
+                        key={`event-block-${index}`}
+                        className="text-[14px] font-bold uppercase tracking-[0.14em] text-fuchsia-200 mt-1 mb-2"
+                      >
+                        {block.text}
+                      </Text>
+                    ) : block.type === "list-item" ? (
+                      <View
+                        key={`event-block-${index}`}
+                        className="mb-2 rounded-[18px] border border-white/8 bg-white/5 px-3 py-3"
+                      >
+                        <Text className="text-[13px] leading-6 text-slate-200">
+                          • {block.text}
+                        </Text>
+                      </View>
+                    ) : (
+                      <View
+                        key={`event-block-${index}`}
+                        className="mb-3 rounded-[20px] border border-white/8 bg-white/5 px-4 py-3"
+                      >
+                        <Text className="text-[13px] leading-6 text-slate-200">
+                          {block.text}
+                        </Text>
+                      </View>
+                    )
+                  )}
+                </View>
               </View>
-            </View>
-          ) : null}
-        </View>
-      ) : null}
-
-      {!selectedGuideSlug ? (
-        <View className="rounded-3xl border border-slate-800 bg-slate-950/90 p-4 mb-4">
-          <Text className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Guides</Text>
-          <Text className="text-lg font-bold text-slate-50 mt-1">{guidesPage?.title || "Guides"}</Text>
-          <Text className="text-sm text-slate-300 mt-1">
-            {guidesPage?.description || "Tips, strategies, and walkthroughs for Pokemon Pokopia."}
-          </Text>
-        </View>
-      ) : null}
-
-      {!selectedGuideSlug && guidesLoading ? (
-        <View className="items-center justify-center mt-6">
-          <ActivityIndicator />
-          <Text className="mt-2 text-sm text-slate-300">Loading guides…</Text>
-        </View>
-      ) : !selectedGuideSlug && guidesError ? (
-        <SectionError title="Guides unavailable" message={guidesError} />
-      ) : !selectedGuideSlug ? (
-        guidesPage?.entries.map((entry) => (
-          <Pressable key={entry.slug} onPress={() => onSelectGuide(entry.slug)} className="rounded-3xl bg-slate-950 p-4 border mb-4 border-slate-800 min-h-[200px]">
-            {entry.dateLabel ? (
-              <Text className="text-[12px] text-slate-400 mb-3">{entry.dateLabel}</Text>
-            ) : null}
-            <Text className="text-[22px] font-semibold text-slate-50 leading-7">{entry.title}</Text>
-            {entry.summary ? (
-              <Text className="text-[13px] leading-6 text-slate-300 mt-3">{entry.summary}</Text>
-            ) : null}
-            <Text className="text-[12px] font-semibold text-sky-300 mt-auto pt-4">Read guide →</Text>
-          </Pressable>
-        ))
-      ) : null}
-    </>
-  );
-
-  return (
-    <View className="flex-1 px-2 pt-4">
-      {selectedInfoSection !== "overview" ? (
-        <Pressable
-          onPress={() => onSelectInfoSection("overview")}
-          className="self-start mb-3 px-3 py-2 rounded-2xl border border-slate-700 bg-slate-900/80"
-        >
-          <Text className="text-[12px] font-semibold text-slate-100">Back to Info</Text>
-        </Pressable>
-      ) : null}
-
-      {selectedInfoSection === "overview" ? (
-        <>
-          <View className="rounded-3xl border border-slate-800 bg-slate-950/90 p-4 mb-4">
-            <Text className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Pokopia Info</Text>
-            <Text className="text-lg font-bold text-slate-50 mt-1">Explore Pokopia Info</Text>
-            <Text className="text-sm text-slate-300 mt-1">
-              Browse dream islands, cloud islands, limited-time events, and written guides in the same in-app Pokopia flow.
-            </Text>
-          </View>
-
-          {POKOPIA_INFO_CARDS.map((card) => {
-            const count =
-              card.id === "islands"
-                ? (dreamIslandsPage?.islands.length ?? 0) + (cloudIslandsPage?.islands.length ?? 0) || card.count
-                : card.id === "events"
-                  ? eventsPage?.entries.length ?? card.count
-                  : guidesPage?.entries.length ?? card.count;
-
-            return (
-              <Pressable
-                key={card.id}
-                onPress={() => onSelectInfoSection(card.id)}
-                className="rounded-3xl bg-slate-950 p-4 border mb-3 border-slate-800"
-              >
-                <Text className="text-[15px] font-semibold text-slate-50">{card.title}</Text>
-                <Text className="text-[12px] leading-5 text-slate-300 mt-2">{card.subtitle}</Text>
-                <Text className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400 mt-3">
-                  {count} entries
+            ) : null
+          ) : sheetContentType === "guide" ? (
+            selectedGuideLoading ? (
+              <View className="items-center justify-center py-8">
+                <ActivityIndicator />
+                <Text className="mt-2 text-sm text-slate-300">Loading guide…</Text>
+              </View>
+            ) : selectedGuideError ? (
+              <View className="rounded-3xl border border-rose-500/30 bg-rose-500/10 px-4 py-4 mb-4">
+                <Text className="text-sm font-semibold text-rose-200">Guide unavailable</Text>
+                <Text className="mt-1 text-[12px] leading-5 text-rose-100/90">
+                  {selectedGuideError}
                 </Text>
-              </Pressable>
-            );
-          })}
-        </>
-      ) : selectedInfoSection === "islands" ? (
-        renderIslandsSection()
-      ) : selectedInfoSection === "events" ? (
-        renderEventsSection()
-      ) : (
-        renderGuidesSection()
-      )}
+              </View>
+            ) : selectedGuideDetail ? (
+              <View className="overflow-hidden rounded-[30px] border border-white/10 bg-[#0d1720]">
+                <View className="relative min-h-[180px] overflow-hidden bg-[#10202b] px-4 pt-4 pb-5">
+                  <View className="absolute inset-0 bg-[#10202b]" />
+                  <View className="absolute -top-10 -right-10 h-36 w-36 rounded-full bg-cyan-400/18" />
+                  <View className="absolute top-12 -left-8 h-24 w-24 rounded-full bg-sky-400/14" />
+                  <View className="absolute bottom-4 right-10 h-20 w-20 rounded-full bg-teal-300/10" />
+                  <View className="absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-cyan-300/10 to-transparent" />
+                  <View className="absolute inset-x-0 bottom-0 h-24 bg-black/20" />
+
+                  <View className="relative flex-row items-start justify-between gap-2">
+                    <View className="rounded-full border border-white/15 bg-black/35 px-3 py-1.5">
+                      <Text className="text-[10px] font-black uppercase tracking-[0.22em] text-white">
+                        Guide
+                      </Text>
+                    </View>
+
+                    {selectedGuideDetail.dateLabel ? (
+                      <View className="rounded-full border border-cyan-300/20 bg-cyan-400/15 px-3 py-1.5">
+                        <Text className="text-[10px] font-semibold text-cyan-100">
+                          {selectedGuideDetail.dateLabel}
+                        </Text>
+                      </View>
+                    ) : null}
+                  </View>
+
+                  <View className="relative mt-10 rounded-[24px] border border-white/10 bg-black/28 px-4 py-4">
+                    <Text className="text-[20px] font-extrabold text-slate-100">
+                      {selectedGuideDetail.title}
+                    </Text>
+                  </View>
+                </View>
+
+                <View className="p-4">
+                  {selectedGuideDetail.blocks.map((block, index) =>
+                    block.type === "image" ? (
+                      <View
+                        key={`guide-image-${index}`}
+                        className="w-full overflow-hidden rounded-[24px] border border-white/10 bg-slate-900 mb-3"
+                        style={{ aspectRatio: 16 / 9 }}
+                      >
+                        <ExpoImage
+                          source={{ uri: block.imageUrl }}
+                          style={{ width: "100%", height: "100%" }}
+                          contentFit="cover"
+                          transition={120}
+                        />
+                      </View>
+                    ) : block.type === "heading" ? (
+                      <View
+                        key={`guide-block-${index}`}
+                        className="mb-3 rounded-[22px] border border-cyan-400/15 bg-cyan-400/8 px-4 py-3"
+                      >
+                        <Text className="text-[18px] font-black text-cyan-100">
+                          {block.text}
+                        </Text>
+                      </View>
+                    ) : block.type === "subheading" ? (
+                      <Text
+                        key={`guide-block-${index}`}
+                        className="text-[14px] font-bold uppercase tracking-[0.14em] text-cyan-200 mt-1 mb-2"
+                      >
+                        {block.text}
+                      </Text>
+                    ) : block.type === "list-item" ? (
+                      <View
+                        key={`guide-block-${index}`}
+                        className="mb-2 rounded-[18px] border border-white/8 bg-white/5 px-3 py-3"
+                      >
+                        <Text className="text-[13px] leading-6 text-slate-200">
+                          • {block.text}
+                        </Text>
+                      </View>
+                    ) : (
+                      <View
+                        key={`guide-block-${index}`}
+                        className="mb-3 rounded-[20px] border border-white/8 bg-white/5 px-4 py-3"
+                      >
+                        <Text className="text-[13px] leading-6 text-slate-200">
+                          {block.text}
+                        </Text>
+                      </View>
+                    )
+                  )}
+                </View>
+              </View>
+            ) : null
+          ) : null}
+        </ScrollView>
+      </BottomSheetModal>
     </View>
   );
 }

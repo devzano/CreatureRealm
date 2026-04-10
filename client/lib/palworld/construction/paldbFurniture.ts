@@ -42,6 +42,14 @@ export type FurnitureDetail = FurnitureIndexItem & {
   treant: TreantNode | null;
 };
 
+const INDEX_TTL = 1000 * 60 * 10;
+const DETAIL_TTL = 1000 * 60 * 10;
+let furnitureListCache: FurnitureIndexItem[] | null = null;
+let furnitureListCacheAt = 0;
+let furnitureListPending: Promise<FurnitureIndexItem[]> | null = null;
+const furnitureDetailCache = new Map<string, { at: number; data: FurnitureDetail }>();
+const furnitureDetailPending = new Map<string, Promise<FurnitureDetail>>();
+
 const BASE_EN = "https://paldb.cc/en";
 
 function normalizeSlug(slugOrHref: string) {
@@ -431,53 +439,91 @@ function parseCardListPage(html: string): FurnitureIndexItem[] {
 // Public API
 // -----------------------------
 
-export async function fetchFurnitureList(): Promise<FurnitureIndexItem[]> {
-  const res = await fetch(furnitureUrl(), {
-    method: "GET",
-    headers: {
-      "accept-language": "en-US,en;q=0.9",
-    },
-  });
+export async function fetchFurnitureList(opts?: { force?: boolean }): Promise<FurnitureIndexItem[]> {
+  const force = !!opts?.force;
+  const now = Date.now();
+  if (!force && furnitureListCache && now - furnitureListCacheAt < INDEX_TTL) return furnitureListCache;
+  if (!force && furnitureListPending) return furnitureListPending;
 
-  if (!res.ok) throw new Error(`PalDB Furniture list failed: ${res.status}`);
-  const html = await res.text();
-  return parseCardListPage(html);
+  const request = (async () => {
+    const res = await fetch(furnitureUrl(), {
+      method: "GET",
+      headers: {
+        "accept-language": "en-US,en;q=0.9",
+      },
+    });
+
+    if (!res.ok) throw new Error(`PalDB Furniture list failed: ${res.status}`);
+    const html = await res.text();
+    const parsed = parseCardListPage(html);
+    furnitureListCache = parsed;
+    furnitureListCacheAt = Date.now();
+    return parsed;
+  })();
+
+  furnitureListPending = request;
+  try {
+    return await request;
+  } finally {
+    if (furnitureListPending === request) furnitureListPending = null;
+  }
 }
 
 export async function fetchFurnitureDetail(slug: string): Promise<FurnitureDetail> {
   const s = cleanKey(slug);
   if (!s) throw new Error("fetchFurnitureDetail: missing slug");
 
-  // 1) List page data (fast + consistent)
-  const list = await fetchFurnitureList();
-  const fromList = list.find((x) => x.slug === s) ?? null;
+  const now = Date.now();
+  const cached = furnitureDetailCache.get(s);
+  if (cached && now - cached.at < DETAIL_TTL) return cached.data;
 
-  // 2) Detail page (treant)
-  const url = normalizeDetailHref(s) ?? furnitureDetailUrl(s);
-  const res = await fetch(url, {
-    method: "GET",
-    headers: { "accept-language": "en-US,en;q=0.9" },
-  });
+  const pending = furnitureDetailPending.get(s);
+  if (pending) return pending;
 
-  if (!res.ok) {
-    if (fromList) return { ...fromList, treant: null };
-    throw new Error(`PalDB Furniture detail failed: ${res.status}`);
+  const request = (async () => {
+    const list = await fetchFurnitureList();
+    const fromList = list.find((x) => x.slug === s) ?? null;
+
+    const url = normalizeDetailHref(s) ?? furnitureDetailUrl(s);
+    const res = await fetch(url, {
+      method: "GET",
+      headers: { "accept-language": "en-US,en;q=0.9" },
+    });
+
+    let detail: FurnitureDetail;
+    if (!res.ok) {
+      if (fromList) {
+        detail = { ...fromList, treant: null };
+      } else {
+        throw new Error(`PalDB Furniture detail failed: ${res.status}`);
+      }
+    } else {
+      const html = await res.text();
+      const treant = parseTreantTreeFromPage(html);
+
+      detail = fromList
+        ? { ...fromList, treant }
+        : {
+            slug: s,
+            name: cleanKey(s.replace(/_/g, " ")),
+            iconUrl: null,
+            categoryText: "Furniture",
+            technologyLevel: null,
+            workSuitability: null,
+            description: null,
+            recipe: [],
+            treant,
+          };
+    }
+
+    furnitureDetailCache.set(s, { at: Date.now(), data: detail });
+    return detail;
+  })();
+
+  furnitureDetailPending.set(s, request);
+  try {
+    return await request;
+  } finally {
+    if (furnitureDetailPending.get(s) === request) furnitureDetailPending.delete(s);
   }
-
-  const html = await res.text();
-  const treant = parseTreantTreeFromPage(html);
-
-  if (fromList) return { ...fromList, treant };
-
-  return {
-    slug: s,
-    name: cleanKey(s.replace(/_/g, " ")),
-    iconUrl: null,
-    categoryText: "Furniture",
-    technologyLevel: null,
-    workSuitability: null,
-    description: null,
-    recipe: [],
-    treant,
-  };
 }

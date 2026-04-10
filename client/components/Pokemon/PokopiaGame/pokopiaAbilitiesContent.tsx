@@ -6,6 +6,7 @@ import { Ionicons } from "@expo/vector-icons";
 import type { PokopiaAbilityDetail } from "@/lib/pokemon/pokopia/abilityDetail";
 import type { PokopiaAbility } from "@/lib/pokemon/pokopia/abilities";
 import BottomSheetModal from "@/components/ui/BottomSheetModal";
+import { PokopiaEmptyState, PokopiaLoadingState } from "./PokopiaContentStates";
 
 type Props = {
   abilities: PokopiaAbility[];
@@ -58,15 +59,17 @@ export default function PokopiaAbilitiesContent({
   return (
     <View className="flex-1 px-2 pt-4">
       {abilitiesLoading ? (
-        <View className="items-center justify-center mt-6">
-          <ActivityIndicator />
-          <Text className="mt-2 text-sm text-slate-300">Loading Pokopia abilities…</Text>
-        </View>
+        <PokopiaLoadingState label="Loading Pokopia abilities…" />
       ) : abilitiesError ? (
         <View className="rounded-3xl border border-rose-500/30 bg-rose-500/10 px-4 py-4">
           <Text className="text-sm font-semibold text-rose-200">Abilities unavailable</Text>
           <Text className="mt-1 text-[12px] leading-5 text-rose-100/90">{abilitiesError}</Text>
         </View>
+      ) : !abilities.length ? (
+        <PokopiaEmptyState
+          title="No abilities to show"
+          message="There are no Pokopia abilities available right now."
+        />
       ) : (
         <View className="flex-row flex-wrap -mx-1">
           {abilities.map((ability) => (

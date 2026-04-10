@@ -38,6 +38,14 @@ export type DefensesDetail = DefensesIndexItem & {
   treant: TreantNode | null;
 };
 
+const INDEX_TTL = 1000 * 60 * 10;
+const DETAIL_TTL = 1000 * 60 * 10;
+let defensesListCache: DefensesIndexItem[] | null = null;
+let defensesListCacheAt = 0;
+let defensesListPending: Promise<DefensesIndexItem[]> | null = null;
+const defensesDetailCache = new Map<string, { at: number; data: DefensesDetail }>();
+const defensesDetailPending = new Map<string, Promise<DefensesDetail>>();
+
 const BASE_EN = "https://paldb.cc/en";
 
 function normalizeSlug(slugOrHref: string) {
@@ -358,49 +366,89 @@ function parseCardListPage(html: string): DefensesIndexItem[] {
 // Public API
 // -----------------------------
 
-export async function fetchDefensesList(): Promise<DefensesIndexItem[]> {
-  const res = await fetch(defensesUrl(), {
-    method: "GET",
-    headers: { "accept-language": "en-US,en;q=0.9" },
-  });
+export async function fetchDefensesList(opts?: { force?: boolean }): Promise<DefensesIndexItem[]> {
+  const force = !!opts?.force;
+  const now = Date.now();
+  if (!force && defensesListCache && now - defensesListCacheAt < INDEX_TTL) return defensesListCache;
+  if (!force && defensesListPending) return defensesListPending;
 
-  if (!res.ok) throw new Error(`PalDB Defenses list failed: ${res.status}`);
-  const html = await res.text();
-  return parseCardListPage(html);
+  const request = (async () => {
+    const res = await fetch(defensesUrl(), {
+      method: "GET",
+      headers: { "accept-language": "en-US,en;q=0.9" },
+    });
+
+    if (!res.ok) throw new Error(`PalDB Defenses list failed: ${res.status}`);
+    const html = await res.text();
+    const parsed = parseCardListPage(html);
+    defensesListCache = parsed;
+    defensesListCacheAt = Date.now();
+    return parsed;
+  })();
+
+  defensesListPending = request;
+  try {
+    return await request;
+  } finally {
+    if (defensesListPending === request) defensesListPending = null;
+  }
 }
 
 export async function fetchDefensesDetail(slug: string): Promise<DefensesDetail> {
   const s = cleanKey(slug);
   if (!s) throw new Error("fetchDefensesDetail: missing slug");
 
-  const list = await fetchDefensesList();
-  const fromList = list.find((x) => x.slug === s) ?? null;
+  const now = Date.now();
+  const cached = defensesDetailCache.get(s);
+  if (cached && now - cached.at < DETAIL_TTL) return cached.data;
 
-  const url = normalizeDetailHref(s) ?? defensesDetailUrl(s);
-  const res = await fetch(url, {
-    method: "GET",
-    headers: { "accept-language": "en-US,en;q=0.9" },
-  });
+  const pending = defensesDetailPending.get(s);
+  if (pending) return pending;
 
-  if (!res.ok) {
-    if (fromList) return { ...fromList, treant: null };
-    throw new Error(`PalDB Defenses detail failed: ${res.status}`);
+  const request = (async () => {
+    const list = await fetchDefensesList();
+    const fromList = list.find((x) => x.slug === s) ?? null;
+
+    const url = normalizeDetailHref(s) ?? defensesDetailUrl(s);
+    const res = await fetch(url, {
+      method: "GET",
+      headers: { "accept-language": "en-US,en;q=0.9" },
+    });
+
+    let detail: DefensesDetail;
+    if (!res.ok) {
+      if (fromList) {
+        detail = { ...fromList, treant: null };
+      } else {
+        throw new Error(`PalDB Defenses detail failed: ${res.status}`);
+      }
+    } else {
+      const html = await res.text();
+      const treant = parseTreantTreeFromPage(html);
+
+      detail = fromList
+        ? { ...fromList, treant }
+        : {
+            slug: s,
+            name: cleanKey(s.replace(/_/g, " ")),
+            iconUrl: null,
+            categoryText: "Defenses",
+            technologyLevel: null,
+            workSuitability: null,
+            description: null,
+            recipe: [],
+            treant,
+          };
+    }
+
+    defensesDetailCache.set(s, { at: Date.now(), data: detail });
+    return detail;
+  })();
+
+  defensesDetailPending.set(s, request);
+  try {
+    return await request;
+  } finally {
+    if (defensesDetailPending.get(s) === request) defensesDetailPending.delete(s);
   }
-
-  const html = await res.text();
-  const treant = parseTreantTreeFromPage(html);
-
-  if (fromList) return { ...fromList, treant };
-
-  return {
-    slug: s,
-    name: cleanKey(s.replace(/_/g, " ")),
-    iconUrl: null,
-    categoryText: "Defenses",
-    technologyLevel: null,
-    workSuitability: null,
-    description: null,
-    recipe: [],
-    treant,
-  };
 }

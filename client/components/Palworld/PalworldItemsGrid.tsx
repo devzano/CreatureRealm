@@ -49,6 +49,7 @@ type PalworldItemsGridProps = {
   armor: ArmorIndexItem[];
 
   search: string;
+  isLoading?: boolean;
 };
 
 type CategoryKey =
@@ -143,6 +144,7 @@ const PalworldItemsGrid: React.FC<PalworldItemsGridProps> = ({
   accessories,
   armor,
   search,
+  isLoading = false,
 }) => {
   const normalizedSearch = (search ?? "").trim().toLowerCase();
 
@@ -658,6 +660,8 @@ const PalworldItemsGrid: React.FC<PalworldItemsGridProps> = ({
       totalShown={totalShown}
       totalAll={totalAll}
       categories={categories}
+      isLoading={isLoading}
+      loadingLabel="Loading item categories…"
       reorderEnabled={true}
       defaultOrder={DEFAULT_CATEGORY_ORDER}
       order={effectiveOrder}
