@@ -3,12 +3,10 @@ import type { PokopiaPlannerZoneId } from "@/store/pokopiaPlannerStore";
 export type PokopiaSection =
   | "dex"
   | "habitats"
-  | "favorites"
-  | "food"
+  | "themes"
   | "items"
   | "recipes"
-  | "abilities"
-  | "specialties"
+  | "traits"
   | "buildings"
   | "collectibles"
   | "info"
@@ -70,6 +68,15 @@ export type PokopiaFavoriteListItem = {
   slug: string;
   label: string;
   href: string;
+  iconUrl?: string;
+};
+
+export type PokopiaEffectListItem = {
+  slug: string;
+  label: string;
+  href: string;
+  iconUrl: string;
+  count: number;
 };
 
 export type PokopiaInfoCard = {
@@ -108,12 +115,10 @@ export const POKOPIA_COLORS = {
 export const POKOPIA_SECTION_CARDS: PokopiaSectionCard[] = [
   { id: "dex", title: "Pokédex", subtitle: "Track Pokopia roster progress.", count: 303 },
   { id: "habitats", title: "Habitats", subtitle: "Explore habitat and encounter data.", count: 212 },
-  { id: "favorites", title: "Favorites", subtitle: "Browse Pokemon likes and item themes.", count: 43 },
-  { id: "food", title: "Food", subtitle: "Browse flavors and food items.", count: 6 },
+  { id: "themes", title: "Filters", subtitle: "Browse favorites, effects, and food flavors.", count: 54 },
   { id: "items", title: "Items", subtitle: "Reference Pokopia item data.", count: 1208 },
   { id: "recipes", title: "Recipes", subtitle: "Review cooking and crafting recipes.", count: 714 },
-  { id: "abilities", title: "Abilities", subtitle: "Look up Pokopia ability systems.", count: 8 },
-  { id: "specialties", title: "Specialties", subtitle: "See specialties and role data.", count: 31 },
+  { id: "traits", title: "Abilities & Specialties", subtitle: "Browse move teaching and role data.", count: 39 },
   { id: "buildings", title: "Buildings", subtitle: "Browse structures and unlock paths.", count: 45 },
   { id: "collectibles", title: "Collectibles", subtitle: "Track collectibles outside the dex.", count: 287 },
   { id: "info", title: "Info", subtitle: "Browse Pokopia info pages and references.", count: 3 },
@@ -228,6 +233,52 @@ export const POKOPIA_PLANNER_ZONES: PokopiaPlannerZoneMeta[] = [
   },
 ];
 
+const POKOPIA_FAVORITE_ICON_BY_SLUG: Record<string, string> = {
+  "blocky-stuff": "https://pokopiadex.com/images/items/crafting_ui/iron-chair.png",
+  cleanliness: "https://pokopiadex.com/images/items/item_ui/bathtime-set.png",
+  "colorful-stuff": "https://pokopiadex.com/images/items/item_ui/pop-art-sofa.png",
+  "complicated-stuff": "https://pokopiadex.com/images/items/item_ui/polygonal-shelf.png",
+  construction: "https://pokopiadex.com/images/items/item_ui/lumber.png",
+  containers: "https://pokopiadex.com/images/items/item_ui/poke-ball-chest.png",
+  "cute-stuff": "https://pokopiadex.com/images/items/item_ui/cute-chair.png",
+  electronics: "https://pokopiadex.com/images/items/item_ui/munna-bank.png",
+  exercise: "https://pokopiadex.com/images/items/item_ui/bouncy-blue-bathtub.png",
+  fabric: "https://pokopiadex.com/images/items/item_ui/fluff.png",
+  garbage: "https://pokopiadex.com/images/items/item_ui/recycled-bread.png",
+  gatherings: "https://pokopiadex.com/images/items/item_ui/pop-art-table.png",
+  "glass-stuff": "https://pokopiadex.com/images/items/item_ui/wiggly-mirror.png",
+  "group-activities": "https://pokopiadex.com/images/items/item_ui/pop-art-sofa.png",
+  "hard-stuff": "https://pokopiadex.com/images/items/item_ui/iron-ingot.png",
+  healing: "https://pokopiadex.com/images/items/item_ui/lum-berry.png",
+  "letters-and-words": "https://pokopiadex.com/images/items/item_ui/berry-case.png",
+  "looks-like-food": "https://pokopiadex.com/images/items/item_ui/ribbon-cake.png",
+  "lots-of-dirt": "https://pokopiadex.com/images/items/item_ui/potato.png",
+  "lots-of-fire": "https://pokopiadex.com/images/items/crafting_ui/cooking-pot.png",
+  "lots-of-nature": "https://pokopiadex.com/images/items/item_ui/healthy-hedge-seeds.png",
+  "lots-of-water": "https://pokopiadex.com/images/items/item_ui/fresh-water.png",
+  luxury: "https://pokopiadex.com/images/items/item_ui/berry-bed.png",
+  "metal-stuff": "https://pokopiadex.com/images/items/item_ui/pokemetal.png",
+  "nice-breezes": "https://pokopiadex.com/images/items/item_ui/seaweed.png",
+  "noisy-stuff": "https://pokopiadex.com/images/items/item_ui/munna-bank.png",
+  "ocean-vibes": "https://pokopiadex.com/images/items/item_ui/seaweed.png",
+  "play-spaces": "https://pokopiadex.com/images/items/item_ui/bouncy-blue-bathtub.png",
+  "pretty-flowers": "https://pokopiadex.com/images/items/item_ui/healthy-hedge-seeds.png",
+  rides: "https://pokopiadex.com/images/items/item_ui/poke-ball-chest.png",
+  "round-stuff": "https://pokopiadex.com/images/items/item_ui/poke-ball-chest.png",
+  "sharp-stuff": "https://pokopiadex.com/images/items/item_ui/iron-ingot.png",
+  "shiny-stuff": "https://pokopiadex.com/images/items/item_ui/pokemetal.png",
+  "slender-objects": "https://pokopiadex.com/images/items/item_ui/wheat.png",
+  "soft-stuff": "https://pokopiadex.com/images/items/item_ui/pop-art-sofa.png",
+  "spinning-stuff": "https://pokopiadex.com/images/items/item_ui/poke-ball-chest.png",
+  "spooky-stuff": "https://pokopiadex.com/images/items/item_ui/munna-bank.png",
+  "stone-stuff": "https://pokopiadex.com/images/items/item_ui/potato.png",
+  "strange-stuff": "https://pokopiadex.com/images/items/item_ui/munna-bank.png",
+  symbols: "https://pokopiadex.com/images/items/item_ui/berry-case.png",
+  "watching-stuff": "https://pokopiadex.com/images/items/item_ui/wiggly-mirror.png",
+  "wobbly-stuff": "https://pokopiadex.com/images/items/item_ui/wiggly-mirror.png",
+  "wooden-stuff": "https://pokopiadex.com/images/items/item_ui/lumber.png",
+};
+
 export const POKOPIA_FAVORITES: PokopiaFavoriteListItem[] = [
   "Blocky stuff",
   "Cleanliness",
@@ -285,5 +336,18 @@ export const POKOPIA_FAVORITES: PokopiaFavoriteListItem[] = [
     slug,
     label,
     href: `https://pokopiadex.com/pokedex/favorites/${slug}`,
+    iconUrl: POKOPIA_FAVORITE_ICON_BY_SLUG[slug],
   };
 });
+
+export const POKOPIA_EFFECTS: PokopiaEffectListItem[] = [
+  { slug: "decoration", label: "Decoration", count: 172 },
+  { slug: "food", label: "Food", count: 46 },
+  { slug: "relaxation", label: "Relaxation", count: 68 },
+  { slug: "road", label: "Road", count: 55 },
+  { slug: "toy", label: "Toy", count: 55 },
+].map((effect) => ({
+  ...effect,
+  href: `https://pokopiadex.com/items?tag=${effect.slug}`,
+  iconUrl: `https://pokopiadex.com/images/icons/${effect.slug}.png`,
+}));

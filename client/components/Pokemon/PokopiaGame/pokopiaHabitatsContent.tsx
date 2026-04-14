@@ -66,6 +66,21 @@ export default function PokopiaHabitatsContent({
     [habitats]
   );
 
+  const isHabitatComplete = useCallback(
+    (habitat: PokopiaHabitat) =>
+      habitat.pokemon.length > 0 &&
+      habitat.pokemon.every((pokemon) => {
+        const speciesId =
+          resolveSpeciesId({
+            slug: pokemon.slug,
+            name: pokemon.name,
+          }) ?? (pokemon.id > 0 ? pokemon.id : null);
+
+        return speciesId != null && getCaughtState(speciesId);
+      }),
+    [getCaughtState, resolveSpeciesId]
+  );
+
   return (
     <View className="flex-1 px-2 pt-4">
       {habitatsLoading ? (
@@ -97,15 +112,54 @@ export default function PokopiaHabitatsContent({
 
               <View className="flex-row flex-wrap -mx-1">
                 {items.map((habitat) => (
-                  <View
-                    key={`${habitat.groupSlug}-${habitat.id}`}
-                    className="w-1/3 px-1 mb-2"
-                  >
+                  <View key={`${habitat.groupSlug}-${habitat.id}`} className="w-1/3 px-1 mb-2">
                     <Pressable
                       onPress={() => openSheet(habitat)}
                       className="rounded-3xl bg-slate-950 border border-slate-800 overflow-hidden"
                       style={{ minHeight: 168 }}
                     >
+                      {isHabitatComplete(habitat) ? (
+                        <View
+                          style={{
+                            position: "absolute",
+                            top: 10,
+                            left: 10,
+                            width: 24,
+                            height: 24,
+                            borderRadius: 12,
+                            backgroundColor: "#6DDA5F",
+                            borderWidth: 2,
+                            borderColor: "rgba(255,255,255,0.92)",
+                            zIndex: 2,
+                            overflow: "hidden",
+                          }}
+                        >
+                          <View
+                            style={{
+                              position: "absolute",
+                              left: 0,
+                              right: 0,
+                              top: 10,
+                              height: 2,
+                              backgroundColor: "rgba(255,255,255,0.95)",
+                            }}
+                          />
+                          <View
+                            style={{
+                              position: "absolute",
+                              top: 6,
+                              left: 6,
+                              width: 8,
+                              height: 8,
+                              borderRadius: 4,
+                              backgroundColor: "rgba(255,255,255,0.95)",
+                              borderWidth: 1.5,
+                              borderColor: "#6DDA5F",
+                            }}
+                          />
+                        </View>
+                      ) : null}
+
                       <View className="items-center justify-center pt-4 pb-2">
                         <View className="w-24 h-24 rounded-2xl overflow-hidden bg-slate-900 border border-slate-700">
                           <ExpoImage

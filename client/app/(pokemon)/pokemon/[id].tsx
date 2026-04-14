@@ -30,6 +30,7 @@ import { useSpeciesDexSlots } from "@/components/Pokemon/PokemonDetails/helpers/
 import PokemonOverviewSection from "@/components/Pokemon/PokemonDetails/PokemonOverviewSection";
 import PokopiaFavoriteChip from "@/components/Pokemon/PokopiaGame/PokopiaFavoriteChip";
 import PokopiaFavoriteDetailSheet from "@/components/Pokemon/PokopiaGame/PokopiaFavoriteDetailSheet";
+import PokopiaItemDetailSheet from "@/components/Pokemon/PokopiaGame/PokopiaItemDetailSheet";
 import { POKOPIA_COLORS } from "@/components/Pokemon/PokopiaGame/config";
 
 type RouteParams = {
@@ -496,6 +497,9 @@ function PokopiaPokemonDetailScreen({
   const [favoriteSheetVisible, setFavoriteSheetVisible] = useState(false);
   const [selectedFavoriteLabel, setSelectedFavoriteLabel] = useState<string | null>(null);
   const [selectedFavoriteSlug, setSelectedFavoriteSlug] = useState<string | null>(null);
+  const [selectedLovedItemSlug, setSelectedLovedItemSlug] = useState<string | null>(null);
+  const [selectedLovedItemName, setSelectedLovedItemName] = useState<string | null>(null);
+  const [selectedLovedItemImageUrl, setSelectedLovedItemImageUrl] = useState<string | null>(null);
 
   const speciesId = Number(id);
   const toggleCaught = usePokemonCollectionStore((s) => s.toggleCaught);
@@ -516,6 +520,18 @@ function PokopiaPokemonDetailScreen({
     setFavoriteSheetVisible(false);
     setSelectedFavoriteLabel(null);
     setSelectedFavoriteSlug(null);
+  };
+
+  const openLovedItemSheet = (item: { slug: string; name: string; imageUrl: string }) => {
+    setSelectedLovedItemSlug(item.slug);
+    setSelectedLovedItemName(item.name);
+    setSelectedLovedItemImageUrl(item.imageUrl);
+  };
+
+  const closeLovedItemSheet = () => {
+    setSelectedLovedItemSlug(null);
+    setSelectedLovedItemName(null);
+    setSelectedLovedItemImageUrl(null);
   };
 
   useEffect(() => {
@@ -781,7 +797,10 @@ function PokopiaPokemonDetailScreen({
                 <View className="flex-row flex-wrap -mx-1">
                   {group.items.map((item) => (
                     <View key={item.slug} className="w-1/3 px-1 mb-2">
-                      <View className="rounded-2xl bg-slate-950/80 border border-slate-800 p-2 items-center min-h-[120px]">
+                      <Pressable
+                        onPress={() => openLovedItemSheet(item)}
+                        className="rounded-2xl bg-slate-950/80 border border-slate-800 p-2 items-center min-h-[120px]"
+                      >
                         <ExpoImage
                           source={{ uri: item.imageUrl }}
                           style={{ width: 40, height: 40 }}
@@ -797,7 +816,7 @@ function PokopiaPokemonDetailScreen({
                             {item.tags.join(" • ")}
                           </Text>
                         ) : null}
-                      </View>
+                      </Pressable>
                     </View>
                   ))}
                 </View>
@@ -848,6 +867,16 @@ function PokopiaPokemonDetailScreen({
         favoriteLabel={selectedFavoriteLabel}
         favoriteSlug={selectedFavoriteSlug}
         onRequestClose={closeFavoriteSheet}
+      />
+
+      <PokopiaItemDetailSheet
+        visible={!!selectedLovedItemSlug}
+        itemSlug={selectedLovedItemSlug}
+        itemName={selectedLovedItemName}
+        itemImageUrl={selectedLovedItemImageUrl}
+        subtitle="Loved Item"
+        collectKind="item"
+        onRequestClose={closeLovedItemSheet}
       />
     </PageWrapper>
   );

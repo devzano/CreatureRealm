@@ -281,13 +281,12 @@ export default function usePokopiaGameData({
   const plannerPokemonResults = useMemo(() => {
     const query = plannerSearch.trim().toLowerCase();
     const base = [...items].sort((a, b) => a.gameDexNumber - b.gameDexNumber);
-    const filtered = !query
+    return !query
       ? base
       : base.filter((pokemon) => {
           const haystack = `${pokemon.name} ${pokemon.gameDexNumber} ${pokemon.description || ""}`.toLowerCase();
           return haystack.includes(query);
         });
-    return filtered.slice(0, 40);
   }, [items, plannerSearch]);
 
   const plannerAssignments = useMemo(() => {

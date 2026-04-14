@@ -5,6 +5,7 @@ export type PokopiaFoodFlavor = {
   routeSlug: string;
   label: string;
   color: string;
+  iconUrl: string;
 };
 
 export type PokopiaFoodItem = {
@@ -94,6 +95,18 @@ function parsePage(html: string): PokopiaFoodPage {
                   : label === "Spicy"
                     ? "#ca2910"
                     : "#f59e0b",
+        iconUrl:
+          label === "Sweet"
+            ? `${POKOPIA_BASE_URL}/images/items/item_ui/pecha-berry.png`
+            : label === "Dry"
+              ? `${POKOPIA_BASE_URL}/images/items/item_ui/chesto-berry.png`
+              : label === "Bitter"
+                ? `${POKOPIA_BASE_URL}/images/items/item_ui/rawst-berry.png`
+                : label === "Sour"
+                  ? `${POKOPIA_BASE_URL}/images/items/item_ui/aspear-berry.png`
+                  : label === "Spicy"
+                    ? `${POKOPIA_BASE_URL}/images/items/item_ui/chili-sauce.png`
+                    : `${POKOPIA_BASE_URL}/images/items/dream_ui/leppa-berry.png`,
       };
     })
     .filter(Boolean) as PokopiaFoodFlavor[];

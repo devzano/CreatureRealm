@@ -2,7 +2,6 @@ import React from "react";
 
 import type { DashboardCategory } from "@/components/Palworld/PalworldDashboardGrid";
 import {
-  POKOPIA_FAVORITES,
   POKOPIA_INFO_CARDS,
   POKOPIA_PLANNER_ZONES,
   POKOPIA_SECTION_CARDS,
@@ -16,23 +15,19 @@ type NamedEntry = {
 type Params = {
   filteredItems: NamedEntry[];
   habitats: NamedEntry[];
-  foodItems: NamedEntry[];
-  foodFlavorLabels: string[];
+  themeItems: NamedEntry[];
   pokopiaItems: NamedEntry[];
   recipes: NamedEntry[];
-  abilities: NamedEntry[];
-  specialties: NamedEntry[];
+  traitItems: NamedEntry[];
   buildings: NamedEntry[];
   collectibles: NamedEntry[];
   totalMon: number;
   renderDexContent: () => React.ReactNode;
   renderHabitatsContent: () => React.ReactNode;
-  renderFavoritesContent: () => React.ReactNode;
-  renderFoodContent: () => React.ReactNode;
+  renderThemesContent: () => React.ReactNode;
   renderItemsContent: () => React.ReactNode;
   renderRecipesContent: () => React.ReactNode;
-  renderAbilitiesContent: () => React.ReactNode;
-  renderSpecialtiesContent: () => React.ReactNode;
+  renderTraitsContent: () => React.ReactNode;
   renderBuildingsContent: () => React.ReactNode;
   renderCollectiblesContent: () => React.ReactNode;
   renderInfoContent: () => React.ReactNode;
@@ -42,23 +37,19 @@ type Params = {
 export default function BuildPokopiaDashboardCategories({
   filteredItems,
   habitats,
-  foodItems,
-  foodFlavorLabels,
+  themeItems,
   pokopiaItems,
   recipes,
-  abilities,
-  specialties,
+  traitItems,
   buildings,
   collectibles,
   totalMon,
   renderDexContent,
   renderHabitatsContent,
-  renderFavoritesContent,
-  renderFoodContent,
+  renderThemesContent,
   renderItemsContent,
   renderRecipesContent,
-  renderAbilitiesContent,
-  renderSpecialtiesContent,
+  renderTraitsContent,
   renderBuildingsContent,
   renderCollectiblesContent,
   renderInfoContent,
@@ -73,18 +64,14 @@ export default function BuildPokopiaDashboardCategories({
         ? filteredItems.length
         : section.id === "habitats"
           ? habitats.length
-          : section.id === "favorites"
-            ? POKOPIA_FAVORITES.length
-            : section.id === "food"
-              ? foodFlavorLabels.length || section.count
-              : section.id === "items"
+          : section.id === "themes"
+            ? themeItems.length
+            : section.id === "items"
                 ? pokopiaItems.length
                 : section.id === "recipes"
                   ? recipes.length
-                  : section.id === "abilities"
-                    ? abilities.length
-                    : section.id === "specialties"
-                      ? specialties.length
+                  : section.id === "traits"
+                    ? traitItems.length
                       : section.id === "buildings"
                         ? buildings.length
                         : section.id === "collectibles"
@@ -99,18 +86,14 @@ export default function BuildPokopiaDashboardCategories({
         ? totalMon
         : section.id === "habitats"
           ? habitats.length || section.count
-          : section.id === "favorites"
-            ? POKOPIA_FAVORITES.length
-            : section.id === "food"
-              ? foodFlavorLabels.length || section.count
-              : section.id === "items"
+          : section.id === "themes"
+            ? themeItems.length || section.count
+            : section.id === "items"
                 ? pokopiaItems.length || section.count
                 : section.id === "recipes"
                   ? recipes.length || section.count
-                  : section.id === "abilities"
-                    ? abilities.length || section.count
-                    : section.id === "specialties"
-                      ? specialties.length || section.count
+                  : section.id === "traits"
+                    ? traitItems.length || section.count
                       : section.id === "buildings"
                         ? buildings.length || section.count
                         : section.id === "collectibles"
@@ -125,18 +108,14 @@ export default function BuildPokopiaDashboardCategories({
         ? filteredItems
         : section.id === "habitats"
           ? habitats
-          : section.id === "favorites"
-            ? POKOPIA_FAVORITES
-            : section.id === "food"
-              ? foodItems
-              : section.id === "items"
+          : section.id === "themes"
+            ? themeItems
+            : section.id === "items"
                 ? pokopiaItems
                 : section.id === "recipes"
                   ? recipes
-                  : section.id === "abilities"
-                    ? abilities
-                    : section.id === "specialties"
-                      ? specialties
+                  : section.id === "traits"
+                    ? traitItems
                       : section.id === "buildings"
                         ? buildings
                         : section.id === "collectibles"
@@ -155,18 +134,14 @@ export default function BuildPokopiaDashboardCategories({
         ? filteredItems.slice(0, 6).map((item) => ({ name: item.name }))
         : section.id === "habitats"
           ? habitats.slice(0, 6).map((habitat) => ({ name: habitat.name }))
-          : section.id === "favorites"
-            ? POKOPIA_FAVORITES.slice(0, 6).map((favorite) => ({ name: favorite.label }))
-            : section.id === "food"
-              ? foodFlavorLabels.map((label) => ({ name: label }))
-              : section.id === "items"
+          : section.id === "themes"
+            ? themeItems.slice(0, 6).map((item) => ({ name: item.name }))
+            : section.id === "items"
                 ? pokopiaItems.slice(0, 6).map((item) => ({ name: item.name }))
                 : section.id === "recipes"
                   ? recipes.slice(0, 6).map((recipe) => ({ name: recipe.name }))
-                  : section.id === "abilities"
-                    ? abilities.slice(0, 6).map((ability) => ({ name: ability.name }))
-                    : section.id === "specialties"
-                      ? specialties.slice(0, 6).map((specialty) => ({ name: specialty.name }))
+                  : section.id === "traits"
+                    ? traitItems.slice(0, 6).map((item) => ({ name: item.name }))
                       : section.id === "buildings"
                         ? buildings.slice(0, 6).map((building) => ({ name: building.name }))
                         : section.id === "collectibles"
@@ -185,18 +160,14 @@ export default function BuildPokopiaDashboardCategories({
         ? renderDexContent()
         : section.id === "habitats"
           ? renderHabitatsContent()
-          : section.id === "favorites"
-            ? renderFavoritesContent()
-            : section.id === "food"
-              ? renderFoodContent()
-              : section.id === "items"
+          : section.id === "themes"
+            ? renderThemesContent()
+            : section.id === "items"
                 ? renderItemsContent()
                 : section.id === "recipes"
                   ? renderRecipesContent()
-                  : section.id === "abilities"
-                    ? renderAbilitiesContent()
-                    : section.id === "specialties"
-                      ? renderSpecialtiesContent()
+                  : section.id === "traits"
+                    ? renderTraitsContent()
                       : section.id === "buildings"
                         ? renderBuildingsContent()
                         : section.id === "collectibles"

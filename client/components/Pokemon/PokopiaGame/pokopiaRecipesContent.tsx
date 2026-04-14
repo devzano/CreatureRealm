@@ -6,6 +6,7 @@ import { Ionicons } from "@expo/vector-icons";
 import type { RecipeCategoryFilter } from "./config";
 import { RECIPE_CATEGORY_FILTERS } from "./config";
 import PokopiaFavoriteChip from "./PokopiaFavoriteChip";
+import PokopiaCollectToggleButton from "./PokopiaCollectToggleButton";
 import PokopiaFavoriteDetailSheet from "./PokopiaFavoriteDetailSheet";
 import PokopiaItemVariantStrip from "./PokopiaItemVariantStrip";
 import { PokopiaEmptyState, PokopiaLoadingState } from "./PokopiaContentStates";
@@ -13,6 +14,7 @@ import { resolveFavoriteSlug } from "@/lib/pokemon/pokopia/favoriteUtils";
 import type { PokopiaRecipe } from "@/lib/pokemon/pokopia/recipes";
 import { fetchPokopiaItemDetail, type PokopiaItemDetail } from "@/lib/pokemon/pokopia/itemDetail";
 import BottomSheetModal from "@/components/ui/BottomSheetModal";
+import { usePokopiaCollectionStore } from "@/store/pokopiaCollectionStore";
 
 type Props = {
   filteredRecipes: PokopiaRecipe[];
@@ -42,6 +44,8 @@ export default function PokopiaRecipesContent({
   const [selectedFavoriteLabel, setSelectedFavoriteLabel] = useState<string | null>(null);
   const [selectedFavoriteSlug, setSelectedFavoriteSlug] = useState<string | null>(null);
   const lastRecipe = useRef<PokopiaRecipe | null>(null);
+  const isCollected = usePokopiaCollectionStore((state) => state.isCollected);
+  const toggleCollected = usePokopiaCollectionStore((state) => state.toggleCollected);
 
   const openSheet = useCallback(async (recipe: PokopiaRecipe) => {
     lastRecipe.current = recipe;
@@ -140,38 +144,47 @@ export default function PokopiaRecipesContent({
         />
       ) : (
         <View className="flex-row flex-wrap -mx-1">
-          {filteredRecipes.map((recipe) => (
-            <View key={`${recipe.category}-${recipe.id}`} className="w-1/3 px-1 mb-2">
-              <Pressable
-                onPress={() => openSheet(recipe)}
-                className="rounded-3xl bg-slate-950 border border-slate-800 overflow-hidden"
-                style={{ minHeight: 160 }}
-              >
-                <View className="items-center justify-center pt-4 pb-2">
-                  <View className="w-24 h-24">
-                    <ExpoImage
-                      source={{ uri: recipe.imageUrl }}
-                      style={{ width: "100%", height: "100%" }}
-                      contentFit="contain"
-                      transition={120}
-                    />
-                  </View>
-                </View>
+          {filteredRecipes.map((recipe) => {
+            const collected = isCollected("recipe", recipe.slug);
 
-                <View className="px-3 pb-4 items-center">
-                  <Text
-                    numberOfLines={2}
-                    className="text-[13px] font-semibold text-slate-50 text-center leading-5"
-                  >
-                    {recipe.name}
-                  </Text>
-                  <Text className="text-[11px] text-slate-400 mt-1 text-center">
-                    {recipe.category || "Other"}
-                  </Text>
-                </View>
-              </Pressable>
-            </View>
-          ))}
+            return (
+              <View key={`${recipe.category}-${recipe.id}`} className="w-1/3 px-1 mb-2">
+                <Pressable
+                  onPress={() => openSheet(recipe)}
+                  className="rounded-3xl bg-slate-950 border border-slate-800 overflow-hidden"
+                  style={{ minHeight: 160 }}
+                >
+                  {collected ? (
+                    <View className="absolute top-2 right-2 z-10 rounded-full bg-[#6DDA5F] border border-white/70 px-1.5 py-1">
+                      <Ionicons name="checkmark" size={12} color="#fff" />
+                    </View>
+                  ) : null}
+                  <View className="items-center justify-center pt-4 pb-2">
+                    <View className="w-24 h-24">
+                      <ExpoImage
+                        source={{ uri: recipe.imageUrl }}
+                        style={{ width: "100%", height: "100%" }}
+                        contentFit="contain"
+                        transition={120}
+                      />
+                    </View>
+                  </View>
+
+                  <View className="px-3 pb-4 items-center">
+                    <Text
+                      numberOfLines={2}
+                      className="text-[13px] font-semibold text-slate-50 text-center leading-5"
+                    >
+                      {recipe.name}
+                    </Text>
+                    <Text className="text-[11px] text-slate-400 mt-1 text-center">
+                      {recipe.category || "Other"}
+                    </Text>
+                  </View>
+                </Pressable>
+              </View>
+            );
+          })}
         </View>
       )}
 
@@ -185,8 +198,8 @@ export default function PokopiaRecipesContent({
           bounces
           contentContainerStyle={{ paddingBottom: 32 }}
         >
-          <View className="flex-row items-center justify-between mb-4">
-            <View className="flex-row items-center flex-1">
+          <View className="flex-row items-start justify-between mb-4">
+            <View className="flex-row items-center flex-1 pr-3">
               {displayRecipe?.imageUrl ? (
                 <View className="w-14 h-14 rounded-2xl overflow-hidden bg-slate-900 border border-slate-700 p-1">
                   <ExpoImage
@@ -198,7 +211,7 @@ export default function PokopiaRecipesContent({
                 </View>
               ) : null}
 
-              <View className="ml-3 flex-1 pr-3">
+              <View className="ml-3 flex-1">
                 <Text className="text-slate-50 text-[16px] font-semibold" numberOfLines={2}>
                   {displayRecipe?.name ?? "—"}
                 </Text>
@@ -208,12 +221,21 @@ export default function PokopiaRecipesContent({
               </View>
             </View>
 
-            <Pressable
-              onPress={closeSheet}
-              className="h-10 w-10 items-center justify-center rounded-full border border-slate-700 bg-slate-900"
-            >
-              <Ionicons name="close" size={20} color="white" />
-            </Pressable>
+            <View className="items-end">
+              {displayRecipe?.slug ? (
+                <PokopiaCollectToggleButton
+                  collected={isCollected("recipe", displayRecipe.slug)}
+                  onPress={() => toggleCollected("recipe", displayRecipe.slug)}
+                />
+              ) : null}
+
+              <Pressable
+                onPress={closeSheet}
+                className="mt-2 h-10 w-10 items-center justify-center rounded-full border border-slate-700 bg-slate-900"
+              >
+                <Ionicons name="close" size={20} color="white" />
+              </Pressable>
+            </View>
           </View>
 
           {selectedRecipeDetailLoading ? (

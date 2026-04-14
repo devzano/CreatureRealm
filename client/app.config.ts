@@ -56,7 +56,7 @@ const androidIcons = {
 //   backgroundColor: "#071826"
 // };
 
-const BUILD_NUMBER = 15;
+const BUILD_NUMBER = 16;
 
 const config: ExpoConfig = {
   name: pick(appNames),

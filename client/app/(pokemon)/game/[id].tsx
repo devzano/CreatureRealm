@@ -20,21 +20,20 @@ import GameDexContent from "@/components/Pokemon/GameDex/GameDexContent";
 import { capitalize } from "@/components/Pokemon/GameDex/gameDexHelpers";
 import PalworldDashboardGrid, { type DashboardCategory } from "@/components/Palworld/PalworldDashboardGrid";
 import PokopiaCollectiblesContent from "@/components/Pokemon/PokopiaGame/PokopiaCollectiblesContent";
-import PokopiaAbilitiesContent from "@/components/Pokemon/PokopiaGame/PokopiaAbilitiesContent";
 import PokopiaBuildingsContent from "@/components/Pokemon/PokopiaGame/PokopiaBuildingsContent";
-import PokopiaFavoritesContent from "@/components/Pokemon/PokopiaGame/PokopiaFavoritesContent";
-import PokopiaFoodContent from "@/components/Pokemon/PokopiaGame/PokopiaFoodContent";
 import PokopiaHabitatsContent from "@/components/Pokemon/PokopiaGame/PokopiaHabitatsContent";
 import PokopiaInfoContent from "@/components/Pokemon/PokopiaGame/PokopiaInfoContent";
 import PokopiaItemsContent from "@/components/Pokemon/PokopiaGame/PokopiaItemsContent";
 import PokopiaPlannerContent from "@/components/Pokemon/PokopiaGame/PokopiaPlannerContent";
 import PokopiaRecipesContent from "@/components/Pokemon/PokopiaGame/PokopiaRecipesContent";
-import PokopiaSpecialtiesContent from "@/components/Pokemon/PokopiaGame/PokopiaSpecialtiesContent";
+import PokopiaThemesContent from "@/components/Pokemon/PokopiaGame/PokopiaThemesContent";
+import PokopiaTraitsContent from "@/components/Pokemon/PokopiaGame/PokopiaTraitsContent";
+import PokopiaDailyChecklist from "@/components/Pokemon/PokopiaGame/PokopiaDailyChecklist";
 import BuildPokopiaDashboardCategories from "@/components/Pokemon/PokopiaGame/BuildPokopiaDashboardCategories";
 import usePokopiaGameData from "@/components/Pokemon/PokopiaGame/usePokopiaGameData";
 import {
+  POKOPIA_EFFECTS,
   POKOPIA_FAVORITES,
-  POKOPIA_PLANNER_ZONES,
   POKOPIA_SECTION_CARDS,
   type PokopiaSection,
 } from "@/components/Pokemon/PokopiaGame/config";
@@ -88,7 +87,7 @@ export default function GameDexScreen() {
   const addPlannerPokemonToBuilding = usePokopiaPlannerStore((state) => state.addPokemonToBuilding);
   const removePlannerPokemonFromBuilding = usePokopiaPlannerStore((state) => state.removePokemonFromBuilding);
   const pokopiaDashboardOrder = usePokopiaDashboardOrderStore(
-    (state) => state.orders["pokopia.dashboard"] as PokopiaSection[] | undefined
+    (state) => state.orders["pokopia.dashboard"] as string[] | undefined
   );
   const setPokopiaDashboardOrder = usePokopiaDashboardOrderStore((state) => state.setOrder);
 
@@ -99,7 +98,6 @@ export default function GameDexScreen() {
     abilities,
     specialties,
     buildings,
-    plannerCatalogBuildings,
     collectibles,
     foodPage,
     cloudIslandsPage,
@@ -195,13 +193,6 @@ export default function GameDexScreen() {
     selectedCollectibleLoading,
     selectedCollectibleError,
     setSelectedCollectibleError,
-    selectedFoodItemSlug,
-    setSelectedFoodItemSlug,
-    selectedFoodItemDetail,
-    setSelectedFoodItemDetail,
-    selectedFoodItemLoading,
-    selectedFoodItemError,
-    setSelectedFoodItemError,
     selectedRecipeCategory,
     setSelectedRecipeCategory,
     selectedItemCategory,
@@ -360,6 +351,29 @@ export default function GameDexScreen() {
     });
   }, [items, statusFilter, game, getEntry, supportsAlpha, supportsShiny]);
 
+  const themePreviewItems = useMemo(
+    () => [
+      ...POKOPIA_FAVORITES.map((favorite) => ({ name: favorite.label })),
+      ...POKOPIA_EFFECTS.map((effect) => ({ name: effect.label })),
+      ...((foodPage?.flavors ?? []).map((flavor) => ({ name: flavor.label }))),
+    ],
+    [foodPage]
+  );
+
+  const normalizedPokopiaDashboardOrder = !pokopiaDashboardOrder?.length
+    ? undefined
+    : Array.from(
+        new Set(
+          pokopiaDashboardOrder.flatMap((key) => {
+            if (key === "favorites" || key === "food") return ["themes"];
+            if (key === "abilities" || key === "specialties") return ["traits"];
+            return [key];
+          })
+        )
+      ).filter((key): key is PokopiaSection =>
+        POKOPIA_SECTION_CARDS.some((section) => section.id === key)
+      );
+
   if (!game) {
     return (
       <PageWrapper title="Game Pokédex" headerLayout="inline">
@@ -469,20 +483,11 @@ export default function GameDexScreen() {
     />
   );
 
-  const renderFavoritesContent = () => <PokopiaFavoritesContent />;
-
-  const renderFoodContent = () => (
-    <PokopiaFoodContent
+  const renderThemesContent = () => (
+    <PokopiaThemesContent
       foodPage={foodPage}
       foodLoading={foodLoading}
       foodError={foodError}
-      selectedFoodItemSlug={selectedFoodItemSlug}
-      selectedFoodItemDetail={selectedFoodItemDetail}
-      selectedFoodItemLoading={selectedFoodItemLoading}
-      selectedFoodItemError={selectedFoodItemError}
-      onSelectFoodItemSlug={setSelectedFoodItemSlug}
-      onClearSelectedFoodItemDetail={() => setSelectedFoodItemDetail(null)}
-      onClearSelectedFoodItemError={() => setSelectedFoodItemError(null)}
     />
   );
 
@@ -559,22 +564,6 @@ export default function GameDexScreen() {
     />
   );
 
-  const renderDexTiles = () => (
-    <View className="px-2 pt-2">
-      <View className="flex-row flex-wrap">
-        {filteredItems.map((item) => (
-          <React.Fragment key={item.id}>{renderItem({ item })}</React.Fragment>
-        ))}
-      </View>
-
-      {filteredItems.length === 0 ? (
-        <View className="mt-10 items-center">
-          <Text className="text-sm text-slate-400">No Pokémon match this filter yet.</Text>
-        </View>
-      ) : null}
-    </View>
-  );
-
   const renderPlannerContent = () => (
     <PokopiaPlannerContent
       selectedPlannerZoneId={selectedPlannerZoneId}
@@ -619,8 +608,8 @@ export default function GameDexScreen() {
     />
   );
 
-  const renderAbilitiesContent = () => (
-    <PokopiaAbilitiesContent
+  const renderTraitsContent = () => (
+    <PokopiaTraitsContent
       abilities={abilities}
       abilitiesLoading={abilitiesLoading}
       abilitiesError={abilitiesError}
@@ -631,11 +620,6 @@ export default function GameDexScreen() {
       onSelectAbilitySlug={setSelectedAbilitySlug}
       onClearSelectedAbilityDetail={() => setSelectedAbilityDetail(null)}
       onClearSelectedAbilityError={() => setSelectedAbilityError(null)}
-    />
-  );
-
-  const renderSpecialtiesContent = () => (
-    <PokopiaSpecialtiesContent
       specialties={specialties}
       specialtiesLoading={specialtiesLoading}
       specialtiesError={specialtiesError}
@@ -669,12 +653,10 @@ export default function GameDexScreen() {
     : BuildPokopiaDashboardCategories({
         filteredItems: filteredItems.map((item) => ({ ...item, name: capitalize(item.name) })),
         habitats,
-        foodItems: foodPage?.items ?? [],
-        foodFlavorLabels: (foodPage?.flavors ?? []).map((flavor) => flavor.label),
+        themeItems: themePreviewItems,
         pokopiaItems,
         recipes,
-        abilities,
-        specialties,
+        traitItems: [...abilities, ...specialties],
         buildings,
         collectibles,
         totalMon: items.length,
@@ -696,12 +678,10 @@ export default function GameDexScreen() {
           />
         ),
         renderHabitatsContent,
-        renderFavoritesContent,
-        renderFoodContent,
+        renderThemesContent,
         renderItemsContent,
         renderRecipesContent,
-        renderAbilitiesContent,
-        renderSpecialtiesContent,
+        renderTraitsContent,
         renderBuildingsContent,
         renderCollectiblesContent,
         renderInfoContent,
@@ -742,9 +722,10 @@ export default function GameDexScreen() {
           isLoading={pokopiaDashboardLoading}
           loadingLabel="Loading Pokopia sections…"
           reorderEnabled
-          order={pokopiaDashboardOrder}
+          order={normalizedPokopiaDashboardOrder}
           defaultOrder={POKOPIA_SECTION_CARDS.map((section) => section.id)}
           onOrderChange={(order) => setPokopiaDashboardOrder("pokopia.dashboard", order)}
+          topContent={<PokopiaDailyChecklist />}
         />
       ) : (
         <GameDexContent

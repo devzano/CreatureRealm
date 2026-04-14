@@ -79,6 +79,11 @@ export function getPokopiaFavoriteTheme(label: string, href?: string | null): Fa
   if (slug === "sour-flavors") return THEMES.yellow;
   if (slug === "spicy-flavors") return THEMES.red;
   if (slug === "no-flavor") return THEMES.amber;
+  if (slug === "decoration") return THEMES.purple;
+  if (slug === "food") return THEMES.yellow;
+  if (slug === "relaxation") return THEMES.mint;
+  if (slug === "road") return THEMES.amber;
+  if (slug === "toy") return THEMES.pink;
 
   if (slug.includes("water") || slug.includes("ocean")) return THEMES.blue;
   if (slug.includes("fire")) return THEMES.red;

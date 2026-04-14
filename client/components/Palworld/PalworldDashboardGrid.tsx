@@ -70,6 +70,7 @@ export type PalworldDashboardGridProps<K extends string> = {
   onOrderChange?: (order: K[]) => void;
   defaultOrder?: K[];
   previewMax?: number;
+  topContent?: React.ReactNode;
 };
 
 export default function PalworldDashboardGrid<K extends string>(props: PalworldDashboardGridProps<K>) {
@@ -85,6 +86,7 @@ export default function PalworldDashboardGrid<K extends string>(props: PalworldD
     onOrderChange,
     defaultOrder,
     previewMax = 3,
+    topContent,
   } = props;
 
   const normalizedSearch = (search ?? "").trim().toLowerCase();
@@ -274,7 +276,7 @@ export default function PalworldDashboardGrid<K extends string>(props: PalworldD
         <View className="h-10" />
       </View>
     );
-  }, [orderedCategories, selected, normalizedSearch, renderCategoryHeader, renderCtx]);
+  }, [orderedCategories, selected, normalizedSearch, renderCategoryHeader, renderCtx, isLoading, loadingLabel]);
 
   const canOpenReorder = reorderEnabled && selected === "all";
 
@@ -421,6 +423,7 @@ export default function PalworldDashboardGrid<K extends string>(props: PalworldD
               <EmptyState title="No results" subtitle={normalizedSearch ? "Try a different search." : "No items available."} />
             ) : (
               <>
+                {topContent ? <View className="mb-4">{topContent}</View> : null}
                 <View className="flex-row flex-wrap" style={{ gap: 12 }}>
                   {visibleCards.map((c) => {
                     const source = (c.previewItems ?? c.items ?? []) as any[];
