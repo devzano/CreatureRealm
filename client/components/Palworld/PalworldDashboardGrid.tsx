@@ -238,9 +238,18 @@ export default function PalworldDashboardGrid<K extends string>(props: PalworldD
 
           <Pressable
             onPress={() => beginNav("all")}
-            className="ml-2 px-2 py-1 rounded-full border border-white/10 bg-white/[0.04] active:opacity-90"
+            className="ml-2 px-3 py-1.5 rounded-full border active:opacity-90"
+            style={{
+              borderColor: "rgba(103, 232, 249, 0.35)",
+              backgroundColor: "rgba(34, 211, 238, 0.12)",
+            }}
           >
-            <Text className="text-[10px] text-white/60">Back</Text>
+            <View className="flex-row items-center">
+              <Text className="text-[12px] mr-1" style={{ color: "#a5f3fc" }}>←</Text>
+              <Text className="text-[11px] font-semibold" style={{ color: "#cffafe" }}>
+                Back to Dashboard
+              </Text>
+            </View>
           </Pressable>
         </View>
       </View>

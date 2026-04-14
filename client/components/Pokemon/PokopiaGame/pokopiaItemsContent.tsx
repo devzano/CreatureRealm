@@ -1,5 +1,5 @@
-import React, { useCallback, useRef, useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import React, { useCallback, useMemo, useRef, useState } from "react";
+import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
 import { Image as ExpoImage } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -9,6 +9,7 @@ import PokopiaFavoriteChip from "./PokopiaFavoriteChip";
 import PokopiaCollectToggleButton from "./PokopiaCollectToggleButton";
 import PokopiaFavoriteDetailSheet from "./PokopiaFavoriteDetailSheet";
 import PokopiaItemVariantStrip from "./PokopiaItemVariantStrip";
+import PokopiaSearchInput from "./PokopiaSearchInput";
 import { PokopiaEmptyState, PokopiaLoadingState } from "./PokopiaContentStates";
 import type { PokopiaItemDetail } from "@/lib/pokemon/pokopia/itemDetail";
 import { resolveFavoriteSlug } from "@/lib/pokemon/pokopia/favoriteUtils";
@@ -55,8 +56,26 @@ export default function PokopiaItemsContent({
   const [selectedFavoriteLabel, setSelectedFavoriteLabel] = useState<string | null>(null);
   const [selectedFavoriteSlug, setSelectedFavoriteSlug] = useState<string | null>(null);
   const lastItem = useRef<PokopiaItem | null>(null);
-  const isCollected = usePokopiaCollectionStore((state) => state.isCollected);
-  const toggleCollected = usePokopiaCollectionStore((state) => state.toggleCollected);
+  const collectedItems = usePokopiaCollectionStore((state) => state.collected.item);
+  const collectedItemSet = useMemo(() => new Set(collectedItems), [collectedItems]);
+  const groupedItems = useMemo(() => {
+    const collected: PokopiaItem[] = [];
+    const needed: PokopiaItem[] = [];
+
+    for (const item of filteredPokopiaItems) {
+      const slug = String(item.slug).trim().toLowerCase();
+      if (collectedItemSet.has(slug)) {
+        collected.push(item);
+      } else {
+        needed.push(item);
+      }
+    }
+
+    return [
+      { key: "collected", label: "Collected", items: collected },
+      { key: "needed", label: "Need", items: needed },
+    ].filter((group) => group.items.length > 0);
+  }, [filteredPokopiaItems, collectedItemSet]);
 
   const openSheet = useCallback(
     (item: PokopiaItem) => {
@@ -119,12 +138,10 @@ export default function PokopiaItemsContent({
       </View>
 
       <View className="mb-4">
-        <TextInput
+        <PokopiaSearchInput
           value={itemSearch}
           onChangeText={onChangeItemSearch}
           placeholder="Search items..."
-          placeholderTextColor="rgba(148,163,184,0.8)"
-          className="h-11 rounded-2xl border border-slate-700 bg-slate-950 px-4 text-[13px] text-slate-100"
         />
       </View>
 
@@ -141,49 +158,62 @@ export default function PokopiaItemsContent({
           message="Try a different category or search term."
         />
       ) : (
-        <View className="flex-row flex-wrap -mx-1">
-          {filteredPokopiaItems.map((item) => {
-            const collected = isCollected("item", item.slug);
-
-            return (
-              <View key={`${item.id}-${item.slug}`} className="w-1/3 px-1 mb-2">
-                <Pressable
-                  onPress={() => openSheet(item)}
-                  className="rounded-3xl bg-slate-950 border border-slate-800 overflow-hidden"
-                  style={{ minHeight: 160 }}
-                >
-                  {collected ? (
-                    <View className="absolute top-2 right-2 z-10 rounded-full bg-[#6DDA5F] border border-white/70 px-1.5 py-1">
-                      <Ionicons name="checkmark" size={12} color="#fff" />
-                    </View>
-                  ) : null}
-                  <View className="items-center justify-center pt-4 pb-2">
-                    <View className="w-24 h-24">
-                      <ExpoImage
-                        source={{ uri: item.imageUrl }}
-                        style={{ width: "100%", height: "100%" }}
-                        contentFit="contain"
-                        transition={120}
-                      />
-                    </View>
-                  </View>
-
-                  <View className="px-3 pb-4 items-center">
-                    <Text
-                      numberOfLines={2}
-                      className="text-[13px] font-semibold text-slate-50 text-center leading-5"
-                    >
-                      {item.name}
-                    </Text>
-                    <Text className="text-[11px] text-slate-400 mt-1 text-center">
-                      {item.menuCategory || "Uncategorized"}
-                    </Text>
-                  </View>
-                </Pressable>
+        <>
+          {groupedItems.map((group) => (
+            <View key={group.key} className="mb-4">
+              <View className="px-1 mb-2">
+                <Text className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                  {group.label}
+                </Text>
+                <Text className="text-[11px] text-slate-500 mt-0.5">{group.items.length} items</Text>
               </View>
-            );
-          })}
-        </View>
+
+              <View className="flex-row flex-wrap -mx-1">
+                {group.items.map((item) => {
+                  const collected = collectedItemSet.has(String(item.slug).trim().toLowerCase());
+
+                  return (
+                    <View key={`${item.id}-${item.slug}`} className="w-1/3 px-1 mb-2">
+                      <Pressable
+                        onPress={() => openSheet(item)}
+                        className="rounded-3xl bg-slate-950 border border-slate-800 overflow-hidden"
+                        style={{ minHeight: 160 }}
+                      >
+                        {collected ? (
+                          <View className="absolute top-2 right-2 z-10 rounded-full bg-[#6DDA5F] border border-white/70 px-1.5 py-1">
+                            <Ionicons name="checkmark" size={12} color="#fff" />
+                          </View>
+                        ) : null}
+                        <View className="items-center justify-center pt-4 pb-2">
+                          <View className="w-24 h-24">
+                            <ExpoImage
+                              source={{ uri: item.imageUrl }}
+                              style={{ width: "100%", height: "100%" }}
+                              contentFit="contain"
+                              transition={120}
+                            />
+                          </View>
+                        </View>
+
+                        <View className="px-3 pb-4 items-center">
+                          <Text
+                            numberOfLines={2}
+                            className="text-[13px] font-semibold text-slate-50 text-center leading-5"
+                          >
+                            {item.name}
+                          </Text>
+                          <Text className="text-[11px] text-slate-400 mt-1 text-center">
+                            {item.menuCategory || "Uncategorized"}
+                          </Text>
+                        </View>
+                      </Pressable>
+                    </View>
+                  );
+                })}
+              </View>
+            </View>
+          ))}
+        </>
       )}
 
       <BottomSheetModal
@@ -222,8 +252,8 @@ export default function PokopiaItemsContent({
             <View className="items-end">
               {displayItem?.slug ? (
                 <PokopiaCollectToggleButton
-                  collected={isCollected("item", displayItem.slug)}
-                  onPress={() => toggleCollected("item", displayItem.slug)}
+                  kind="item"
+                  slug={displayItem.slug}
                 />
               ) : null}
 

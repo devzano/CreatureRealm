@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, FlatList, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, FlatList, Pressable, ScrollView, Text, View } from "react-native";
 import { Image as ExpoImage } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -10,8 +10,10 @@ import {
   type PokopiaFilteredItemsPage,
 } from "@/lib/pokemon/pokopia/itemFilters";
 import { POKOPIA_EFFECTS, POKOPIA_FAVORITES } from "./config";
+import PokopiaSearchInput from "./PokopiaSearchInput";
 import { PokopiaEmptyState, PokopiaLoadingState } from "./PokopiaContentStates";
 import { getPokopiaFavoriteTheme } from "./favoritePresentation";
+import { usePokopiaCollectionStore } from "@/store/pokopiaCollectionStore";
 
 type Props = {
   foodPage: PokopiaFoodPage | null;
@@ -117,6 +119,8 @@ export default function PokopiaThemesContent({
   const [flavorItemsError, setFlavorItemsError] = useState<string | null>(null);
   const foodEffect = useMemo(() => POKOPIA_EFFECTS.find((effect) => effect.slug === "food") ?? null, []);
   const nonFoodEffects = useMemo(() => POKOPIA_EFFECTS.filter((effect) => effect.slug !== "food"), []);
+  const collectedItems = usePokopiaCollectionStore((state) => state.collected.item);
+  const collectedItemSet = useMemo(() => new Set(collectedItems), [collectedItems]);
 
   const themeEntries = useMemo<ThemeEntry[]>(() => {
     const favorites = POKOPIA_FAVORITES.map((favorite) => ({
@@ -187,6 +191,36 @@ export default function PokopiaThemesContent({
       })),
     []
   );
+  const groupedFlavorItems = useMemo(() => {
+    const collected: PokopiaFoodItem[] = [];
+    const needed: PokopiaFoodItem[] = [];
+
+    for (const item of flavorItems) {
+      const slug = String(item.slug).trim().toLowerCase();
+      if (collectedItemSet.has(slug)) collected.push(item);
+      else needed.push(item);
+    }
+
+    return [
+      { key: "collected", label: "Collected", items: collected },
+      { key: "needed", label: "Need", items: needed },
+    ].filter((group) => group.items.length > 0);
+  }, [flavorItems, collectedItemSet]);
+  const groupedFoodModeItems = useMemo(() => {
+    const collected: PokopiaFoodItem[] = [];
+    const needed: PokopiaFoodItem[] = [];
+
+    for (const item of foodModeItems) {
+      const slug = String(item.slug).trim().toLowerCase();
+      if (collectedItemSet.has(slug)) collected.push(item);
+      else needed.push(item);
+    }
+
+    return [
+      { key: "collected", label: "Collected", items: collected },
+      { key: "needed", label: "Need", items: needed },
+    ].filter((group) => group.items.length > 0);
+  }, [foodModeItems, collectedItemSet]);
 
   useEffect(() => {
     let cancelled = false;
@@ -367,12 +401,10 @@ export default function PokopiaThemesContent({
       </View>
 
       <View className="mb-4">
-        <TextInput
+        <PokopiaSearchInput
           value={search}
           onChangeText={setSearch}
           placeholder="Search themes, effects, or flavors..."
-          placeholderTextColor="rgba(148,163,184,0.8)"
-          className="h-11 rounded-2xl border border-slate-700 bg-slate-950 px-4 text-[13px] text-slate-100"
         />
       </View>
 
@@ -655,29 +687,42 @@ export default function PokopiaThemesContent({
               />
             ) : (
               <>
-                <Text className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400 mb-2">
-                  {flavorItems.length} Items
-                </Text>
-                <View className="flex-row flex-wrap -mx-1">
-                  {flavorItems.map((item) => (
-                    <View key={item.slug} className="w-1/3 px-1 mb-2">
-                      <View className="rounded-2xl bg-slate-950 border border-slate-800 px-2.5 py-3 items-center">
-                        <ExpoImage
-                          source={{ uri: item.imageUrl }}
-                          style={{ width: 48, height: 48 }}
-                          contentFit="contain"
-                          transition={120}
-                        />
-                        <Text numberOfLines={2} className="mt-1.5 text-[11px] font-semibold text-slate-100 text-center">
-                          {item.name}
-                        </Text>
-                        <Text numberOfLines={2} className="mt-1 text-[10px] text-slate-400 text-center">
-                          {item.description}
-                        </Text>
-                      </View>
+                {groupedFlavorItems.map((group) => (
+                  <View key={group.key} className="mb-4">
+                    <Text className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400 mb-2">
+                      {group.label} • {group.items.length}
+                    </Text>
+                    <View className="flex-row flex-wrap -mx-1">
+                      {group.items.map((item) => {
+                        const collected = collectedItemSet.has(String(item.slug).trim().toLowerCase());
+
+                        return (
+                          <View key={item.slug} className="w-1/3 px-1 mb-2">
+                            <View className="rounded-2xl bg-slate-950 border border-slate-800 px-2.5 py-3 items-center overflow-hidden">
+                              {collected ? (
+                                <View className="absolute top-2 right-2 z-10 rounded-full bg-[#6DDA5F] border border-white/70 px-1.5 py-1">
+                                  <Ionicons name="checkmark" size={12} color="#fff" />
+                                </View>
+                              ) : null}
+                              <ExpoImage
+                                source={{ uri: item.imageUrl }}
+                                style={{ width: 48, height: 48 }}
+                                contentFit="contain"
+                                transition={120}
+                              />
+                              <Text numberOfLines={2} className="mt-1.5 text-[11px] font-semibold text-slate-100 text-center">
+                                {item.name}
+                              </Text>
+                              <Text numberOfLines={2} className="mt-1 text-[10px] text-slate-400 text-center">
+                                {item.description}
+                              </Text>
+                            </View>
+                          </View>
+                        );
+                      })}
                     </View>
-                  ))}
-                </View>
+                  </View>
+                ))}
               </>
             )
           ) : selectedEffectSlug === "food" ? (
@@ -688,29 +733,42 @@ export default function PokopiaThemesContent({
               />
             ) : (
               <>
-                <Text className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400 mb-2">
-                  {foodModeItems.length} Items
-                </Text>
-                <View className="flex-row flex-wrap -mx-1">
-                  {foodModeItems.map((item) => (
-                    <View key={item.slug} className="w-1/3 px-1 mb-2">
-                      <View className="rounded-2xl bg-slate-950 border border-slate-800 px-2.5 py-3 items-center">
-                        <ExpoImage
-                          source={{ uri: item.imageUrl }}
-                          style={{ width: 48, height: 48 }}
-                          contentFit="contain"
-                          transition={120}
-                        />
-                        <Text numberOfLines={2} className="mt-1.5 text-[11px] font-semibold text-slate-100 text-center">
-                          {item.name}
-                        </Text>
-                        <Text numberOfLines={2} className="mt-1 text-[10px] text-slate-400 text-center">
-                          {item.description}
-                        </Text>
-                      </View>
+                {groupedFoodModeItems.map((group) => (
+                  <View key={group.key} className="mb-4">
+                    <Text className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400 mb-2">
+                      {group.label} • {group.items.length}
+                    </Text>
+                    <View className="flex-row flex-wrap -mx-1">
+                      {group.items.map((item) => {
+                        const collected = collectedItemSet.has(String(item.slug).trim().toLowerCase());
+
+                        return (
+                          <View key={item.slug} className="w-1/3 px-1 mb-2">
+                            <View className="rounded-2xl bg-slate-950 border border-slate-800 px-2.5 py-3 items-center overflow-hidden">
+                              {collected ? (
+                                <View className="absolute top-2 right-2 z-10 rounded-full bg-[#6DDA5F] border border-white/70 px-1.5 py-1">
+                                  <Ionicons name="checkmark" size={12} color="#fff" />
+                                </View>
+                              ) : null}
+                              <ExpoImage
+                                source={{ uri: item.imageUrl }}
+                                style={{ width: 48, height: 48 }}
+                                contentFit="contain"
+                                transition={120}
+                              />
+                              <Text numberOfLines={2} className="mt-1.5 text-[11px] font-semibold text-slate-100 text-center">
+                                {item.name}
+                              </Text>
+                              <Text numberOfLines={2} className="mt-1 text-[10px] text-slate-400 text-center">
+                                {item.description}
+                              </Text>
+                            </View>
+                          </View>
+                        );
+                      })}
                     </View>
-                  ))}
-                </View>
+                  </View>
+                ))}
               </>
             )
           ) : filteredPageLoading ? (
@@ -746,116 +804,150 @@ export default function PokopiaThemesContent({
                       {group.items.length} items
                     </Text>
                   </View>
+                  {[
+                    {
+                      key: "collected",
+                      label: "Collected",
+                      items: group.items.filter((item) =>
+                        collectedItemSet.has(String(item.slug).trim().toLowerCase())
+                      ),
+                    },
+                    {
+                      key: "needed",
+                      label: "Need",
+                      items: group.items.filter(
+                        (item) => !collectedItemSet.has(String(item.slug).trim().toLowerCase())
+                      ),
+                    },
+                  ]
+                    .filter((section) => section.items.length > 0)
+                    .map((section) => (
+                      <View key={`${group.label}-${section.key}`} className="mb-3">
+                        <Text className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500 mb-2 px-1">
+                          {section.label} • {section.items.length}
+                        </Text>
 
-                  <View className="flex-row flex-wrap -mx-1">
-                    {group.items.map((item) => (
-                      <View key={item.slug} className="w-1/3 px-1 mb-2">
-                        <View className="rounded-3xl bg-slate-950 border border-slate-800 px-2.5 py-3">
-                          <View className="items-center">
-                            <ExpoImage
-                              source={{ uri: item.imageUrl }}
-                              style={{ width: 48, height: 48 }}
-                              contentFit="contain"
-                              transition={120}
-                            />
-                          </View>
+                        <View className="flex-row flex-wrap -mx-1">
+                          {section.items.map((item) => {
+                            const collected = collectedItemSet.has(String(item.slug).trim().toLowerCase());
 
-                          <Text numberOfLines={2} className="mt-1.5 text-[11px] font-semibold text-slate-100 text-center">
-                            {item.name}
-                          </Text>
+                            return (
+                              <View key={item.slug} className="w-1/3 px-1 mb-2">
+                                <View className="rounded-3xl bg-slate-950 border border-slate-800 px-2.5 py-3 overflow-hidden">
+                                  {collected ? (
+                                    <View className="absolute top-2 right-2 z-10 rounded-full bg-[#6DDA5F] border border-white/70 px-1.5 py-1">
+                                      <Ionicons name="checkmark" size={12} color="#fff" />
+                                    </View>
+                                  ) : null}
 
-                          {item.description ? (
-                            <Text numberOfLines={2} className="mt-1 text-[10px] text-slate-400 text-center">
-                              {item.description}
-                            </Text>
-                          ) : null}
+                                  <View className="items-center">
+                                    <ExpoImage
+                                      source={{ uri: item.imageUrl }}
+                                      style={{ width: 48, height: 48 }}
+                                      contentFit="contain"
+                                      transition={120}
+                                    />
+                                  </View>
 
-                          <View className="flex-row flex-wrap mt-2">
-                            {!isFoodMode && !selectedEffectSlug
-                              ? item.effects
-                                  .filter((effect) => effect.slug !== "food")
-                                  .map((effect) => (
-                                    <Pressable
-                                      key={`${item.slug}-effect-${effect.slug}`}
-                                      onPress={() => {
-                                        setSelectedFlavorSlug(null);
-                                        setSelectedEffectSlug(effect.slug);
-                                      }}
-                                      className="mr-2 mb-2 rounded-full border px-2 py-1"
-                                      style={{
-                                        backgroundColor: "rgba(15,23,42,0.72)",
-                                        borderColor: "rgba(51,65,85,0.9)",
-                                      }}
-                                    >
-                                      <View className="flex-row items-center">
-                                        {effect.iconUrl ? (
-                                          <ExpoImage
-                                            source={{ uri: effect.iconUrl }}
-                                            style={{ width: 11, height: 11 }}
-                                            contentFit="contain"
-                                            transition={120}
-                                          />
-                                        ) : null}
-                                        <Text className="ml-1 text-[9px] font-semibold text-slate-200">
-                                          {effect.label}
-                                        </Text>
+                                  <Text numberOfLines={2} className="mt-1.5 text-[11px] font-semibold text-slate-100 text-center">
+                                    {item.name}
+                                  </Text>
+
+                                  {item.description ? (
+                                    <Text numberOfLines={2} className="mt-1 text-[10px] text-slate-400 text-center">
+                                      {item.description}
+                                    </Text>
+                                  ) : null}
+
+                                  <View className="flex-row flex-wrap mt-2">
+                                    {!isFoodMode && !selectedEffectSlug
+                                      ? item.effects
+                                          .filter((effect) => effect.slug !== "food")
+                                          .map((effect) => (
+                                            <Pressable
+                                              key={`${item.slug}-effect-${effect.slug}`}
+                                              onPress={() => {
+                                                setSelectedFlavorSlug(null);
+                                                setSelectedEffectSlug(effect.slug);
+                                              }}
+                                              className="mr-2 mb-2 rounded-full border px-2 py-1"
+                                              style={{
+                                                backgroundColor: "rgba(15,23,42,0.72)",
+                                                borderColor: "rgba(51,65,85,0.9)",
+                                              }}
+                                            >
+                                              <View className="flex-row items-center">
+                                                {effect.iconUrl ? (
+                                                  <ExpoImage
+                                                    source={{ uri: effect.iconUrl }}
+                                                    style={{ width: 11, height: 11 }}
+                                                    contentFit="contain"
+                                                    transition={120}
+                                                  />
+                                                ) : null}
+                                                <Text className="ml-1 text-[9px] font-semibold text-slate-200">
+                                                  {effect.label}
+                                                </Text>
+                                              </View>
+                                            </Pressable>
+                                          ))
+                                      : null}
+
+                                    {item.isRecipe ? (
+                                      <View className="mr-2 mb-2 rounded-full border border-amber-400/40 bg-amber-400/10 px-2.5 py-1">
+                                        <Text className="text-[10px] font-semibold text-amber-200">Recipe</Text>
                                       </View>
-                                    </Pressable>
-                                  ))
-                              : null}
+                                    ) : null}
 
-                            {item.isRecipe ? (
-                              <View className="mr-2 mb-2 rounded-full border border-amber-400/40 bg-amber-400/10 px-2.5 py-1">
-                                <Text className="text-[10px] font-semibold text-amber-200">Recipe</Text>
+                                    {!isFoodMode && selectedEffectSlug
+                                      ? item.favorites.map((favorite) => {
+                                          const theme = getPokopiaFavoriteTheme(
+                                            favorite.label,
+                                            `https://pokopiadex.com/pokedex/favorites/${favorite.slug}`
+                                          );
+                                          const iconUrl = favoriteIconBySlug.get(favorite.slug);
+
+                                          return (
+                                            <Pressable
+                                              key={`${item.slug}-favorite-${favorite.slug}`}
+                                              onPress={() => {
+                                                setSelectedFlavorSlug(null);
+                                                setSelectedFavoriteSlug(favorite.slug);
+                                              }}
+                                              className="mr-2 mb-2 rounded-full border px-2 py-1"
+                                              style={{
+                                                backgroundColor: theme.bg,
+                                                borderColor: theme.border,
+                                              }}
+                                            >
+                                              <View className="flex-row items-center">
+                                                {iconUrl ? (
+                                                  <ExpoImage
+                                                    source={{ uri: iconUrl }}
+                                                    style={{ width: 11, height: 11 }}
+                                                    contentFit="contain"
+                                                    transition={120}
+                                                  />
+                                                ) : null}
+                                                <Text
+                                                  className="text-[9px] font-semibold"
+                                                  style={{ color: theme.text, marginLeft: iconUrl ? 4 : 0 }}
+                                                >
+                                                  {favorite.label}
+                                                </Text>
+                                              </View>
+                                            </Pressable>
+                                          );
+                                        })
+                                      : null}
+                                  </View>
+                                </View>
                               </View>
-                            ) : null}
-
-                            {!isFoodMode && selectedEffectSlug
-                              ? item.favorites.map((favorite) => {
-                                  const theme = getPokopiaFavoriteTheme(
-                                    favorite.label,
-                                    `https://pokopiadex.com/pokedex/favorites/${favorite.slug}`
-                                  );
-                                  const iconUrl = favoriteIconBySlug.get(favorite.slug);
-
-                                  return (
-                                    <Pressable
-                                      key={`${item.slug}-favorite-${favorite.slug}`}
-                                      onPress={() => {
-                                        setSelectedFlavorSlug(null);
-                                        setSelectedFavoriteSlug(favorite.slug);
-                                      }}
-                                      className="mr-2 mb-2 rounded-full border px-2 py-1"
-                                      style={{
-                                        backgroundColor: theme.bg,
-                                        borderColor: theme.border,
-                                      }}
-                                    >
-                                      <View className="flex-row items-center">
-                                        {iconUrl ? (
-                                          <ExpoImage
-                                            source={{ uri: iconUrl }}
-                                            style={{ width: 11, height: 11 }}
-                                            contentFit="contain"
-                                            transition={120}
-                                          />
-                                        ) : null}
-                                        <Text
-                                          className="text-[9px] font-semibold"
-                                          style={{ color: theme.text, marginLeft: iconUrl ? 4 : 0 }}
-                                        >
-                                          {favorite.label}
-                                        </Text>
-                                      </View>
-                                    </Pressable>
-                                  );
-                                })
-                              : null}
-                          </View>
+                            );
+                          })}
                         </View>
                       </View>
                     ))}
-                  </View>
                 </View>
               ))}
             </>

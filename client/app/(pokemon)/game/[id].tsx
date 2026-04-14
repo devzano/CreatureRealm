@@ -360,6 +360,11 @@ export default function GameDexScreen() {
     [foodPage]
   );
 
+  const defaultPokopiaDashboardOrder = useMemo(
+    () => POKOPIA_SECTION_CARDS.map((section) => section.id),
+    []
+  );
+
   const normalizedPokopiaDashboardOrder = !pokopiaDashboardOrder?.length
     ? undefined
     : Array.from(
@@ -373,6 +378,8 @@ export default function GameDexScreen() {
       ).filter((key): key is PokopiaSection =>
         POKOPIA_SECTION_CARDS.some((section) => section.id === key)
       );
+
+  const resolvedPokopiaDashboardOrder = normalizedPokopiaDashboardOrder ?? defaultPokopiaDashboardOrder;
 
   if (!game) {
     return (
@@ -722,8 +729,8 @@ export default function GameDexScreen() {
           isLoading={pokopiaDashboardLoading}
           loadingLabel="Loading Pokopia sections…"
           reorderEnabled
-          order={normalizedPokopiaDashboardOrder}
-          defaultOrder={POKOPIA_SECTION_CARDS.map((section) => section.id)}
+          order={resolvedPokopiaDashboardOrder}
+          defaultOrder={defaultPokopiaDashboardOrder}
           onOrderChange={(order) => setPokopiaDashboardOrder("pokopia.dashboard", order)}
           topContent={<PokopiaDailyChecklist />}
         />

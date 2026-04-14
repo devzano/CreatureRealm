@@ -1,5 +1,5 @@
 import React, { useCallback, useRef, useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
 import { Image as ExpoImage } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -8,6 +8,7 @@ import { COLLECTIBLE_CATEGORY_FILTERS, POKOPIA_COLORS } from "./config";
 import PokopiaFavoriteChip from "./PokopiaFavoriteChip";
 import PokopiaFavoriteDetailSheet from "./PokopiaFavoriteDetailSheet";
 import PokopiaItemVariantStrip from "./PokopiaItemVariantStrip";
+import PokopiaSearchInput from "./PokopiaSearchInput";
 import { PokopiaEmptyState, PokopiaLoadingState } from "./PokopiaContentStates";
 import type { PokopiaCollectibleDetail } from "@/lib/pokemon/pokopia/collectibleDetail";
 import { resolveFavoriteSlug } from "@/lib/pokemon/pokopia/favoriteUtils";
@@ -163,12 +164,10 @@ export default function PokopiaCollectiblesContent({
       )}
 
       <View className="mb-4">
-        <TextInput
+        <PokopiaSearchInput
           value={collectibleSearch}
           onChangeText={onChangeCollectibleSearch}
           placeholder="Search collectibles..."
-          placeholderTextColor="rgba(148,163,184,0.8)"
-          className="h-11 rounded-2xl border border-slate-700 bg-slate-950 px-4 text-[13px] text-slate-100"
         />
       </View>
 

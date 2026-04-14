@@ -475,7 +475,7 @@ export default function PokopiaPlannerContent({
       <BottomSheetModal
         visible={plannerPickerVisible}
         onRequestClose={closePlannerPickers}
-        fixedHeight={560}
+        fixedHeight={700}
         sheetStyle={{ paddingHorizontal: 0, paddingTop: 0, paddingBottom: 0, overflow: "hidden" }}
       >
         <View className="px-5 pt-5 pb-3 flex-row items-center justify-between border-b border-slate-800">
@@ -537,7 +537,7 @@ export default function PokopiaPlannerContent({
                     className="rounded-2xl border border-slate-700 bg-slate-900 px-4 py-3 text-slate-50"
                   />
                 </View>
-                <ScrollView className="flex-1 px-5 pt-3 pb-5">
+                <ScrollView className="flex-1 px-5 pt-3 pb-5" keyboardShouldPersistTaps="handled">
                   {plannerBuildingResults.map((building) => (
                     <Pressable
                       key={`planner-building-option-${building.slug}`}
@@ -643,7 +643,7 @@ export default function PokopiaPlannerContent({
                 className="rounded-2xl border border-slate-700 bg-slate-900 px-4 py-3 text-slate-50"
               />
             </View>
-            <ScrollView className="flex-1 px-5 pt-3 pb-5">
+            <ScrollView className="flex-1 px-5 pt-3 pb-5" keyboardShouldPersistTaps="handled">
               {plannerPokemonResults.map((pokemon) => {
                 const assignment = plannerAssignments.get(pokemon.id);
                 const sameTarget =

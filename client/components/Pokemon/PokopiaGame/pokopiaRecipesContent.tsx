@@ -1,5 +1,5 @@
-import React, { useCallback, useRef, useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import React, { useCallback, useMemo, useRef, useState } from "react";
+import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
 import { Image as ExpoImage } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -9,6 +9,7 @@ import PokopiaFavoriteChip from "./PokopiaFavoriteChip";
 import PokopiaCollectToggleButton from "./PokopiaCollectToggleButton";
 import PokopiaFavoriteDetailSheet from "./PokopiaFavoriteDetailSheet";
 import PokopiaItemVariantStrip from "./PokopiaItemVariantStrip";
+import PokopiaSearchInput from "./PokopiaSearchInput";
 import { PokopiaEmptyState, PokopiaLoadingState } from "./PokopiaContentStates";
 import { resolveFavoriteSlug } from "@/lib/pokemon/pokopia/favoriteUtils";
 import type { PokopiaRecipe } from "@/lib/pokemon/pokopia/recipes";
@@ -44,8 +45,26 @@ export default function PokopiaRecipesContent({
   const [selectedFavoriteLabel, setSelectedFavoriteLabel] = useState<string | null>(null);
   const [selectedFavoriteSlug, setSelectedFavoriteSlug] = useState<string | null>(null);
   const lastRecipe = useRef<PokopiaRecipe | null>(null);
-  const isCollected = usePokopiaCollectionStore((state) => state.isCollected);
-  const toggleCollected = usePokopiaCollectionStore((state) => state.toggleCollected);
+  const collectedRecipes = usePokopiaCollectionStore((state) => state.collected.recipe);
+  const collectedRecipeSet = useMemo(() => new Set(collectedRecipes), [collectedRecipes]);
+  const groupedRecipes = useMemo(() => {
+    const collected: PokopiaRecipe[] = [];
+    const needed: PokopiaRecipe[] = [];
+
+    for (const recipe of filteredRecipes) {
+      const slug = String(recipe.slug).trim().toLowerCase();
+      if (collectedRecipeSet.has(slug)) {
+        collected.push(recipe);
+      } else {
+        needed.push(recipe);
+      }
+    }
+
+    return [
+      { key: "collected", label: "Collected", items: collected },
+      { key: "needed", label: "Need", items: needed },
+    ].filter((group) => group.items.length > 0);
+  }, [filteredRecipes, collectedRecipeSet]);
 
   const openSheet = useCallback(async (recipe: PokopiaRecipe) => {
     lastRecipe.current = recipe;
@@ -121,12 +140,10 @@ export default function PokopiaRecipesContent({
       </View>
 
       <View className="mb-4">
-        <TextInput
+        <PokopiaSearchInput
           value={recipeSearch}
           onChangeText={onChangeRecipeSearch}
           placeholder="Search recipes..."
-          placeholderTextColor="rgba(148,163,184,0.8)"
-          className="h-11 rounded-2xl border border-slate-700 bg-slate-950 px-4 text-[13px] text-slate-100"
         />
       </View>
 
@@ -143,49 +160,62 @@ export default function PokopiaRecipesContent({
           message="Try a different category or search term."
         />
       ) : (
-        <View className="flex-row flex-wrap -mx-1">
-          {filteredRecipes.map((recipe) => {
-            const collected = isCollected("recipe", recipe.slug);
-
-            return (
-              <View key={`${recipe.category}-${recipe.id}`} className="w-1/3 px-1 mb-2">
-                <Pressable
-                  onPress={() => openSheet(recipe)}
-                  className="rounded-3xl bg-slate-950 border border-slate-800 overflow-hidden"
-                  style={{ minHeight: 160 }}
-                >
-                  {collected ? (
-                    <View className="absolute top-2 right-2 z-10 rounded-full bg-[#6DDA5F] border border-white/70 px-1.5 py-1">
-                      <Ionicons name="checkmark" size={12} color="#fff" />
-                    </View>
-                  ) : null}
-                  <View className="items-center justify-center pt-4 pb-2">
-                    <View className="w-24 h-24">
-                      <ExpoImage
-                        source={{ uri: recipe.imageUrl }}
-                        style={{ width: "100%", height: "100%" }}
-                        contentFit="contain"
-                        transition={120}
-                      />
-                    </View>
-                  </View>
-
-                  <View className="px-3 pb-4 items-center">
-                    <Text
-                      numberOfLines={2}
-                      className="text-[13px] font-semibold text-slate-50 text-center leading-5"
-                    >
-                      {recipe.name}
-                    </Text>
-                    <Text className="text-[11px] text-slate-400 mt-1 text-center">
-                      {recipe.category || "Other"}
-                    </Text>
-                  </View>
-                </Pressable>
+        <>
+          {groupedRecipes.map((group) => (
+            <View key={group.key} className="mb-4">
+              <View className="px-1 mb-2">
+                <Text className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                  {group.label}
+                </Text>
+                <Text className="text-[11px] text-slate-500 mt-0.5">{group.items.length} recipes</Text>
               </View>
-            );
-          })}
-        </View>
+
+              <View className="flex-row flex-wrap -mx-1">
+                {group.items.map((recipe) => {
+                  const collected = collectedRecipeSet.has(String(recipe.slug).trim().toLowerCase());
+
+                  return (
+                    <View key={`${recipe.category}-${recipe.id}`} className="w-1/3 px-1 mb-2">
+                      <Pressable
+                        onPress={() => openSheet(recipe)}
+                        className="rounded-3xl bg-slate-950 border border-slate-800 overflow-hidden"
+                        style={{ minHeight: 160 }}
+                      >
+                        {collected ? (
+                          <View className="absolute top-2 right-2 z-10 rounded-full bg-[#6DDA5F] border border-white/70 px-1.5 py-1">
+                            <Ionicons name="checkmark" size={12} color="#fff" />
+                          </View>
+                        ) : null}
+                        <View className="items-center justify-center pt-4 pb-2">
+                          <View className="w-24 h-24">
+                            <ExpoImage
+                              source={{ uri: recipe.imageUrl }}
+                              style={{ width: "100%", height: "100%" }}
+                              contentFit="contain"
+                              transition={120}
+                            />
+                          </View>
+                        </View>
+
+                        <View className="px-3 pb-4 items-center">
+                          <Text
+                            numberOfLines={2}
+                            className="text-[13px] font-semibold text-slate-50 text-center leading-5"
+                          >
+                            {recipe.name}
+                          </Text>
+                          <Text className="text-[11px] text-slate-400 mt-1 text-center">
+                            {recipe.category || "Other"}
+                          </Text>
+                        </View>
+                      </Pressable>
+                    </View>
+                  );
+                })}
+              </View>
+            </View>
+          ))}
+        </>
       )}
 
       <BottomSheetModal
@@ -224,8 +254,8 @@ export default function PokopiaRecipesContent({
             <View className="items-end">
               {displayRecipe?.slug ? (
                 <PokopiaCollectToggleButton
-                  collected={isCollected("recipe", displayRecipe.slug)}
-                  onPress={() => toggleCollected("recipe", displayRecipe.slug)}
+                  kind="recipe"
+                  slug={displayRecipe.slug}
                 />
               ) : null}
 

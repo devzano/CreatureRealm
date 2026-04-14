@@ -10,7 +10,7 @@ import PokopiaItemVariantStrip from "./PokopiaItemVariantStrip";
 import PokopiaCollectToggleButton from "./PokopiaCollectToggleButton";
 import { fetchPokopiaItemDetail, type PokopiaItemDetail } from "@/lib/pokemon/pokopia/itemDetail";
 import { resolveFavoriteSlug } from "@/lib/pokemon/pokopia/favoriteUtils";
-import { usePokopiaCollectionStore, type PokopiaCollectKind } from "@/store/pokopiaCollectionStore";
+import type { PokopiaCollectKind } from "@/store/pokopiaCollectionStore";
 
 type Props = {
   visible: boolean;
@@ -37,8 +37,6 @@ export default function PokopiaItemDetailSheet({
   const [favoriteSheetVisible, setFavoriteSheetVisible] = useState(false);
   const [selectedFavoriteLabel, setSelectedFavoriteLabel] = useState<string | null>(null);
   const [selectedFavoriteSlug, setSelectedFavoriteSlug] = useState<string | null>(null);
-  const isCollected = usePokopiaCollectionStore((state) => state.isCollected);
-  const toggleCollected = usePokopiaCollectionStore((state) => state.toggleCollected);
 
   useEffect(() => {
     let cancelled = false;
@@ -128,8 +126,8 @@ export default function PokopiaItemDetailSheet({
             <View className="items-end">
               {itemSlug ? (
                 <PokopiaCollectToggleButton
-                  collected={isCollected(collectKind, itemSlug)}
-                  onPress={() => toggleCollected(collectKind, itemSlug)}
+                  kind={collectKind}
+                  slug={itemSlug}
                 />
               ) : null}
 
