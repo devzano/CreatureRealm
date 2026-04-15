@@ -10,6 +10,7 @@ import {
   type PokopiaFilteredItemsPage,
 } from "@/lib/pokemon/pokopia/itemFilters";
 import { POKOPIA_EFFECTS, POKOPIA_FAVORITES } from "./config";
+import PokopiaItemDetailSheet from "./PokopiaItemDetailSheet";
 import PokopiaSearchInput from "./PokopiaSearchInput";
 import { PokopiaEmptyState, PokopiaLoadingState } from "./PokopiaContentStates";
 import { getPokopiaFavoriteTheme } from "./favoritePresentation";
@@ -117,10 +118,42 @@ export default function PokopiaThemesContent({
   const [flavorItems, setFlavorItems] = useState<PokopiaFoodItem[]>([]);
   const [flavorItemsLoading, setFlavorItemsLoading] = useState(false);
   const [flavorItemsError, setFlavorItemsError] = useState<string | null>(null);
+  const [selectedItemSlug, setSelectedItemSlug] = useState<string | null>(null);
+  const [selectedItemName, setSelectedItemName] = useState<string | null>(null);
+  const [selectedItemImageUrl, setSelectedItemImageUrl] = useState<string | null>(null);
+  const [itemSheetVisible, setItemSheetVisible] = useState(false);
+  const [restoreFilterSheetOnItemClose, setRestoreFilterSheetOnItemClose] = useState(false);
   const foodEffect = useMemo(() => POKOPIA_EFFECTS.find((effect) => effect.slug === "food") ?? null, []);
   const nonFoodEffects = useMemo(() => POKOPIA_EFFECTS.filter((effect) => effect.slug !== "food"), []);
   const collectedItems = usePokopiaCollectionStore((state) => state.collected.item);
   const collectedItemSet = useMemo(() => new Set(collectedItems), [collectedItems]);
+
+  function openItemSheet(item: { slug: string; name: string; imageUrl: string }) {
+    setSelectedItemSlug(item.slug);
+    setSelectedItemName(item.name);
+    setSelectedItemImageUrl(item.imageUrl);
+    setRestoreFilterSheetOnItemClose(true);
+    setSheetVisible(false);
+    setTimeout(() => {
+      setItemSheetVisible(true);
+    }, 180);
+  }
+
+  function closeItemSheet() {
+    setItemSheetVisible(false);
+    const shouldRestore = restoreFilterSheetOnItemClose;
+    setRestoreFilterSheetOnItemClose(false);
+
+    setTimeout(() => {
+      setSelectedItemSlug(null);
+      setSelectedItemName(null);
+      setSelectedItemImageUrl(null);
+
+      if (shouldRestore) {
+        setSheetVisible(true);
+      }
+    }, 180);
+  }
 
   const themeEntries = useMemo<ThemeEntry[]>(() => {
     const favorites = POKOPIA_FAVORITES.map((favorite) => ({
@@ -221,6 +254,15 @@ export default function PokopiaThemesContent({
       { key: "needed", label: "Need", items: needed },
     ].filter((group) => group.items.length > 0);
   }, [foodModeItems, collectedItemSet]);
+  const availableEffects = useMemo(
+    () =>
+      isFoodMode
+        ? foodEffect
+          ? [foodEffect]
+          : []
+        : nonFoodEffects,
+    [foodEffect, isFoodMode, nonFoodEffects]
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -510,8 +552,7 @@ export default function PokopiaThemesContent({
                   }}
                   className="h-10 flex-row items-center rounded-full border border-cyan-400/45 bg-cyan-500/12 px-3"
                 >
-                  <Ionicons name="arrow-back" size={16} color="#a5f3fc" />
-                  <Text className="ml-1.5 text-[12px] font-semibold text-cyan-100">Back</Text>
+                  <Text className="ml-1.5 text-[12px] font-semibold text-cyan-100">CLEAR</Text>
                 </Pressable>
               ) : null}
 
@@ -579,7 +620,7 @@ export default function PokopiaThemesContent({
               {isFoodMode ? "Food" : "Effects"}
             </Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              {(isFoodMode ? [foodEffect].filter(Boolean) : nonFoodEffects).map((effect) => {
+              {availableEffects.map((effect) => {
                 const active = selectedEffectSlug === effect.slug;
                 const theme = getPokopiaFavoriteTheme(effect.label, effect.href);
 
@@ -698,7 +739,10 @@ export default function PokopiaThemesContent({
 
                         return (
                           <View key={item.slug} className="w-1/3 px-1 mb-2">
-                            <View className="rounded-2xl bg-slate-950 border border-slate-800 px-2.5 py-3 items-center overflow-hidden">
+                            <Pressable
+                              onPress={() => openItemSheet(item)}
+                              className="rounded-2xl bg-slate-950 border border-slate-800 px-2.5 py-3 items-center overflow-hidden"
+                            >
                               {collected ? (
                                 <View className="absolute top-2 right-2 z-10 rounded-full bg-[#6DDA5F] border border-white/70 px-1.5 py-1">
                                   <Ionicons name="checkmark" size={12} color="#fff" />
@@ -716,7 +760,7 @@ export default function PokopiaThemesContent({
                               <Text numberOfLines={2} className="mt-1 text-[10px] text-slate-400 text-center">
                                 {item.description}
                               </Text>
-                            </View>
+                            </Pressable>
                           </View>
                         );
                       })}
@@ -744,7 +788,10 @@ export default function PokopiaThemesContent({
 
                         return (
                           <View key={item.slug} className="w-1/3 px-1 mb-2">
-                            <View className="rounded-2xl bg-slate-950 border border-slate-800 px-2.5 py-3 items-center overflow-hidden">
+                            <Pressable
+                              onPress={() => openItemSheet(item)}
+                              className="rounded-2xl bg-slate-950 border border-slate-800 px-2.5 py-3 items-center overflow-hidden"
+                            >
                               {collected ? (
                                 <View className="absolute top-2 right-2 z-10 rounded-full bg-[#6DDA5F] border border-white/70 px-1.5 py-1">
                                   <Ionicons name="checkmark" size={12} color="#fff" />
@@ -762,7 +809,7 @@ export default function PokopiaThemesContent({
                               <Text numberOfLines={2} className="mt-1 text-[10px] text-slate-400 text-center">
                                 {item.description}
                               </Text>
-                            </View>
+                            </Pressable>
                           </View>
                         );
                       })}
@@ -833,7 +880,10 @@ export default function PokopiaThemesContent({
 
                             return (
                               <View key={item.slug} className="w-1/3 px-1 mb-2">
-                                <View className="rounded-3xl bg-slate-950 border border-slate-800 px-2.5 py-3 overflow-hidden">
+                                <Pressable
+                                  onPress={() => openItemSheet(item)}
+                                  className="rounded-3xl bg-slate-950 border border-slate-800 px-2.5 py-3 overflow-hidden"
+                                >
                                   {collected ? (
                                     <View className="absolute top-2 right-2 z-10 rounded-full bg-[#6DDA5F] border border-white/70 px-1.5 py-1">
                                       <Ionicons name="checkmark" size={12} color="#fff" />
@@ -941,7 +991,7 @@ export default function PokopiaThemesContent({
                                         })
                                       : null}
                                   </View>
-                                </View>
+                                </Pressable>
                               </View>
                             );
                           })}
@@ -954,6 +1004,16 @@ export default function PokopiaThemesContent({
           ) : null}
         </ScrollView>
       </BottomSheetModal>
+
+      <PokopiaItemDetailSheet
+        visible={itemSheetVisible}
+        itemSlug={selectedItemSlug}
+        itemName={selectedItemName}
+        itemImageUrl={selectedItemImageUrl}
+        subtitle="Item"
+        onRequestClose={closeItemSheet}
+        collectKind="item"
+      />
     </View>
   );
 }
