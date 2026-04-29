@@ -19,7 +19,9 @@ type PokemonHomeContentProps = {
 const NATIONAL_VIEW_MODE: DexViewMode = "national";
 
 type ActiveTab = "dex" | "maps" | "games";
-type GameSectionKey = `gen-${number}` | "pokopia";
+type GameSectionKey = `gen-${number}` | "pokopia" | "tcg";
+
+const TCG_SEARCH_TERMS = ["tcg", "card", "cards", "trading card", "pokemon tcg", "physical set", "booster"];
 
 function getGameSectionKey(game: (typeof games)[number]): GameSectionKey {
   return game.id === "pokopia" ? "pokopia" : `gen-${game.generationId}`;
@@ -27,11 +29,13 @@ function getGameSectionKey(game: (typeof games)[number]): GameSectionKey {
 
 function getGameSectionLabel(sectionKey: GameSectionKey): string {
   if (sectionKey === "pokopia") return "Pokopia";
+  if (sectionKey === "tcg") return "Pokemon TCG";
   return `Generation ${sectionKey.replace("gen-", "")}`;
 }
 
 function getGameSectionBadge(sectionKey: GameSectionKey): string {
   if (sectionKey === "pokopia") return "P";
+  if (sectionKey === "tcg") return "T";
   return sectionKey.replace("gen-", "");
 }
 
@@ -114,6 +118,16 @@ const PokemonHomeContent: React.FC<PokemonHomeContentProps> = ({ onBackToCollect
         games: sectionGames,
       }));
   }, [filteredGames]);
+
+  const showTcgSection = useMemo(() => {
+    if (!normalizedSearch) return true;
+    return TCG_SEARCH_TERMS.some((term) => term.includes(normalizedSearch) || normalizedSearch.includes(term));
+  }, [normalizedSearch]);
+
+  const gamesIndexSections = useMemo(() => {
+    const sections = generationSections.map((section) => section.sectionKey);
+    return showTcgSection ? (["tcg", ...sections] as GameSectionKey[]) : sections;
+  }, [generationSections, showTcgSection]);
 
   const scrollToSection = (sectionKey: GameSectionKey) => {
     const y = sectionOffsetsRef.current[sectionKey];
@@ -215,144 +229,220 @@ const PokemonHomeContent: React.FC<PokemonHomeContentProps> = ({ onBackToCollect
             <View className="w-full">
               <View className="mt-1 mb-1 px-1" />
 
-              {filteredGames.length === 0 ? (
+              {filteredGames.length === 0 && !showTcgSection ? (
                 <View className="mt-6 items-center">
                   <Text className="text-sm text-slate-400 text-center px-4">
-                    No games match this search. Try searching by title, generation, or short code.
+                    No games match this search. Try searching by title, generation, short code, or TCG.
                   </Text>
                 </View>
               ) : (
-                generationSections.map((section) => (
-                  <View
-                    key={section.sectionKey}
-                    onLayout={(e) => {
-                      sectionOffsetsRef.current[section.sectionKey] = e.nativeEvent.layout.y;
-                    }}
-                    className="mb-2"
-                  >
-                    <View className="flex-row items-center mb-1 px-1 mt-2">
-                      <View className="w-1.5 h-5 rounded-full mr-2 bg-slate-700" />
-                      <Text className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-                        {getGameSectionLabel(section.sectionKey)}
-                      </Text>
+                <>
+                  {showTcgSection ? (
+                    <View
+                      key="tcg"
+                      onLayout={(e) => {
+                        sectionOffsetsRef.current.tcg = e.nativeEvent.layout.y;
+                      }}
+                      className="mb-2"
+                    >
+                      <View className="flex-row items-center mb-1 px-1 mt-2">
+                        <View className="w-1.5 h-5 rounded-full mr-2 bg-amber-400" />
+                        <Text className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                          {getGameSectionLabel("tcg")}
+                        </Text>
+                      </View>
+
+                      <Pressable
+                        onPress={() => router.push("/tcg")}
+                        className="rounded-3xl bg-slate-950/80 border mb-3 overflow-hidden"
+                        style={{ borderColor: "#f59e0b" }}
+                      >
+                        <View className="flex-row items-center px-4 pt-3 pb-2">
+                          <View
+                            style={{
+                              width: 54,
+                              height: 72,
+                              borderRadius: 14,
+                              marginRight: 12,
+                              backgroundColor: "rgba(120,53,15,0.22)",
+                              borderWidth: 1,
+                              borderColor: "rgba(245,158,11,0.35)",
+                              alignItems: "center",
+                              justifyContent: "center",
+                            }}
+                          >
+                            <Text className="text-[18px] font-bold text-amber-300">TCG</Text>
+                          </View>
+
+                          <View className="flex-1">
+                            <Text className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                              Physical Sets
+                            </Text>
+                            <Text className="text-[15px] font-semibold text-slate-50 mt-0.5">Pokemon TCG</Text>
+                            <Text className="text-[12px] text-slate-400 mt-0.5">
+                              Browse official sets, filter cards, and track owned or wanted pulls.
+                            </Text>
+                          </View>
+
+                          <View className="items-end ml-3">
+                            <View className="flex-row items-center px-2.5 py-1 rounded-full bg-slate-950 border border-slate-700">
+                              <Text className="text-[10px] font-semibold text-slate-200 mr-1">Open Cards</Text>
+                              <Feather name="chevron-right" size={14} color="#E5E7EB" />
+                            </View>
+                            <Text className="text-[11px] text-slate-400 mt-1">Foundation</Text>
+                          </View>
+                        </View>
+
+                        <View className="px-4 pb-3 pt-1 border-t border-slate-800/80 bg-slate-950/80">
+                          <View className="flex-row items-center">
+                            <View className="w-1.5 h-6 rounded-full mr-2 bg-amber-400" />
+                            <Text className="text-[11px] text-slate-400">
+                              Official <Text className="text-slate-200 font-semibold">Pokemon TCG API</Text>
+                              {" • "}Physical collection tracking
+                            </Text>
+                          </View>
+
+                          <View className="flex-row flex-wrap mt-2 -mr-1">
+                            {["Sets", "Cards", "Wanted", "Owned"].map((label) => (
+                              <View key={label} className="px-2 py-1 rounded-full bg-slate-900/90 border border-slate-700 mr-2 mt-1">
+                                <Text className="text-[10px] text-slate-300">{label}</Text>
+                              </View>
+                            ))}
+                          </View>
+                        </View>
+                      </Pressable>
                     </View>
+                  ) : null}
 
-                    {section.games.map((game: any) => {
-                      const accent = Array.isArray(game.accentColor) ? game.accentColor[0] : game.accentColor ?? "#38bdf8";
-                      const speciesCount = game.speciesCount ?? undefined;
-                      const coverUrl: string | undefined = typeof game.coverImageUrl === "string" ? game.coverImageUrl : undefined;
+                  {generationSections.map((section) => (
+                    <View
+                      key={section.sectionKey}
+                      onLayout={(e) => {
+                        sectionOffsetsRef.current[section.sectionKey] = e.nativeEvent.layout.y;
+                      }}
+                      className="mb-2"
+                    >
+                      <View className="flex-row items-center mb-1 px-1 mt-2">
+                        <View className="w-1.5 h-5 rounded-full mr-2 bg-slate-700" />
+                        <Text className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                          {getGameSectionLabel(section.sectionKey)}
+                        </Text>
+                      </View>
 
-                      return (
-                        <Pressable
-                          key={game.id}
-                          onPress={() =>
-                            router.push({
-                              pathname: "/game/[id]",
-                              params: { id: game.id },
-                            })
-                          }
-                          className="rounded-3xl bg-slate-950/80 border mb-3 overflow-hidden"
-                          style={{ borderColor: accent }}
-                        >
-                          {/* Top row: cover + title + CTA */}
-                          <View className="flex-row items-center px-4 pt-3 pb-2">
-                            {/* ✅ Game cover thumbnail (expo-image) */}
-                            {coverUrl ? (
-                              <ExpoImage
-                                source={{ uri: coverUrl }}
-                                contentFit="cover"
-                                transition={120}
-                                style={{
-                                  width: 54,
-                                  height: 72,
-                                  borderRadius: 14,
-                                  marginRight: 12,
-                                  backgroundColor: "rgba(2,6,23,0.7)",
-                                  borderWidth: 1,
-                                  borderColor: "rgba(51,65,85,0.6)",
-                                }}
-                              />
-                            ) : (
-                              <View
-                                style={{
-                                  width: 54,
-                                  height: 72,
-                                  borderRadius: 14,
-                                  marginRight: 12,
-                                  backgroundColor: "rgba(2,6,23,0.7)",
-                                  borderWidth: 1,
-                                  borderColor: "rgba(51,65,85,0.6)",
-                                  alignItems: "center",
-                                  justifyContent: "center",
-                                }}
-                              >
-                                <Feather name="image" size={16} color="#64748B" />
-                              </View>
-                            )}
+                      {section.games.map((game: any) => {
+                        const accent = Array.isArray(game.accentColor) ? game.accentColor[0] : game.accentColor ?? "#38bdf8";
+                        const speciesCount = game.speciesCount ?? undefined;
+                        const coverUrl: string | undefined = typeof game.coverImageUrl === "string" ? game.coverImageUrl : undefined;
 
-                            <View className="flex-1">
-                              <Text className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-                                {game.id === "pokopia" ? "Pokopia" : `Gen ${game.generationId}`}
-                              </Text>
-                              <Text className="text-[15px] font-semibold text-slate-50 mt-0.5">{game.title}</Text>
-                              {game.subtitle ? <Text className="text-[12px] text-slate-400 mt-0.5">{game.subtitle}</Text> : null}
-                            </View>
+                        return (
+                          <Pressable
+                            key={game.id}
+                            onPress={() =>
+                              router.push({
+                                pathname: "/game/[id]",
+                                params: { id: game.id },
+                              })
+                            }
+                            className="rounded-3xl bg-slate-950/80 border mb-3 overflow-hidden"
+                            style={{ borderColor: accent }}
+                          >
+                            <View className="flex-row items-center px-4 pt-3 pb-2">
+                              {coverUrl ? (
+                                <ExpoImage
+                                  source={{ uri: coverUrl }}
+                                  contentFit="cover"
+                                  transition={120}
+                                  style={{
+                                    width: 54,
+                                    height: 72,
+                                    borderRadius: 14,
+                                    marginRight: 12,
+                                    backgroundColor: "rgba(2,6,23,0.7)",
+                                    borderWidth: 1,
+                                    borderColor: "rgba(51,65,85,0.6)",
+                                  }}
+                                />
+                              ) : (
+                                <View
+                                  style={{
+                                    width: 54,
+                                    height: 72,
+                                    borderRadius: 14,
+                                    marginRight: 12,
+                                    backgroundColor: "rgba(2,6,23,0.7)",
+                                    borderWidth: 1,
+                                    borderColor: "rgba(51,65,85,0.6)",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                  }}
+                                >
+                                  <Feather name="image" size={16} color="#64748B" />
+                                </View>
+                              )}
 
-                            <View className="items-end ml-3">
-                              <View className="flex-row items-center px-2.5 py-1 rounded-full bg-slate-950 border border-slate-700">
-                                <Text className="text-[10px] font-semibold text-slate-200 mr-1">View Pokédex</Text>
-                                <Feather name="chevron-right" size={14} color="#E5E7EB" />
-                              </View>
-                              {speciesCount ? <Text className="text-[11px] text-slate-400 mt-1">{speciesCount} species</Text> : null}
-                            </View>
-                          </View>
-
-                          {/* Meta + tags row */}
-                          <View className="px-4 pb-3 pt-1 border-t border-slate-800/80 bg-slate-950/80">
-                            <View className="flex-row items-center justify-between">
-                              <View className="flex-row items-center">
-                                <View className="w-1.5 h-6 rounded-full mr-2" style={{ backgroundColor: accent }} />
-                                <Text className="text-[11px] text-slate-400">
-                                  {game.id === "pokopia" ? (
-                                    <>
-                                      <Text className="text-slate-200 font-semibold">Pokopia</Text>
-                                    </>
-                                  ) : (
-                                    <>
-                                      Generation <Text className="text-slate-200 font-semibold">{game.generationId}</Text>
-                                    </>
-                                  )}
-                                  {speciesCount ? (
-                                    <>
-                                      {" • "}
-                                      <Text className="text-slate-200 font-semibold">{speciesCount}</Text> species
-                                    </>
-                                  ) : null}
+                              <View className="flex-1">
+                                <Text className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                                  {game.id === "pokopia" ? "Pokopia" : `Gen ${game.generationId}`}
                                 </Text>
+                                <Text className="text-[15px] font-semibold text-slate-50 mt-0.5">{game.title}</Text>
+                                {game.subtitle ? <Text className="text-[12px] text-slate-400 mt-0.5">{game.subtitle}</Text> : null}
+                              </View>
+
+                              <View className="items-end ml-3">
+                                <View className="flex-row items-center px-2.5 py-1 rounded-full bg-slate-950 border border-slate-700">
+                                  <Text className="text-[10px] font-semibold text-slate-200 mr-1">View Pokédex</Text>
+                                  <Feather name="chevron-right" size={14} color="#E5E7EB" />
+                                </View>
+                                {speciesCount ? <Text className="text-[11px] text-slate-400 mt-1">{speciesCount} species</Text> : null}
                               </View>
                             </View>
 
-                            {Array.isArray(game.shortCode) && game.shortCode.length > 0 ? (
-                              <View className="flex-row flex-wrap mt-2 -mr-1">
-                                {game.shortCode.map((code: string) => (
-                                  <View key={code} className="px-2 py-1 rounded-full bg-slate-900/90 border border-slate-700 mr-2 mt-1">
-                                    <Text className="text-[10px] text-slate-300">{code}</Text>
-                                  </View>
-                                ))}
+                            <View className="px-4 pb-3 pt-1 border-t border-slate-800/80 bg-slate-950/80">
+                              <View className="flex-row items-center justify-between">
+                                <View className="flex-row items-center">
+                                  <View className="w-1.5 h-6 rounded-full mr-2" style={{ backgroundColor: accent }} />
+                                  <Text className="text-[11px] text-slate-400">
+                                    {game.id === "pokopia" ? (
+                                      <>
+                                        <Text className="text-slate-200 font-semibold">Pokopia</Text>
+                                      </>
+                                    ) : (
+                                      <>
+                                        Generation <Text className="text-slate-200 font-semibold">{game.generationId}</Text>
+                                      </>
+                                    )}
+                                    {speciesCount ? (
+                                      <>
+                                        {" • "}
+                                        <Text className="text-slate-200 font-semibold">{speciesCount}</Text> species
+                                      </>
+                                    ) : null}
+                                  </Text>
+                                </View>
                               </View>
-                            ) : null}
-                          </View>
-                        </Pressable>
-                      );
-                    })}
-                  </View>
-                ))
+
+                              {Array.isArray(game.shortCode) && game.shortCode.length > 0 ? (
+                                <View className="flex-row flex-wrap mt-2 -mr-1">
+                                  {game.shortCode.map((code: string) => (
+                                    <View key={code} className="px-2 py-1 rounded-full bg-slate-900/90 border border-slate-700 mr-2 mt-1">
+                                      <Text className="text-[10px] text-slate-300">{code}</Text>
+                                    </View>
+                                  ))}
+                                </View>
+                              ) : null}
+                            </View>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  ))}
+                </>
               )}
             </View>
           </ScrollView>
 
           {/* Generation index on the right side */}
-          {generationSections.length > 0 && (
+          {gamesIndexSections.length > 0 && (
             <View pointerEvents="box-none" style={{ position: "absolute", right: 0, top: 4, bottom: 16, justifyContent: "center", paddingRight: 2 }}>
               <View
                 style={{
@@ -365,13 +455,13 @@ const PokemonHomeContent: React.FC<PokemonHomeContentProps> = ({ onBackToCollect
                   borderColor: "rgba(51,65,85,1)",
                 }}
               >
-                {generationSections.map((section) => (
+                {gamesIndexSections.map((sectionKey) => (
                   <Pressable
-                    key={section.sectionKey}
-                    onPress={() => scrollToSection(section.sectionKey)}
+                    key={sectionKey}
+                    onPress={() => scrollToSection(sectionKey)}
                     style={{ paddingVertical: 4, paddingHorizontal: 6, alignItems: "center" }}
                   >
-                    <Text className="text-[13px] text-slate-400">{getGameSectionBadge(section.sectionKey)}</Text>
+                    <Text className="text-[13px] text-slate-400">{getGameSectionBadge(sectionKey)}</Text>
                   </Pressable>
                 ))}
               </View>

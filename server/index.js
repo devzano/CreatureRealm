@@ -4,6 +4,7 @@ import express from "express";
 import cors from "cors";
 import universeRequestRouter from "./routes/creaturerealmUniverseRequest.js";
 import nookipediaProxyRouter from "./routes/nookipediaProxy.js";
+import pokemonTCGProxyRouter from "./routes/pokemonTCGProxy.js";
 
 const app = express();
 const PORT = process.env.PORT || 8000;
@@ -16,6 +17,7 @@ app.get("/", (req, res) => {
 });
 
 app.use("/nookipedia", nookipediaProxyRouter);
+app.use("/pokemontcg", pokemonTCGProxyRouter);
 
 app.use("/feedback", universeRequestRouter);
 

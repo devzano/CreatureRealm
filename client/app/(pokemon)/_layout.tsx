@@ -5,6 +5,7 @@ export default function PokemonLayout() {
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="game/[id]" />
       <Stack.Screen name="pokemon/[id]" />
+      <Stack.Screen name="tcg" />
     </Stack>
   );
 }
