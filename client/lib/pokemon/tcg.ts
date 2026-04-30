@@ -37,14 +37,77 @@ export type PokemonTCGCard = {
   name: string;
   supertype: string;
   subtypes?: string[];
+  level?: string;
   hp?: string;
   types?: string[];
+  evolvesFrom?: string;
+  evolvesTo?: string[];
+  rules?: string[];
+  flavorText?: string;
+  regulationMark?: string;
+  nationalPokedexNumbers?: number[];
+  abilities?: {
+    name: string;
+    text: string;
+    type: string;
+  }[];
+  attacks?: {
+    cost?: string[];
+    name: string;
+    text?: string;
+    damage?: string;
+    convertedEnergyCost?: number;
+  }[];
+  weaknesses?: {
+    type: string;
+    value: string;
+  }[];
+  resistances?: {
+    type: string;
+    value: string;
+  }[];
+  retreatCost?: string[];
+  convertedRetreatCost?: number;
   rarity?: string;
   number: string;
   artist?: string;
+  legalities?: {
+    standard?: string;
+    expanded?: string;
+    unlimited?: string;
+  };
   images: {
     small: string;
     large: string;
+  };
+  tcgplayer?: {
+    url?: string;
+    updatedAt?: string;
+    prices?: Record<
+      string,
+      {
+        low?: number;
+        mid?: number;
+        high?: number;
+        market?: number;
+        directLow?: number;
+      }
+    >;
+  };
+  cardmarket?: {
+    url?: string;
+    updatedAt?: string;
+    prices?: {
+      averageSellPrice?: number;
+      lowPrice?: number;
+      trendPrice?: number;
+      reverseHoloSell?: number;
+      reverseHoloLow?: number;
+      reverseHoloTrend?: number;
+      avg1?: number;
+      avg7?: number;
+      avg30?: number;
+    };
   };
   set: {
     id: string;
@@ -101,6 +164,7 @@ async function tcgFetch<T>(path: string): Promise<T> {
 
 const setsCache = new Map<string, Promise<PokemonTCGSet[]>>();
 const cardsBySetCache = new Map<string, Promise<PokemonTCGCard[]>>();
+const cardByIdCache = new Map<string, Promise<PokemonTCGCard>>();
 
 function cleanSearch(value: string) {
   return String(value ?? "").trim().toLowerCase();
@@ -157,6 +221,22 @@ export async function fetchPokemonTCGCardsForSet(setId: string): Promise<Pokemon
   })();
 
   cardsBySetCache.set(normalizedSetId, promise);
+  return promise;
+}
+
+export async function fetchPokemonTCGCard(cardId: string): Promise<PokemonTCGCard> {
+  const normalizedCardId = String(cardId ?? "").trim();
+  if (!normalizedCardId) throw new Error("Missing card id.");
+
+  const pending = cardByIdCache.get(normalizedCardId);
+  if (pending) return pending;
+
+  const promise = (async () => {
+    const result = await tcgFetch<{ data: PokemonTCGCard }>(`/cards/${encodeURIComponent(normalizedCardId)}`);
+    return result.data;
+  })();
+
+  cardByIdCache.set(normalizedCardId, promise);
   return promise;
 }
 

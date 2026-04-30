@@ -6,6 +6,7 @@ export type PokemonTCGCollectionEntry = {
   owned: boolean;
   wanted: boolean;
   count: number;
+  digitalCount: number;
   notes?: string;
 };
 
@@ -16,12 +17,15 @@ type PokemonTCGCollectionState = {
   toggleWanted: (cardId: string) => void;
   setCount: (cardId: string, count: number) => void;
   setNotes: (cardId: string, notes: string) => void;
+  addDigitalCopies: (cardId: string, amount?: number) => void;
+  syncDigitalInventory: (inventory: Record<string, number>) => void;
 };
 
 const defaultEntry: PokemonTCGCollectionEntry = {
   owned: false,
   wanted: false,
   count: 0,
+  digitalCount: 0,
   notes: "",
 };
 
@@ -117,6 +121,55 @@ export const usePokemonTCGCollectionStore = create<PokemonTCGCollectionState>()(
               },
             },
           };
+        }),
+
+      addDigitalCopies: (cardId, amount = 1) =>
+        set((state) => {
+          const key = normalizeCardId(cardId);
+          if (!key) return state;
+
+          const prev = state.entries[key] ?? defaultEntry;
+          const nextDigitalCount = Math.max(0, (prev.digitalCount ?? 0) + Math.max(0, Number(amount || 0)));
+
+          return {
+            entries: {
+              ...state.entries,
+              [key]: {
+                ...defaultEntry,
+                ...prev,
+                digitalCount: nextDigitalCount,
+              },
+            },
+          };
+        }),
+
+      syncDigitalInventory: (inventory) =>
+        set((state) => {
+          const nextEntries = { ...state.entries };
+
+          for (const [key, entry] of Object.entries(nextEntries)) {
+            if ((entry.digitalCount ?? 0) > 0) {
+              nextEntries[key] = {
+                ...defaultEntry,
+                ...entry,
+                digitalCount: 0,
+              };
+            }
+          }
+
+          for (const [rawCardId, count] of Object.entries(inventory ?? {})) {
+            const key = normalizeCardId(rawCardId);
+            if (!key) continue;
+
+            const prev = nextEntries[key] ?? defaultEntry;
+            nextEntries[key] = {
+              ...defaultEntry,
+              ...prev,
+              digitalCount: Math.max(0, Number(count || 0)),
+            };
+          }
+
+          return { entries: nextEntries };
         }),
     }),
     {

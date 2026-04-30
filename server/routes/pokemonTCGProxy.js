@@ -5,7 +5,13 @@ const router = express.Router();
 const POKEMON_TCG_BASE = "https://api.pokemontcg.io/v2";
 
 function getApiKey() {
-  const key = String(process.env.EXPO_POKEMON_TCG_API_KEY).trim();
+  const key = String(
+    process.env.POKEMONTCG_API_KEY ??
+      process.env.POKEMON_TCG_API_KEY ??
+      process.env.EXPO_POKEMON_TCG_API_KEY ??
+      process.env.EXPO_POKEMONTCG_API_KEY ??
+      ""
+  ).trim();
 
   if (!key) {
     throw new Error("Missing POKEMONTCG_API_KEY on server.");
