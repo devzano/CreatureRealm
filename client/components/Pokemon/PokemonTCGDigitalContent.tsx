@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Animated, Easing, Pressable, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, Animated, Easing, PanResponder, Pressable, ScrollView, Text, View } from "react-native";
 import { Image as ExpoImage } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -53,6 +53,10 @@ export default function PokemonTCGDigitalContent(props: PokemonTCGDigitalContent
   const syncDigitalInventory = usePokemonTCGCollectionStore((state) => state.syncDigitalInventory);
   const packScale = useRef(new Animated.Value(1)).current;
   const packOpacity = useRef(new Animated.Value(1)).current;
+  const packTranslateX = useRef(new Animated.Value(0)).current;
+  const packTranslateY = useRef(new Animated.Value(0)).current;
+  const packTilt = useRef(new Animated.Value(0)).current;
+  const packGlow = useRef(new Animated.Value(0.2)).current;
   const cardOpacity = useRef(new Animated.Value(0)).current;
   const cardTranslateY = useRef(new Animated.Value(20)).current;
   const cardScale = useRef(new Animated.Value(0.95)).current;
@@ -96,11 +100,26 @@ export default function PokemonTCGDigitalContent(props: PokemonTCGDigitalContent
     setRevealIndex(0);
     packScale.setValue(1);
     packOpacity.setValue(1);
+    packTranslateX.setValue(0);
+    packTranslateY.setValue(0);
+    packTilt.setValue(0);
+    packGlow.setValue(0.2);
     cardOpacity.setValue(0);
     cardTranslateY.setValue(20);
     cardScale.setValue(0.95);
     summaryOpacity.setValue(0);
-  }, [cardOpacity, cardScale, cardTranslateY, packOpacity, packScale, summaryOpacity]);
+  }, [
+    cardOpacity,
+    cardScale,
+    cardTranslateY,
+    packGlow,
+    packOpacity,
+    packScale,
+    packTilt,
+    packTranslateX,
+    packTranslateY,
+    summaryOpacity,
+  ]);
 
   const loadProfile = useCallback(async () => {
     try {
@@ -140,6 +159,10 @@ export default function PokemonTCGDigitalContent(props: PokemonTCGDigitalContent
         setRevealIndex(0);
         packScale.setValue(1);
         packOpacity.setValue(1);
+        packTranslateX.setValue(0);
+        packTranslateY.setValue(0);
+        packTilt.setValue(0);
+        packGlow.setValue(0.2);
         cardOpacity.setValue(0);
         cardTranslateY.setValue(20);
         cardScale.setValue(0.95);
@@ -150,7 +173,20 @@ export default function PokemonTCGDigitalContent(props: PokemonTCGDigitalContent
         setOpeningPackId(null);
       }
     },
-    [cardOpacity, cardScale, cardTranslateY, deviceId, packOpacity, packScale, summaryOpacity, syncDigitalInventory]
+    [
+      cardOpacity,
+      cardScale,
+      cardTranslateY,
+      deviceId,
+      packGlow,
+      packOpacity,
+      packScale,
+      packTilt,
+      packTranslateX,
+      packTranslateY,
+      summaryOpacity,
+      syncDigitalInventory,
+    ]
   );
 
   const digitalSummary = useMemo(() => {
@@ -167,27 +203,68 @@ export default function PokemonTCGDigitalContent(props: PokemonTCGDigitalContent
     Animated.sequence([
       Animated.parallel([
         Animated.timing(packScale, {
-          toValue: 1.06,
-          duration: 150,
+          toValue: 1.14,
+          duration: 180,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
+        Animated.timing(packTranslateY, {
+          toValue: -18,
+          duration: 180,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
+        Animated.timing(packTilt, {
+          toValue: 1,
+          duration: 180,
           easing: Easing.out(Easing.cubic),
           useNativeDriver: true,
         }),
         Animated.timing(packOpacity, {
           toValue: 1,
-          duration: 150,
+          duration: 180,
+          useNativeDriver: true,
+        }),
+        Animated.timing(packGlow, {
+          toValue: 1,
+          duration: 180,
           useNativeDriver: true,
         }),
       ]),
       Animated.parallel([
         Animated.timing(packScale, {
-          toValue: 0.82,
-          duration: 220,
+          toValue: 1.28,
+          duration: 260,
+          easing: Easing.inOut(Easing.cubic),
+          useNativeDriver: true,
+        }),
+        Animated.timing(packTranslateY, {
+          toValue: -240,
+          duration: 280,
+          easing: Easing.in(Easing.cubic),
+          useNativeDriver: true,
+        }),
+        Animated.timing(packTranslateX, {
+          toValue: 34,
+          duration: 280,
+          easing: Easing.in(Easing.cubic),
+          useNativeDriver: true,
+        }),
+        Animated.timing(packTilt, {
+          toValue: 2,
+          duration: 280,
           easing: Easing.in(Easing.cubic),
           useNativeDriver: true,
         }),
         Animated.timing(packOpacity, {
           toValue: 0,
-          duration: 220,
+          duration: 260,
+          easing: Easing.in(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.timing(packGlow, {
+          toValue: 0,
+          duration: 260,
           easing: Easing.in(Easing.quad),
           useNativeDriver: true,
         }),
@@ -196,7 +273,7 @@ export default function PokemonTCGDigitalContent(props: PokemonTCGDigitalContent
       setRevealPhase("revealing");
       animateCardIn();
     });
-  }, [animateCardIn, packOpacity, packScale]);
+  }, [animateCardIn, packGlow, packOpacity, packScale, packTilt, packTranslateX, packTranslateY]);
 
   const advanceReveal = useCallback(() => {
     if (!revealCards?.length) return;
@@ -230,6 +307,75 @@ export default function PokemonTCGDigitalContent(props: PokemonTCGDigitalContent
       animateCardIn();
     });
   }, [animateCardIn, cardOpacity, cardTranslateY, revealCards, revealIndex, summaryOpacity]);
+
+  const sealedPackPanResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponder: (_, gestureState) =>
+          revealPhase === "sealed" && (Math.abs(gestureState.dx) > 8 || Math.abs(gestureState.dy) > 8),
+        onPanResponderMove: (_, gestureState) => {
+          if (revealPhase !== "sealed") return;
+
+          const clampedX = Math.max(-70, Math.min(70, gestureState.dx));
+          const clampedY = Math.max(-120, Math.min(40, gestureState.dy));
+          packTranslateX.setValue(clampedX);
+          packTranslateY.setValue(clampedY);
+          packTilt.setValue(clampedX / 50);
+
+          const distance = Math.min(1, (Math.abs(clampedX) + Math.abs(Math.min(clampedY, 0))) / 140);
+          packGlow.setValue(0.2 + distance * 0.8);
+          packScale.setValue(1 + distance * 0.08);
+        },
+        onPanResponderRelease: (_, gestureState) => {
+          if (revealPhase !== "sealed") return;
+
+          const shouldRip = Math.abs(gestureState.dx) > 72 || gestureState.dy < -72;
+          if (shouldRip) {
+            beginReveal();
+            return;
+          }
+
+          Animated.parallel([
+            Animated.spring(packTranslateX, {
+              toValue: 0,
+              useNativeDriver: true,
+              speed: 18,
+              bounciness: 8,
+            }),
+            Animated.spring(packTranslateY, {
+              toValue: 0,
+              useNativeDriver: true,
+              speed: 18,
+              bounciness: 8,
+            }),
+            Animated.spring(packTilt, {
+              toValue: 0,
+              useNativeDriver: true,
+              speed: 18,
+              bounciness: 8,
+            }),
+            Animated.spring(packScale, {
+              toValue: 1,
+              useNativeDriver: true,
+              speed: 18,
+              bounciness: 8,
+            }),
+            Animated.timing(packGlow, {
+              toValue: 0.2,
+              duration: 180,
+              easing: Easing.out(Easing.quad),
+              useNativeDriver: true,
+            }),
+          ]).start();
+        },
+      }),
+    [beginReveal, packGlow, packScale, packTilt, packTranslateX, packTranslateY, revealPhase]
+  );
+
+  const packRotate = packTilt.interpolate({
+    inputRange: [-2, 0, 2],
+    outputRange: ["-18deg", "0deg", "18deg"],
+  });
 
   return (
     <ScrollView className="flex-1" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 8, paddingBottom: 34 }}>
@@ -453,39 +599,59 @@ export default function PokemonTCGDigitalContent(props: PokemonTCGDigitalContent
             ) : null}
 
             {revealPhase === "sealed" && revealPack ? (
-              <View className="rounded-3xl border border-fuchsia-400/20 bg-slate-950 px-4 py-5">
-                <Animated.View
-                  style={{
-                    transform: [{ scale: packScale }],
-                    opacity: packOpacity,
-                  }}
-                >
-                  <View className="rounded-[28px] border border-fuchsia-400/30 bg-slate-950 px-4 py-5">
-                    <View className="items-center">
-                      <ExpoImage source={{ uri: revealPack.images.logo }} style={{ width: 240, height: 56 }} contentFit="contain" transition={120} />
-                      <View className="mt-4 w-44 h-44 rounded-[28px] border border-slate-700 bg-slate-900 items-center justify-center overflow-hidden p-4">
-                        <ExpoImage source={{ uri: revealPack.images.symbol }} style={{ width: "100%", height: "100%" }} contentFit="contain" transition={120} />
-                      </View>
-                    </View>
-
-                    <Text className="mt-5 text-center text-[14px] font-semibold text-slate-100">{revealPack.name}</Text>
-                    <Text className="mt-1 text-center text-[12px] leading-5 text-slate-400">{revealPack.subtitle}</Text>
-
-                    <View className="mt-4 flex-row flex-wrap justify-center">
-                      {revealPack.slotOdds.map((slot, index) => (
-                        <View key={`${revealPack.id}-${index}`} className="mr-2 mb-2 rounded-full border border-slate-700 bg-slate-900 px-2.5 py-1">
-                          <Text className="text-[10px] font-semibold text-slate-200">
-                            Slot {index + 1}: {slot.tier}
-                          </Text>
+                <View className="rounded-3xl border border-fuchsia-400/20 bg-slate-950 px-4 py-5">
+                  <Animated.View
+                    {...sealedPackPanResponder.panHandlers}
+                    style={{
+                      transform: [{ scale: packScale }],
+                      opacity: packOpacity,
+                    }}
+                  >
+                    <Animated.View
+                      style={{
+                        transform: [{ translateX: packTranslateX }, { translateY: packTranslateY }, { rotate: packRotate }, { scale: packScale }],
+                      }}
+                    >
+                      <Animated.View
+                        className="rounded-[28px] border border-fuchsia-400/30 bg-slate-950 px-4 py-5"
+                        style={{
+                          shadowColor: "#d946ef",
+                          shadowOpacity: 0.45,
+                          shadowRadius: 22,
+                          shadowOffset: { width: 0, height: 10 },
+                          opacity: Animated.add(0.75, Animated.multiply(packGlow, 0.25)),
+                        }}
+                      >
+                        <View className="items-center">
+                          <ExpoImage source={{ uri: revealPack.images.logo }} style={{ width: 240, height: 56 }} contentFit="contain" transition={120} />
+                          <View className="mt-4 w-44 h-44 rounded-[28px] border border-slate-700 bg-slate-900 items-center justify-center overflow-hidden p-4">
+                            <ExpoImage source={{ uri: revealPack.images.symbol }} style={{ width: "100%", height: "100%" }} contentFit="contain" transition={120} />
+                          </View>
                         </View>
-                      ))}
-                    </View>
-                  </View>
-                </Animated.View>
+
+                        <Text className="mt-5 text-center text-[14px] font-semibold text-slate-100">{revealPack.name}</Text>
+                        <Text className="mt-1 text-center text-[12px] leading-5 text-slate-400">{revealPack.subtitle}</Text>
+
+                        <View className="mt-4 flex-row flex-wrap justify-center">
+                          {revealPack.slotOdds.map((slot, index) => (
+                            <View key={`${revealPack.id}-${index}`} className="mr-2 mb-2 rounded-full border border-slate-700 bg-slate-900 px-2.5 py-1">
+                              <Text className="text-[10px] font-semibold text-slate-200">
+                                Slot {index + 1}: {slot.tier}
+                              </Text>
+                            </View>
+                          ))}
+                        </View>
+                      </Animated.View>
+                    </Animated.View>
+                  </Animated.View>
+
+                <Text className="mt-4 text-center text-[11px] leading-5 text-slate-400">
+                  Swipe up or sideways on the pack to rip it open, or use the button below.
+                </Text>
 
                 <Pressable
                   onPress={beginReveal}
-                  className="mt-5 rounded-2xl border border-fuchsia-400/40 bg-fuchsia-500/12 px-4 py-3 items-center"
+                  className="mt-4 rounded-2xl border border-fuchsia-400/40 bg-fuchsia-500/12 px-4 py-3 items-center"
                 >
                   <Text className="text-[12px] font-semibold text-fuchsia-100">Rip Pack</Text>
                 </Pressable>
