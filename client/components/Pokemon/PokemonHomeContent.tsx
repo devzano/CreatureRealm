@@ -11,6 +11,7 @@ import { games } from "@/lib/pokemon/gameFilters";
 import LiquidGlass from "../ui/LiquidGlass";
 
 import PokemonMapsTab from "@/components/Pokemon/PokemonMapsTab";
+import AppImages from "@/constants/images";
 
 type PokemonHomeContentProps = {
   onBackToCollections: () => void;
@@ -176,8 +177,8 @@ const PokemonHomeContent: React.FC<PokemonHomeContentProps> = ({ onBackToCollect
               activeTab === "maps"
                 ? "Search maps (region, area, town…)"
                 : activeTab === "games"
-                ? "Search games (title, gen, short code…)"
-                : "Search Pokémon (name or number…)"
+                  ? "Search games (title, gen, short code…)"
+                  : "Search Pokémon (name or number…)"
             }
             placeholderTextColor="#6B7280"
             className="flex-1 ml-2 text-[13px] text-slate-100"
@@ -246,7 +247,7 @@ const PokemonHomeContent: React.FC<PokemonHomeContentProps> = ({ onBackToCollect
                       className="mb-2"
                     >
                       <View className="flex-row items-center mb-1 px-1 mt-2">
-                        <View className="w-1.5 h-5 rounded-full mr-2 bg-amber-400" />
+                        <View className="w-1.5 h-5 rounded-full mr-2 bg-gray-700" />
                         <Text className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
                           {getGameSectionLabel("tcg")}
                         </Text>
@@ -258,7 +259,10 @@ const PokemonHomeContent: React.FC<PokemonHomeContentProps> = ({ onBackToCollect
                         style={{ borderColor: "#f59e0b" }}
                       >
                         <View className="flex-row items-center px-4 pt-3 pb-2">
-                          <View
+                          <ExpoImage
+                            source={AppImages.crPack}
+                            contentFit="cover"
+                            transition={120}
                             style={{
                               width: 54,
                               height: 72,
@@ -267,16 +271,12 @@ const PokemonHomeContent: React.FC<PokemonHomeContentProps> = ({ onBackToCollect
                               backgroundColor: "rgba(120,53,15,0.22)",
                               borderWidth: 1,
                               borderColor: "rgba(245,158,11,0.35)",
-                              alignItems: "center",
-                              justifyContent: "center",
                             }}
-                          >
-                            <Text className="text-[18px] font-bold text-amber-300">TCG</Text>
-                          </View>
+                          />
 
                           <View className="flex-1">
                             <Text className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-                              Physical Sets
+                              Physical/Digital Sets
                             </Text>
                             <Text className="text-[15px] font-semibold text-slate-50 mt-0.5">Pokemon TCG</Text>
                             <Text className="text-[12px] text-slate-400 mt-0.5">
@@ -294,18 +294,20 @@ const PokemonHomeContent: React.FC<PokemonHomeContentProps> = ({ onBackToCollect
                         </View>
 
                         <View className="px-4 pb-3 pt-1 border-t border-slate-800/80 bg-slate-950/80">
-                          <View className="flex-row items-center">
-                            <View className="w-1.5 h-6 rounded-full mr-2 bg-amber-400" />
-                            <Text className="text-[11px] text-slate-400">
-                              Official <Text className="text-slate-200 font-semibold">Pokemon TCG API</Text>
-                              {" • "}Physical collection tracking
-                            </Text>
-                          </View>
-
                           <View className="flex-row flex-wrap mt-2 -mr-1">
+                            <View className="w-1.5 h-6 rounded-full mr-2 bg-amber-400" />
                             {["Sets", "Cards", "Wanted", "Owned"].map((label) => (
-                              <View key={label} className="px-2 py-1 rounded-full bg-slate-900/90 border border-slate-700 mr-2 mt-1">
-                                <Text className="text-[10px] text-slate-300">{label}</Text>
+                              <View
+                                key={label}
+                                className="px-2 py-1 rounded-full bg-slate-900/90 border border-slate-700 mr-2 mt-1 flex-row items-center"
+                              >
+                                {label === "Wanted" ? (
+                                  <Feather name="heart" size={12} color="#fca5a5" />
+                                ) : label === "Owned" ? (
+                                  <Feather name="check-circle" size={12} color="#86efac" />
+                                ) : (
+                                  <Text className="text-[10px] text-slate-300">{label}</Text>
+                                )}
                               </View>
                             ))}
                           </View>

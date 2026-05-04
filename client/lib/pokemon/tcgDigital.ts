@@ -11,6 +11,7 @@ export type PokemonTCGDigitalPack = {
   id: string;
   setId: string;
   name: string;
+  subtitle: string;
   series: string;
   releaseDate: string;
   total: number;
@@ -21,6 +22,11 @@ export type PokemonTCGDigitalPack = {
   };
   unlockCost: number;
   slot: number;
+  packSize?: number;
+  slotOdds: {
+    tier: string;
+    fallback?: string[];
+  }[];
 };
 
 export type PokemonTCGDigitalRevealCard = {

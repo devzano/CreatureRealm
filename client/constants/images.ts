@@ -1,6 +1,8 @@
 const AppImages = {
   icon: require('../assets/images/icon.png'),
   splash: require('../assets/images/splash.png'),
+  crPack: require('../assets/images/tcgDigitalPack/frame-00.png'),
+  cardBack: require('../assets/images/tcgDigitalPack/card-back.png'),
   // alphaIcon: require('../assets/images/iconalpha.png'),
   // logo: require('../assets/images/logo.png'),
   alphaPokemonIcon: require('../assets/images/gameIcons/alpha_pokemon.png'),

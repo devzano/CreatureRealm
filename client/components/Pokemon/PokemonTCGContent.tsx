@@ -7,6 +7,7 @@ import * as Linking from "expo-linking";
 import PageWrapper from "@/components/PageWrapper";
 import BottomSheetModal from "@/components/ui/BottomSheetModal";
 import PokemonTCGDigitalContent from "@/components/Pokemon/PokemonTCGDigitalContent";
+import AppImages from "@/constants/images";
 import {
   fetchPokemonTCGCard,
   fetchPokemonTCGCardsForSet,
@@ -110,10 +111,10 @@ function FilterPill(props: {
     tone === "green"
       ? { backgroundColor: "rgba(109,218,95,0.14)", borderColor: "rgba(109,218,95,0.45)", color: "#d9f99d" }
       : tone === "rose"
-      ? { backgroundColor: "rgba(251,113,133,0.14)", borderColor: "rgba(251,113,133,0.45)", color: "#fecdd3" }
-      : tone === "amber"
-      ? { backgroundColor: "rgba(245,158,11,0.14)", borderColor: "rgba(245,158,11,0.45)", color: "#fde68a" }
-      : { backgroundColor: "rgba(59,130,246,0.14)", borderColor: "rgba(59,130,246,0.45)", color: "#bfdbfe" };
+        ? { backgroundColor: "rgba(251,113,133,0.14)", borderColor: "rgba(251,113,133,0.45)", color: "#fecdd3" }
+        : tone === "amber"
+          ? { backgroundColor: "rgba(245,158,11,0.14)", borderColor: "rgba(245,158,11,0.45)", color: "#fde68a" }
+          : { backgroundColor: "rgba(59,130,246,0.14)", borderColor: "rgba(59,130,246,0.45)", color: "#bfdbfe" };
 
   return (
     <Pressable
@@ -153,17 +154,18 @@ function ActionButton(props: {
   tone?: "green" | "rose" | "blue" | "amber";
   onPress: (event: GestureResponderEvent) => void;
   compact?: boolean;
+  iconOnly?: boolean;
 }) {
-  const { label, icon, active = false, tone = "blue", onPress, compact = false } = props;
+  const { label, icon, active = false, tone = "blue", onPress, compact = false, iconOnly = false } = props;
 
   const activeStyle =
     tone === "green"
       ? { backgroundColor: "rgba(109,218,95,0.14)", borderColor: "rgba(109,218,95,0.5)", color: "#d9f99d", icon: "#d9f99d" }
       : tone === "rose"
-      ? { backgroundColor: "rgba(251,113,133,0.14)", borderColor: "rgba(251,113,133,0.5)", color: "#fecdd3", icon: "#fda4af" }
-      : tone === "amber"
-      ? { backgroundColor: "rgba(245,158,11,0.14)", borderColor: "rgba(245,158,11,0.5)", color: "#fde68a", icon: "#fbbf24" }
-      : { backgroundColor: "rgba(59,130,246,0.14)", borderColor: "rgba(59,130,246,0.5)", color: "#bfdbfe", icon: "#93c5fd" };
+        ? { backgroundColor: "rgba(251,113,133,0.14)", borderColor: "rgba(251,113,133,0.5)", color: "#fecdd3", icon: "#fda4af" }
+        : tone === "amber"
+          ? { backgroundColor: "rgba(245,158,11,0.14)", borderColor: "rgba(245,158,11,0.5)", color: "#fde68a", icon: "#fbbf24" }
+          : { backgroundColor: "rgba(59,130,246,0.14)", borderColor: "rgba(59,130,246,0.5)", color: "#bfdbfe", icon: "#93c5fd" };
 
   return (
     <Pressable
@@ -175,12 +177,14 @@ function ActionButton(props: {
       }}
     >
       <Ionicons name={icon} size={compact ? 12 : 14} color={active ? activeStyle.icon : "#e2e8f0"} />
-      <Text
-        className={`${compact ? "text-[10px]" : "text-[12px]"} font-semibold ml-1.5`}
-        style={{ color: active ? activeStyle.color : "#e2e8f0" }}
-      >
-        {label}
-      </Text>
+      {!iconOnly ? (
+        <Text
+          className={`${compact ? "text-[10px]" : "text-[12px]"} font-semibold ml-1.5`}
+          style={{ color: active ? activeStyle.color : "#e2e8f0" }}
+        >
+          {label}
+        </Text>
+      ) : null}
     </Pressable>
   );
 }
@@ -687,25 +691,47 @@ export default function PokemonTCGContent() {
                     className="rounded-3xl bg-slate-950/80 border border-slate-800 mb-3 overflow-hidden"
                   >
                     <View className="px-4 pt-4 pb-3">
-                  <View className="flex-row items-center">
-                    <View className="w-14 h-14 rounded-2xl bg-slate-900 border border-slate-700 items-center justify-center mr-3 overflow-hidden p-1">
-                      <ExpoImage source={{ uri: set.images.symbol }} style={{ width: "100%", height: "100%" }} contentFit="contain" transition={120} />
-                    </View>
+                      <View className="flex-row items-center">
+                        <View className="w-14 h-14 rounded-2xl bg-slate-900 border border-slate-700 items-center justify-center mr-3 overflow-hidden p-1">
+                          <ExpoImage source={{ uri: set.images.logo }} style={{ width: "100%", height: "100%" }} contentFit="contain" transition={120} />
+                        </View>
 
-                    <View className="flex-1 pr-3">
-                      <Text className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">{set.series}</Text>
-                      <Text className="text-[15px] font-semibold text-slate-50 mt-0.5">{set.name}</Text>
-                      <Text className="text-[11px] text-slate-400 mt-0.5">{set.releaseDate} • {set.total} cards</Text>
-                    </View>
+                        <View className="flex-1 pr-3">
+                          <Text className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">{set.series}</Text>
+                          <Text className="text-[15px] font-semibold text-slate-50 mt-0.5">{set.name}</Text>
+                          <Text className="text-[11px] text-slate-400 mt-0.5">{set.releaseDate} • {set.total} cards</Text>
+                        </View>
 
-                    <View className="px-3 py-1.5 rounded-full bg-amber-500/12 border border-amber-400/35">
-                      <Text className="text-[10px] font-semibold text-amber-100">Open Set</Text>
-                    </View>
-                  </View>
+                        <View className="px-3 py-1.5 rounded-full bg-amber-500/12 border border-amber-400/35">
+                          <Text className="text-[10px] font-semibold text-amber-100">Open Set</Text>
+                        </View>
+                      </View>
 
-                  <View className="mt-3 rounded-2xl bg-slate-900/70 border border-slate-800 overflow-hidden p-2">
-                    <ExpoImage source={{ uri: set.images.logo }} style={{ width: "100%", height: 42 }} contentFit="contain" transition={120} />
-                  </View>
+                      <View className="mt-3 rounded-2xl bg-slate-900/70 border border-slate-800 overflow-hidden px-3 py-4">
+                        <View className="flex-row items-center justify-center" style={{ height: 86 }}>
+                          {[0, 1, 2, 3, 4].map((index) => (
+                            <ExpoImage
+                              key={index}
+                              source={AppImages.cardBack}
+                              contentFit="cover"
+                              transition={120}
+                              style={{
+                                width: 54,
+                                height: 76,
+                                borderRadius: 10,
+                                marginLeft: index === 0 ? 0 : -18,
+                                transform: [
+                                  { rotate: `${(index - 2) * 5}deg` },
+                                  { translateY: Math.abs(index - 2) * 4 },
+                                ],
+                                borderWidth: 1,
+                                borderColor: "rgba(148,163,184,0.35)",
+                                backgroundColor: "rgba(15,23,42,0.9)",
+                              }}
+                            />
+                          ))}
+                        </View>
+                      </View>
                     </View>
 
                     <View className="px-4 pb-4">
@@ -770,7 +796,7 @@ export default function PokemonTCGContent() {
           <View className="rounded-3xl border border-slate-800 bg-slate-950/80 px-4 py-4 mb-4">
             <View className="flex-row items-center">
               <View className="w-14 h-14 rounded-2xl bg-slate-900 border border-slate-700 items-center justify-center mr-3 overflow-hidden p-1">
-                <ExpoImage source={{ uri: selectedSet.images.symbol }} style={{ width: "100%", height: "100%" }} contentFit="contain" transition={120} />
+                <ExpoImage source={{ uri: selectedSet.images.logo }} style={{ width: "100%", height: "100%" }} contentFit="contain" transition={120} />
               </View>
               <View className="flex-1">
                 <Text className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">{selectedSet.series}</Text>
@@ -1012,6 +1038,7 @@ export default function PokemonTCGContent() {
                                     tone="rose"
                                     active={entry.wanted}
                                     compact
+                                    iconOnly
                                     onPress={(event) => {
                                       event.stopPropagation();
                                       toggleWanted(card.id);
@@ -1025,6 +1052,7 @@ export default function PokemonTCGContent() {
                                     tone="green"
                                     active={entry.owned}
                                     compact
+                                    iconOnly
                                     onPress={(event) => {
                                       event.stopPropagation();
                                       toggleOwned(card.id);

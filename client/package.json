@@ -8,6 +8,8 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "lint": "expo lint",
+    "tcg:extract-pack-assets": "node scripts/extractTCGDigitalPackAssets.cjs",
+    "tcg:extract-card-back-assets": "node scripts/extractTCGCardBackAssets.cjs",
     "build:dev:ios": "APP_VARIANT=development eas build --profile development --platform ios",
     "build:dev:android": "APP_VARIANT=development eas build --profile development --platform android",
     "build:prod:ios": "APP_VARIANT=production eas build --profile production --platform ios",
@@ -68,6 +70,7 @@
     "@types/react": "~19.1.0",
     "eslint": "^9.25.0",
     "eslint-config-expo": "~10.0.0",
+    "pngjs": "^7.0.0",
     "prettier-plugin-tailwindcss": "0.5.11",
     "tailwindcss": "3.4.17",
     "typescript": "~5.9.2"
