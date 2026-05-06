@@ -45,10 +45,16 @@ async function ensureSchema(client = null) {
         opened_today INTEGER NOT NULL DEFAULT 0,
         remaining_today INTEGER NOT NULL DEFAULT 4,
         total_opened INTEGER NOT NULL DEFAULT 0,
+        pack_pool JSONB NOT NULL DEFAULT '[]'::jsonb,
         inventory JSONB NOT NULL DEFAULT '{}'::jsonb,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
+    `);
+
+    await db.query(`
+      ALTER TABLE pokemon_tcg_digital_profiles
+      ADD COLUMN IF NOT EXISTS pack_pool JSONB NOT NULL DEFAULT '[]'::jsonb;
     `);
 
     await db.query(`
@@ -100,7 +106,7 @@ export async function withDigitalProfileTransaction(fn) {
 export async function loadDigitalProfile(client, deviceId) {
   const result = await client.query(
     `
-      SELECT device_id, window_key, opened_today, remaining_today, total_opened, inventory, created_at, updated_at
+      SELECT device_id, window_key, opened_today, remaining_today, total_opened, pack_pool, inventory, created_at, updated_at
       FROM pokemon_tcg_digital_profiles
       WHERE device_id = $1
       LIMIT 1
@@ -120,15 +126,17 @@ export async function saveDigitalProfile(client, profile) {
         opened_today,
         remaining_today,
         total_opened,
+        pack_pool,
         inventory,
         created_at,
         updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8)
+      ) VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8, $9)
       ON CONFLICT (device_id) DO UPDATE SET
         window_key = EXCLUDED.window_key,
         opened_today = EXCLUDED.opened_today,
         remaining_today = EXCLUDED.remaining_today,
         total_opened = EXCLUDED.total_opened,
+        pack_pool = EXCLUDED.pack_pool,
         inventory = EXCLUDED.inventory,
         updated_at = EXCLUDED.updated_at
     `,
@@ -138,6 +146,7 @@ export async function saveDigitalProfile(client, profile) {
       profile.openedToday,
       profile.remainingToday,
       profile.totalOpened,
+      JSON.stringify(profile.packPool ?? []),
       JSON.stringify(profile.inventory ?? {}),
       profile.createdAt,
       profile.updatedAt,

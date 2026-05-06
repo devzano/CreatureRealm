@@ -1,5 +1,6 @@
 export const DAILY_PACK_LIMIT = 4;
 export const DIGITAL_PACK_HISTORY_LIMIT = 40;
+export const DIGITAL_ACTIVE_PACK_POOL_SIZE = 3;
 
 export const CURATED_DIGITAL_PACKS = [
   {

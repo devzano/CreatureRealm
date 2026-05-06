@@ -112,9 +112,19 @@ export async function getPokemonTCGDigitalDeviceId() {
   return nextId;
 }
 
-export async function fetchPokemonTCGDigitalProfile(deviceId: string) {
+export async function fetchPokemonTCGDigitalProfile(
+  deviceId: string,
+  options?: {
+    refreshPool?: boolean;
+  }
+) {
+  const search = new URLSearchParams({ deviceId });
+  if (options?.refreshPool) {
+    search.set("refreshPool", "1");
+  }
+
   const result = await request<{ ok: true; profile: PokemonTCGDigitalProfile }>(
-    `/profile?deviceId=${encodeURIComponent(deviceId)}`
+    `/profile?${search.toString()}`
   );
 
   return result.profile;

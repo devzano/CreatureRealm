@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { ActivityIndicator, Animated, Easing, PanResponder, Pressable, ScrollView, Text, View } from "react-native";
 import { Image as ExpoImage } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
+import * as SecureStore from "expo-secure-store";
 
 import BottomSheetModal from "@/components/ui/BottomSheetModal";
 import {
@@ -20,6 +21,7 @@ type PokemonTCGDigitalContentProps = {
 };
 
 type RevealPhase = "sealed" | "ripping" | "revealing" | "summary";
+const AUTO_NEXT_KEY = "creaturerealm-pokemon-tcg-digital-auto-next";
 
 const PACK_FRAME_SOURCES = [
   require("../../assets/images/tcgDigitalPack/frame-00.png"),
@@ -147,6 +149,8 @@ export default function PokemonTCGDigitalContent(props: PokemonTCGDigitalContent
   const [revealIndex, setRevealIndex] = useState(0);
   const [packFrameIndex, setPackFrameIndex] = useState(0);
   const [isCurrentCardFlipped, setIsCurrentCardFlipped] = useState(false);
+  const [autoNextEnabled, setAutoNextEnabled] = useState(false);
+  const [refreshingPool, setRefreshingPool] = useState(false);
 
   const syncDigitalInventory = usePokemonTCGCollectionStore((state) => state.syncDigitalInventory);
   const packTranslateX = useRef(new Animated.Value(0)).current;
@@ -169,12 +173,22 @@ export default function PokemonTCGDigitalContent(props: PokemonTCGDigitalContent
   const flipProgress = useRef(new Animated.Value(0)).current;
   const summaryOpacity = useRef(new Animated.Value(0)).current;
   const ripTimeoutsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const autoAdvanceTimeoutsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   const currentRevealCard = useMemo(
     () => (revealCards?.length ? revealCards[Math.min(revealIndex, revealCards.length - 1)] : null),
     [revealCards, revealIndex]
   );
   const currentRevealTheme = useMemo(() => getDigitalRevealTheme(currentRevealCard), [currentRevealCard]);
+  const hasNextRevealCard = useMemo(
+    () => Boolean(revealCards?.length && revealIndex < revealCards.length - 1),
+    [revealCards, revealIndex]
+  );
+
+  const clearAutoAdvanceTimeouts = useCallback(() => {
+    for (const timeoutId of autoAdvanceTimeoutsRef.current) clearTimeout(timeoutId);
+    autoAdvanceTimeoutsRef.current = [];
+  }, []);
 
   const animateCardIn = useCallback(() => {
     setIsCurrentCardFlipped(false);
@@ -185,19 +199,19 @@ export default function PokemonTCGDigitalContent(props: PokemonTCGDigitalContent
     Animated.parallel([
       Animated.timing(cardOpacity, {
         toValue: 1,
-        duration: 220,
+        duration: 300,
         easing: Easing.out(Easing.cubic),
         useNativeDriver: true,
       }),
       Animated.timing(cardTranslateY, {
         toValue: 0,
-        duration: 260,
+        duration: 360,
         easing: Easing.out(Easing.cubic),
         useNativeDriver: true,
       }),
       Animated.timing(cardScale, {
         toValue: 1,
-        duration: 260,
+        duration: 360,
         easing: Easing.out(Easing.back(1.1)),
         useNativeDriver: true,
       }),
@@ -207,6 +221,7 @@ export default function PokemonTCGDigitalContent(props: PokemonTCGDigitalContent
   const resetRevealState = useCallback(() => {
     for (const timeoutId of ripTimeoutsRef.current) clearTimeout(timeoutId);
     ripTimeoutsRef.current = [];
+    clearAutoAdvanceTimeouts();
     setRevealCards(null);
     setRevealPack(null);
     setRevealPhase("sealed");
@@ -252,22 +267,28 @@ export default function PokemonTCGDigitalContent(props: PokemonTCGDigitalContent
     packTranslateX,
     packTranslateY,
     summaryOpacity,
+    clearAutoAdvanceTimeouts,
   ]);
 
-  const loadProfile = useCallback(async () => {
+  const loadProfile = useCallback(async (options?: { refreshPool?: boolean }) => {
     try {
-      setLoading(true);
+      if (options?.refreshPool) {
+        setRefreshingPool(true);
+      } else {
+        setLoading(true);
+      }
       setError(null);
       const resolvedDeviceId = deviceId ?? (await getPokemonTCGDigitalDeviceId());
       if (!deviceId) setDeviceId(resolvedDeviceId);
 
-      const nextProfile = await fetchPokemonTCGDigitalProfile(resolvedDeviceId);
+      const nextProfile = await fetchPokemonTCGDigitalProfile(resolvedDeviceId, options);
       setProfile(nextProfile);
       syncDigitalInventory(nextProfile.inventory);
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Failed to load digital packs.");
     } finally {
       setLoading(false);
+      setRefreshingPool(false);
     }
   }, [deviceId, syncDigitalInventory]);
 
@@ -356,6 +377,20 @@ export default function PokemonTCGDigitalContent(props: PokemonTCGDigitalContent
     return () => {
       for (const timeoutId of ripTimeoutsRef.current) clearTimeout(timeoutId);
       ripTimeoutsRef.current = [];
+      clearAutoAdvanceTimeouts();
+    };
+  }, [clearAutoAdvanceTimeouts]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void SecureStore.getItemAsync(AUTO_NEXT_KEY).then((value) => {
+      if (cancelled) return;
+      setAutoNextEnabled(value === "1");
+    });
+
+    return () => {
+      cancelled = true;
     };
   }, []);
 
@@ -379,21 +414,21 @@ export default function PokemonTCGDigitalContent(props: PokemonTCGDigitalContent
 
     Animated.sequence([
       Animated.timing(sealedPackScale, {
-        toValue: 1.02,
-        duration: 110,
+        toValue: 1.03,
+        duration: 160,
         easing: Easing.out(Easing.cubic),
         useNativeDriver: true,
       }),
       Animated.sequence([
-        Animated.timing(packTranslateX, { toValue: -10, duration: 45, useNativeDriver: true }),
-        Animated.timing(packTranslateX, { toValue: 10, duration: 45, useNativeDriver: true }),
-        Animated.timing(packTranslateX, { toValue: -8, duration: 45, useNativeDriver: true }),
-        Animated.timing(packTranslateX, { toValue: 8, duration: 45, useNativeDriver: true }),
-        Animated.timing(packTranslateX, { toValue: 0, duration: 40, useNativeDriver: true }),
+        Animated.timing(packTranslateX, { toValue: -12, duration: 70, useNativeDriver: true }),
+        Animated.timing(packTranslateX, { toValue: 12, duration: 70, useNativeDriver: true }),
+        Animated.timing(packTranslateX, { toValue: -10, duration: 65, useNativeDriver: true }),
+        Animated.timing(packTranslateX, { toValue: 10, duration: 65, useNativeDriver: true }),
+        Animated.timing(packTranslateX, { toValue: 0, duration: 60, useNativeDriver: true }),
       ]),
     ]).start();
 
-    const frameDurations = [55, 55, 50, 50, 50, 48, 48, 48, 56, 60, 64, 72, 78, 82];
+    const frameDurations = [90, 90, 84, 84, 84, 80, 80, 80, 96, 104, 112, 124, 140, 156];
     let elapsed = 0;
 
     frameDurations.forEach((duration, index) => {
@@ -411,13 +446,13 @@ export default function PokemonTCGDigitalContent(props: PokemonTCGDigitalContent
               }),
               Animated.timing(tearStripTranslateX, {
                 toValue: 48,
-                duration: 180,
+                duration: 260,
                 easing: Easing.out(Easing.cubic),
                 useNativeDriver: true,
               }),
               Animated.timing(tearStripTranslateY, {
                 toValue: -34,
-                duration: 180,
+                duration: 260,
                 easing: Easing.out(Easing.cubic),
                 useNativeDriver: true,
               }),
@@ -434,12 +469,12 @@ export default function PokemonTCGDigitalContent(props: PokemonTCGDigitalContent
               }),
               Animated.timing(fragmentsOpacity, {
                 toValue: 1,
-                duration: 90,
+                duration: 130,
                 useNativeDriver: true,
               }),
               Animated.timing(fragmentsTranslateY, {
                 toValue: -22,
-                duration: 180,
+                duration: 260,
                 easing: Easing.out(Easing.cubic),
                 useNativeDriver: true,
               }),
@@ -450,18 +485,18 @@ export default function PokemonTCGDigitalContent(props: PokemonTCGDigitalContent
             Animated.parallel([
               Animated.timing(cardBackOpacity, {
                 toValue: 1,
-                duration: 120,
+                duration: 180,
                 useNativeDriver: true,
               }),
               Animated.timing(cardBackTranslateY, {
                 toValue: -18,
-                duration: 160,
+                duration: 240,
                 easing: Easing.out(Easing.cubic),
                 useNativeDriver: true,
               }),
               Animated.timing(cardBackScale, {
                 toValue: 1,
-                duration: 160,
+                duration: 240,
                 easing: Easing.out(Easing.back(1.05)),
                 useNativeDriver: true,
               }),
@@ -475,7 +510,7 @@ export default function PokemonTCGDigitalContent(props: PokemonTCGDigitalContent
       setTimeout(() => {
         setRevealPhase("revealing");
         animateCardIn();
-      }, elapsed + 120)
+      }, elapsed + 240)
     );
   }, [
     animateCardIn,
@@ -533,11 +568,46 @@ export default function PokemonTCGDigitalContent(props: PokemonTCGDigitalContent
     setIsCurrentCardFlipped(true);
     Animated.timing(flipProgress, {
       toValue: 1,
-      duration: 360,
+      duration: 520,
       easing: Easing.inOut(Easing.cubic),
       useNativeDriver: true,
     }).start();
   }, [currentRevealCard, flipProgress, isCurrentCardFlipped]);
+
+  const toggleAutoNext = useCallback(async () => {
+    const nextValue = !autoNextEnabled;
+    setAutoNextEnabled(nextValue);
+    await SecureStore.setItemAsync(AUTO_NEXT_KEY, nextValue ? "1" : "0");
+  }, [autoNextEnabled]);
+
+  useEffect(() => {
+    clearAutoAdvanceTimeouts();
+    if (!autoNextEnabled || revealPhase !== "revealing" || !currentRevealCard) return;
+
+    if (!isCurrentCardFlipped) {
+      autoAdvanceTimeoutsRef.current.push(
+        setTimeout(() => {
+          flipCurrentCard();
+        }, 800)
+      );
+      return;
+    }
+
+    autoAdvanceTimeoutsRef.current.push(
+      setTimeout(() => {
+        advanceReveal();
+      }, hasNextRevealCard ? 1400 : 1700)
+    );
+  }, [
+    advanceReveal,
+    autoNextEnabled,
+    clearAutoAdvanceTimeouts,
+    currentRevealCard,
+    flipCurrentCard,
+    hasNextRevealCard,
+    isCurrentCardFlipped,
+    revealPhase,
+  ]);
 
   const sealedPackPanResponder = useMemo(
     () =>
@@ -689,9 +759,27 @@ export default function PokemonTCGDigitalContent(props: PokemonTCGDigitalContent
 
       <View className="mt-4 flex-row items-center justify-between px-1">
         <Text className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Available Packs</Text>
-        <Pressable onPress={() => void loadProfile()} className="rounded-full border border-slate-700 bg-slate-900 px-3 py-1.5">
-          <Text className="text-[10px] font-semibold text-slate-200">Refresh</Text>
-        </Pressable>
+        <View className="flex-row items-center">
+          <Pressable
+            onPress={toggleAutoNext}
+            className="mr-2 rounded-full border px-3 py-1.5"
+            style={{
+              borderColor: autoNextEnabled ? "rgba(34,197,94,0.45)" : "rgba(51,65,85,1)",
+              backgroundColor: autoNextEnabled ? "rgba(34,197,94,0.12)" : "rgba(15,23,42,1)",
+            }}
+          >
+            <Text className="text-[10px] font-semibold" style={{ color: autoNextEnabled ? "#dcfce7" : "#e2e8f0" }}>
+              Auto Next {autoNextEnabled ? "On" : "Off"}
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={() => void loadProfile({ refreshPool: true })}
+            className="rounded-full border border-slate-700 bg-slate-900 px-3 py-1.5"
+            style={{ opacity: refreshingPool ? 0.65 : 1 }}
+          >
+            <Text className="text-[10px] font-semibold text-slate-200">{refreshingPool ? "Refreshing…" : "Refresh"}</Text>
+          </Pressable>
+        </View>
       </View>
 
       {loading ? (
@@ -1022,16 +1110,18 @@ export default function PokemonTCGDigitalContent(props: PokemonTCGDigitalContent
                         transition={0}
                       />
                     </Animated.View>
-                    <Animated.View
-                      style={{
-                        position: "absolute",
-                        top: 86,
-                        opacity: 0.55,
-                        transform: [{ translateY: cardBackTranslateY.interpolate({ inputRange: [-18, 0], outputRange: [0, 8] }) }],
-                      }}
-                    >
-                      <ExpoImage source={PACK_FRAME_SOURCES[14]} style={{ width: 180, height: 292 }} contentFit="contain" transition={0} />
-                    </Animated.View>
+                    {hasNextRevealCard ? (
+                      <Animated.View
+                        style={{
+                          position: "absolute",
+                          top: 86,
+                          opacity: 0.55,
+                          transform: [{ translateY: cardBackTranslateY.interpolate({ inputRange: [-18, 0], outputRange: [0, 8] }) }],
+                        }}
+                      >
+                        <ExpoImage source={PACK_FRAME_SOURCES[14]} style={{ width: 180, height: 292 }} contentFit="contain" transition={0} />
+                      </Animated.View>
+                    ) : null}
                   </View>
 
                   <Pressable
@@ -1080,7 +1170,7 @@ export default function PokemonTCGDigitalContent(props: PokemonTCGDigitalContent
                   <>
                     <Text className="mt-3 text-[14px] font-semibold text-slate-100 text-center">{currentRevealTheme.label}</Text>
                     <Text className="mt-1 text-[11px] text-slate-400 text-center">
-                      Tap the card back to flip and reveal your pull.
+                      {autoNextEnabled ? "Auto Next is on. This card will flip and advance automatically." : "Tap the card back to flip and reveal your pull."}
                     </Text>
                   </>
                 )}
