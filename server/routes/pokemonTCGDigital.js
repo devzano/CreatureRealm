@@ -22,6 +22,15 @@ const PAGE_SIZE = 250;
 
 const setCache = new Map();
 const cardsBySetCache = new Map();
+const allSetsCache = { ready: false, sets: [], promise: null };
+
+const DEFAULT_SLOT_ODDS = [
+  { tier: "common", fallback: ["uncommon", "rare", "ultra"] },
+  { tier: "common", fallback: ["uncommon", "rare", "ultra"] },
+  { tier: "uncommon", fallback: ["common", "rare", "ultra"] },
+  { tier: "rare", fallback: ["uncommon", "common", "ultra"] },
+  { tier: "ultra", fallback: ["rare", "uncommon", "common"] },
+];
 
 function getApiKey() {
   const key = String(
@@ -69,6 +78,7 @@ function createProfile(deviceId) {
     remainingToday: DAILY_PACK_LIMIT,
     totalOpened: 0,
     packPool: [],
+    poolRefreshKey: "",
     inventory: {},
     createdAt: nowIso(),
     updatedAt: nowIso(),
@@ -85,6 +95,7 @@ function hydrateProfile(row, deviceId) {
     remainingToday: Number(row.remaining_today ?? DAILY_PACK_LIMIT),
     totalOpened: Number(row.total_opened ?? 0),
     packPool: Array.isArray(row.pack_pool) ? row.pack_pool : [],
+    poolRefreshKey: String(row.pool_refresh_key ?? ""),
     inventory: row.inventory && typeof row.inventory === "object" ? row.inventory : {},
     createdAt: new Date(row.created_at).toISOString(),
     updatedAt: new Date(row.updated_at).toISOString(),
@@ -99,52 +110,12 @@ function refreshProfileWindow(profile) {
     profile.openedToday = 0;
     profile.remainingToday = DAILY_PACK_LIMIT;
     profile.packPool = [];
+    profile.poolRefreshKey = "";
     didReset = true;
   }
 
   profile.updatedAt = nowIso();
   return { profile, didReset };
-}
-
-function normalizePackPool(packPool) {
-  if (!Array.isArray(packPool)) return [];
-  const validIds = new Set(CURATED_DIGITAL_PACKS.map((entry) => entry.id));
-  return Array.from(new Set(packPool.map((entry) => String(entry ?? "").trim()).filter((entry) => validIds.has(entry))));
-}
-
-function samplePackPoolIds(previousPool = []) {
-  const ids = CURATED_DIGITAL_PACKS.map((entry) => entry.id);
-  const poolSize = Math.min(DIGITAL_ACTIVE_PACK_POOL_SIZE, ids.length);
-  if (poolSize === ids.length) return ids;
-
-  const previousKey = normalizePackPool(previousPool).slice().sort().join("|");
-  let nextPool = ids.slice();
-
-  for (let attempt = 0; attempt < 8; attempt += 1) {
-    const shuffled = ids
-      .slice()
-      .sort(() => Math.random() - 0.5)
-      .slice(0, poolSize);
-    const candidateKey = shuffled.slice().sort().join("|");
-    nextPool = shuffled;
-    if (candidateKey !== previousKey) break;
-  }
-
-  return nextPool;
-}
-
-function ensurePackPool(profile, options = {}) {
-  const { forceRefresh = false } = options;
-  const currentPool = normalizePackPool(profile.packPool);
-
-  if (forceRefresh || !currentPool.length) {
-    profile.packPool = samplePackPoolIds(currentPool);
-    profile.updatedAt = nowIso();
-    return profile;
-  }
-
-  profile.packPool = currentPool;
-  return profile;
 }
 
 async function tcgFetch(pathname) {
@@ -164,6 +135,30 @@ async function tcgFetch(pathname) {
   return response.json();
 }
 
+async function fetchAllSets() {
+  if (allSetsCache.ready) return allSetsCache.sets;
+  if (allSetsCache.promise) return allSetsCache.promise;
+
+  allSetsCache.promise = (async () => {
+    const sets = [];
+    let page = 1;
+
+    while (true) {
+      const result = await tcgFetch(`/sets?orderBy=releaseDate&page=${page}&pageSize=${PAGE_SIZE}`);
+      const pageSets = Array.isArray(result?.data) ? result.data : [];
+      sets.push(...pageSets);
+      if (pageSets.length < PAGE_SIZE) break;
+      page += 1;
+    }
+
+    allSetsCache.ready = true;
+    allSetsCache.sets = sets;
+    return sets;
+  })();
+
+  return allSetsCache.promise;
+}
+
 async function fetchSetById(setId) {
   if (setCache.has(setId)) return setCache.get(setId);
 
@@ -174,6 +169,25 @@ async function fetchSetById(setId) {
 
   setCache.set(setId, promise);
   return promise;
+}
+
+function packIdForSetId(setId) {
+  return `set-${setId}`;
+}
+
+function setIdFromPackId(packId) {
+  return packId.startsWith("set-") ? packId.slice(4) : packId;
+}
+
+function buildPackConfig(set) {
+  const curated = CURATED_DIGITAL_PACKS.find((c) => c.setId === set.id);
+  return {
+    id: packIdForSetId(set.id),
+    setId: set.id,
+    unlockCost: curated?.unlockCost ?? 1,
+    packSize: curated?.packSize ?? 5,
+    slotOdds: curated?.slotOdds ?? DEFAULT_SLOT_ODDS,
+  };
 }
 
 async function fetchCardsForSet(setId) {
@@ -269,33 +283,80 @@ function buildPackReveal(cards, packConfig) {
   }));
 }
 
-async function resolveCuratedPacks(packIds = null) {
-  const requestedIds = Array.isArray(packIds) && packIds.length ? packIds : CURATED_DIGITAL_PACKS.map((entry) => entry.id);
-  const requestedSet = new Set(requestedIds);
-  const selectedConfigs = CURATED_DIGITAL_PACKS.filter((config) => requestedSet.has(config.id)).sort(
-    (left, right) => requestedIds.indexOf(left.id) - requestedIds.indexOf(right.id)
-  );
+async function normalizePackPool(packPool) {
+  if (!Array.isArray(packPool)) return [];
+  const sets = await fetchAllSets();
+  const validIds = new Set(sets.map((s) => packIdForSetId(s.id)));
+  return Array.from(new Set(packPool.map((entry) => String(entry ?? "").trim()).filter((id) => validIds.has(id))));
+}
 
-  return Promise.all(
-    selectedConfigs.map(async (config, index) => {
-      const set = await fetchSetById(config.setId);
+async function samplePackPoolIds(previousPool = []) {
+  const sets = await fetchAllSets();
+  const ids = sets.map((s) => packIdForSetId(s.id));
+  const poolSize = Math.min(DIGITAL_ACTIVE_PACK_POOL_SIZE, ids.length);
+  if (poolSize === ids.length) return ids;
+
+  const previousKey = [...previousPool].slice().sort().join("|");
+  let nextPool = ids.slice();
+
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const shuffled = ids
+      .slice()
+      .sort(() => Math.random() - 0.5)
+      .slice(0, poolSize);
+    const candidateKey = shuffled.slice().sort().join("|");
+    nextPool = shuffled;
+    if (candidateKey !== previousKey) break;
+  }
+
+  return nextPool;
+}
+
+async function ensurePackPool(profile, options = {}) {
+  const { forceRefresh = false } = options;
+  const currentPool = await normalizePackPool(profile.packPool);
+
+  if (forceRefresh || !currentPool.length) {
+    profile.packPool = await samplePackPoolIds(currentPool);
+    profile.updatedAt = nowIso();
+    return profile;
+  }
+
+  profile.packPool = currentPool;
+  return profile;
+}
+
+async function resolvePacks(packIds) {
+  const sets = await fetchAllSets();
+  const setsById = new Map(sets.map((s) => [s.id, s]));
+  const curatedBySetId = new Map(CURATED_DIGITAL_PACKS.map((c) => [c.setId, c]));
+
+  const results = await Promise.all(
+    packIds.map(async (packId, index) => {
+      const setId = setIdFromPackId(packId);
+      const set = setsById.get(setId) ?? (await fetchSetById(setId).catch(() => null));
+      if (!set) return null;
+
+      const curated = curatedBySetId.get(setId);
       return {
-        id: config.id,
-        setId: config.setId,
-        name: config.name,
-        subtitle: config.subtitle,
+        id: packId,
+        setId,
+        name: curated?.name ?? set.name,
+        subtitle: curated?.subtitle ?? set.series,
         series: set.series,
         releaseDate: set.releaseDate,
         total: set.total,
         printedTotal: set.printedTotal,
         images: set.images,
-        unlockCost: config.unlockCost,
+        unlockCost: curated?.unlockCost ?? 1,
         slot: index + 1,
-        packSize: config.packSize,
-        slotOdds: config.slotOdds,
+        packSize: curated?.packSize ?? 5,
+        slotOdds: curated?.slotOdds ?? DEFAULT_SLOT_ODDS,
       };
     })
   );
+
+  return results.filter(Boolean);
 }
 
 function getProfileSummary(profile, packs, history) {
@@ -307,14 +368,14 @@ function getProfileSummary(profile, packs, history) {
     dailyLimit: DAILY_PACK_LIMIT,
     nextResetAt: getNextResetIso(),
     totalOpened: profile.totalOpened,
+    poolRefreshedToday: profile.poolRefreshKey === getUtcDayKey(),
     inventory: profile.inventory,
     history,
     packs,
   };
 }
 
-async function loadProfileContext(deviceId, options = {}) {
-  const { forceFreshPool = false } = options;
+async function loadProfileContext(deviceId) {
   const normalizedDeviceId = normalizeDeviceId(deviceId);
   if (!normalizedDeviceId) {
     throw new Error("Missing deviceId.");
@@ -323,10 +384,10 @@ async function loadProfileContext(deviceId, options = {}) {
   return withDigitalProfileTransaction(async (client) => {
     const row = await loadDigitalProfile(client, normalizedDeviceId);
     const refreshed = refreshProfileWindow(hydrateProfile(row, normalizedDeviceId));
-    const profile = ensurePackPool(refreshed.profile, { forceRefresh: forceFreshPool || refreshed.didReset });
+    const profile = await ensurePackPool(refreshed.profile, { forceRefresh: refreshed.didReset });
     await saveDigitalProfile(client, profile);
     const history = await loadDigitalHistory(client, normalizedDeviceId, DIGITAL_PACK_HISTORY_LIMIT);
-    return { client, profile, history, normalizedDeviceId };
+    return { profile, history };
   });
 }
 
@@ -334,9 +395,39 @@ router.use(express.json({ limit: "1mb" }));
 
 router.get("/profile", async (req, res) => {
   try {
-    const forceFreshPool = ["1", "true", "yes"].includes(String(req.query.refreshPool ?? "").trim().toLowerCase());
-    const { profile, history } = await loadProfileContext(req.query.deviceId, { forceFreshPool });
-    const packs = await resolveCuratedPacks(profile.packPool);
+    const requestedRefresh = ["1", "true", "yes"].includes(String(req.query.refreshPool ?? "").trim().toLowerCase());
+
+    if (requestedRefresh) {
+      const normalizedDeviceId = normalizeDeviceId(req.query.deviceId);
+      if (!normalizedDeviceId) {
+        return res.status(400).json({ title: "Missing Device", details: "A device id is required." });
+      }
+
+      const result = await withDigitalProfileTransaction(async (client) => {
+        const row = await loadDigitalProfile(client, normalizedDeviceId);
+        const refreshed = refreshProfileWindow(hydrateProfile(row, normalizedDeviceId));
+        const profile = refreshed.profile;
+        const currentDay = getUtcDayKey();
+
+        if (profile.poolRefreshKey === currentDay) {
+          const error = new Error("You have already refreshed your pack pool today. Come back after midnight.");
+          error.statusCode = 429;
+          throw error;
+        }
+
+        profile.poolRefreshKey = currentDay;
+        const updatedProfile = await ensurePackPool(profile, { forceRefresh: true });
+        await saveDigitalProfile(client, updatedProfile);
+        const history = await loadDigitalHistory(client, normalizedDeviceId, DIGITAL_PACK_HISTORY_LIMIT);
+        return { profile: updatedProfile, history };
+      });
+
+      const packs = await resolvePacks(result.profile.packPool);
+      return res.json({ ok: true, profile: getProfileSummary(result.profile, packs, result.history) });
+    }
+
+    const { profile, history } = await loadProfileContext(req.query.deviceId);
+    const packs = await resolvePacks(profile.packPool);
 
     res.json({
       ok: true,
@@ -344,7 +435,7 @@ router.get("/profile", async (req, res) => {
     });
   } catch (error) {
     console.warn("[pokemontcg-digital] profile error:", error);
-    res.status(500).json({
+    res.status(error?.statusCode ?? 500).json({
       title: "Digital TCG Error",
       details: String(error?.message ?? error),
     });
@@ -354,13 +445,16 @@ router.get("/profile", async (req, res) => {
 router.post("/open", async (req, res) => {
   try {
     const packId = String(req.body?.packId ?? "").trim();
-    const packConfig = CURATED_DIGITAL_PACKS.find((entry) => entry.id === packId);
-    if (!packConfig) {
+    const setId = setIdFromPackId(packId);
+    const sets = await fetchAllSets();
+    const matchedSet = sets.find((s) => s.id === setId);
+    if (!matchedSet) {
       return res.status(404).json({
         title: "Pack Not Found",
         details: "This digital pack is unavailable.",
       });
     }
+    const packConfig = buildPackConfig(matchedSet);
 
     const normalizedDeviceId = normalizeDeviceId(req.body?.deviceId);
     if (!normalizedDeviceId) {
@@ -373,9 +467,9 @@ router.post("/open", async (req, res) => {
     const { profile, history, reveal, packPool } = await withDigitalProfileTransaction(async (client) => {
       const row = await loadDigitalProfile(client, normalizedDeviceId);
       const refreshed = refreshProfileWindow(hydrateProfile(row, normalizedDeviceId));
-      const profile = ensurePackPool(refreshed.profile, { forceRefresh: refreshed.didReset });
-      const activePool = normalizePackPool(profile.packPool);
-      if (!activePool.includes(packConfig.id)) {
+      const profile = await ensurePackPool(refreshed.profile, { forceRefresh: refreshed.didReset });
+      const activePool = await normalizePackPool(profile.packPool);
+      if (!activePool.includes(packId)) {
         const error = new Error("This pack is no longer in your current digital pack pool. Refresh and choose from the active packs.");
         error.statusCode = 409;
         throw error;
@@ -394,7 +488,7 @@ router.post("/open", async (req, res) => {
         throw error;
       }
       const reveal = buildPackReveal(setCards, packConfig);
-      const packMeta = (await resolveCuratedPacks(activePool)).find((entry) => entry.id === packId);
+      const packMeta = (await resolvePacks(activePool)).find((entry) => entry.id === packId);
       if (!packMeta) {
         const error = new Error("This digital pack is unavailable.");
         error.statusCode = 404;
@@ -403,7 +497,7 @@ router.post("/open", async (req, res) => {
 
       const historyEntry = {
         id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        packId: packConfig.id,
+        packId,
         setId: packConfig.setId,
         setName: packMeta.name,
         openedAt: nowIso(),
@@ -428,7 +522,7 @@ router.post("/open", async (req, res) => {
       const nextHistory = await loadDigitalHistory(client, normalizedDeviceId, DIGITAL_PACK_HISTORY_LIMIT);
       return { profile, history: nextHistory, reveal, packPool: activePool };
     });
-    const packs = await resolveCuratedPacks(packPool);
+    const packs = await resolvePacks(packPool);
 
     res.json({
       ok: true,

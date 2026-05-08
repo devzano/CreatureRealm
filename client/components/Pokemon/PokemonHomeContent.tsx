@@ -22,8 +22,6 @@ const NATIONAL_VIEW_MODE: DexViewMode = "national";
 type ActiveTab = "dex" | "maps" | "games";
 type GameSectionKey = `gen-${number}` | "pokopia" | "tcg";
 
-const TCG_SEARCH_TERMS = ["tcg", "card", "cards", "trading card", "pokemon tcg", "physical set", "booster"];
-
 function getGameSectionKey(game: (typeof games)[number]): GameSectionKey {
   return game.id === "pokopia" ? "pokopia" : `gen-${game.generationId}`;
 }
@@ -120,14 +118,18 @@ const PokemonHomeContent: React.FC<PokemonHomeContentProps> = ({ onBackToCollect
       }));
   }, [filteredGames]);
 
-  const showTcgSection = useMemo(() => {
-    if (!normalizedSearch) return true;
-    return TCG_SEARCH_TERMS.some((term) => term.includes(normalizedSearch) || normalizedSearch.includes(term));
-  }, [normalizedSearch]);
+  const showTcgSection = true;
 
   const gamesIndexSections = useMemo(() => {
     const sections = generationSections.map((section) => section.sectionKey);
-    return showTcgSection ? (["tcg", ...sections] as GameSectionKey[]) : sections;
+    if (!showTcgSection) return sections;
+
+    const pokopiaIndex = sections.indexOf("pokopia");
+    if (pokopiaIndex === -1) {
+      return ["tcg", ...sections] as GameSectionKey[];
+    }
+
+    return [...sections.slice(0, pokopiaIndex + 1), "tcg", ...sections.slice(pokopiaIndex + 1)] as GameSectionKey[];
   }, [generationSections, showTcgSection]);
 
   const scrollToSection = (sectionKey: GameSectionKey) => {
@@ -238,16 +240,218 @@ const PokemonHomeContent: React.FC<PokemonHomeContentProps> = ({ onBackToCollect
                 </View>
               ) : (
                 <>
-                  {showTcgSection ? (
+                  {generationSections.map((section) => (
+                    <React.Fragment key={section.sectionKey}>
+                      <View
+                        onLayout={(e) => {
+                          sectionOffsetsRef.current[section.sectionKey] = e.nativeEvent.layout.y;
+                        }}
+                        className="mb-2"
+                      >
+                        <View className="flex-row items-center mb-1 px-1 mt-2">
+                          <View className="w-1.5 h-5 rounded-full mr-2 bg-slate-700" />
+                          <Text className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                            {getGameSectionLabel(section.sectionKey)}
+                          </Text>
+                        </View>
+
+                        {section.games.map((game: any) => {
+                          const accent = Array.isArray(game.accentColor) ? game.accentColor[0] : game.accentColor ?? "#38bdf8";
+                          const speciesCount = game.speciesCount ?? undefined;
+                          const coverUrl: string | undefined = typeof game.coverImageUrl === "string" ? game.coverImageUrl : undefined;
+
+                          return (
+                            <Pressable
+                              key={game.id}
+                              onPress={() =>
+                                router.push({
+                                  pathname: "/game/[id]",
+                                  params: { id: game.id },
+                                })
+                              }
+                              className="rounded-3xl bg-slate-950/80 border mb-3 overflow-hidden"
+                              style={{ borderColor: accent }}
+                            >
+                              <View className="flex-row items-center px-4 pt-3 pb-2">
+                                {coverUrl ? (
+                                  <ExpoImage
+                                    source={{ uri: coverUrl }}
+                                    contentFit="cover"
+                                    transition={120}
+                                    style={{
+                                      width: 54,
+                                      height: 72,
+                                      borderRadius: 14,
+                                      marginRight: 12,
+                                      backgroundColor: "rgba(2,6,23,0.7)",
+                                      borderWidth: 1,
+                                      borderColor: "rgba(51,65,85,0.6)",
+                                    }}
+                                  />
+                                ) : (
+                                  <View
+                                    style={{
+                                      width: 54,
+                                      height: 72,
+                                      borderRadius: 14,
+                                      marginRight: 12,
+                                      backgroundColor: "rgba(2,6,23,0.7)",
+                                      borderWidth: 1,
+                                      borderColor: "rgba(51,65,85,0.6)",
+                                      alignItems: "center",
+                                      justifyContent: "center",
+                                    }}
+                                  >
+                                    <Feather name="image" size={16} color="#64748B" />
+                                  </View>
+                                )}
+
+                                <View className="flex-1">
+                                  <Text className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                                    {game.id === "pokopia" ? "Pokopia" : `Gen ${game.generationId}`}
+                                  </Text>
+                                  <Text className="text-[15px] font-semibold text-slate-50 mt-0.5">{game.title}</Text>
+                                  {game.subtitle ? <Text className="text-[12px] text-slate-400 mt-0.5">{game.subtitle}</Text> : null}
+                                </View>
+
+                                <View className="items-end ml-3">
+                                  <View className="flex-row items-center px-2.5 py-1 rounded-full bg-slate-950 border border-slate-700">
+                                    <Text className="text-[10px] font-semibold text-slate-200 mr-1">View Pokédex</Text>
+                                    <Feather name="chevron-right" size={14} color="#E5E7EB" />
+                                  </View>
+                                  {speciesCount ? <Text className="text-[11px] text-slate-400 mt-1">{speciesCount} species</Text> : null}
+                                </View>
+                              </View>
+
+                              <View className="px-4 pb-3 pt-1 border-t border-slate-800/80 bg-slate-950/80">
+                                <View className="flex-row items-center justify-between">
+                                  <View className="flex-row items-center">
+                                    <View className="w-1.5 h-6 rounded-full mr-2" style={{ backgroundColor: accent }} />
+                                    <Text className="text-[11px] text-slate-400">
+                                      {game.id === "pokopia" ? (
+                                        <>
+                                          <Text className="text-slate-200 font-semibold">Pokopia</Text>
+                                        </>
+                                      ) : (
+                                        <>
+                                          Generation <Text className="text-slate-200 font-semibold">{game.generationId}</Text>
+                                        </>
+                                      )}
+                                      {speciesCount ? (
+                                        <>
+                                          {" • "}
+                                          <Text className="text-slate-200 font-semibold">{speciesCount}</Text> species
+                                        </>
+                                      ) : null}
+                                    </Text>
+                                  </View>
+                                </View>
+
+                                {Array.isArray(game.shortCode) && game.shortCode.length > 0 ? (
+                                  <View className="flex-row flex-wrap mt-2 -mr-1">
+                                    {game.shortCode.map((code: string) => (
+                                      <View key={code} className="px-2 py-1 rounded-full bg-slate-900/90 border border-slate-700 mr-2 mt-1">
+                                        <Text className="text-[10px] text-slate-300">{code}</Text>
+                                      </View>
+                                    ))}
+                                  </View>
+                                ) : null}
+                              </View>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+
+                      {showTcgSection && section.sectionKey === "pokopia" ? (
+                        <View
+                          key="tcg"
+                          onLayout={(e) => {
+                            sectionOffsetsRef.current.tcg = e.nativeEvent.layout.y;
+                          }}
+                          className="mb-2"
+                        >
+                          <View className="flex-row items-center mb-1 px-1 mt-2">
+                            <View className="w-1.5 h-5 rounded-full mr-2 bg-amber-400" />
+                            <Text className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                              {getGameSectionLabel("tcg")}
+                            </Text>
+                          </View>
+
+                          <Pressable
+                            onPress={() => router.push("/tcg")}
+                            className="rounded-3xl bg-slate-950/80 border mb-3 overflow-hidden"
+                            style={{ borderColor: "#f59e0b" }}
+                          >
+                            <View className="flex-row items-center px-4 pt-3 pb-2">
+                              <ExpoImage
+                                source={AppImages.crPack}
+                                contentFit="cover"
+                                transition={120}
+                                style={{
+                                  width: 54,
+                                  height: 72,
+                                  borderRadius: 14,
+                                  marginRight: 12,
+                                  backgroundColor: "rgba(120,53,15,0.22)",
+                                  borderWidth: 1,
+                                  borderColor: "rgba(245,158,11,0.35)",
+                                }}
+                              />
+
+                              <View className="flex-1">
+                                <Text className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                                  Physical/Digital Sets
+                                </Text>
+                                <Text className="text-[15px] font-semibold text-slate-50 mt-0.5">Pokemon TCG</Text>
+                                <Text className="text-[12px] text-slate-400 mt-0.5">
+                                  Browse official sets, filter cards, and track owned or wanted pulls.
+                                </Text>
+                              </View>
+
+                              <View className="items-end ml-3">
+                                <View className="flex-row items-center px-2.5 py-1 rounded-full bg-slate-950 border border-slate-700">
+                                  <Text className="text-[10px] font-semibold text-slate-200 mr-1">Open Cards</Text>
+                                  <Feather name="chevron-right" size={14} color="#E5E7EB" />
+                                </View>
+                                <Text className="text-[11px] text-slate-400 mt-1">Foundation</Text>
+                              </View>
+                            </View>
+
+                            <View className="px-4 pb-3 pt-1 border-t border-slate-800/80 bg-slate-950/80">
+                              <View className="flex-row flex-wrap mt-2 -mr-1">
+                                <View className="w-1.5 h-6 rounded-full mr-2 bg-amber-400" />
+                                {["Sets", "Cards", "Wanted", "Owned"].map((label) => (
+                                  <View
+                                    key={label}
+                                    className="px-2 py-1 rounded-full bg-slate-900/90 border border-slate-700 mr-2 mt-1 flex-row items-center"
+                                  >
+                                    {label === "Wanted" ? (
+                                      <Feather name="heart" size={12} color="#fca5a5" />
+                                    ) : label === "Owned" ? (
+                                      <Feather name="check-circle" size={12} color="#86efac" />
+                                    ) : (
+                                      <Text className="text-[10px] text-slate-300">{label}</Text>
+                                    )}
+                                  </View>
+                                ))}
+                              </View>
+                            </View>
+                          </Pressable>
+                        </View>
+                      ) : null}
+                    </React.Fragment>
+                  ))}
+
+                  {showTcgSection && !generationSections.some((section) => section.sectionKey === "pokopia") ? (
                     <View
-                      key="tcg"
+                      key="tcg-fallback"
                       onLayout={(e) => {
                         sectionOffsetsRef.current.tcg = e.nativeEvent.layout.y;
                       }}
                       className="mb-2"
                     >
                       <View className="flex-row items-center mb-1 px-1 mt-2">
-                        <View className="w-1.5 h-5 rounded-full mr-2 bg-gray-700" />
+                        <View className="w-1.5 h-5 rounded-full mr-2 bg-amber-400" />
                         <Text className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
                           {getGameSectionLabel("tcg")}
                         </Text>
@@ -292,152 +496,9 @@ const PokemonHomeContent: React.FC<PokemonHomeContentProps> = ({ onBackToCollect
                             <Text className="text-[11px] text-slate-400 mt-1">Foundation</Text>
                           </View>
                         </View>
-
-                        <View className="px-4 pb-3 pt-1 border-t border-slate-800/80 bg-slate-950/80">
-                          <View className="flex-row flex-wrap mt-2 -mr-1">
-                            <View className="w-1.5 h-6 rounded-full mr-2 bg-amber-400" />
-                            {["Sets", "Cards", "Wanted", "Owned"].map((label) => (
-                              <View
-                                key={label}
-                                className="px-2 py-1 rounded-full bg-slate-900/90 border border-slate-700 mr-2 mt-1 flex-row items-center"
-                              >
-                                {label === "Wanted" ? (
-                                  <Feather name="heart" size={12} color="#fca5a5" />
-                                ) : label === "Owned" ? (
-                                  <Feather name="check-circle" size={12} color="#86efac" />
-                                ) : (
-                                  <Text className="text-[10px] text-slate-300">{label}</Text>
-                                )}
-                              </View>
-                            ))}
-                          </View>
-                        </View>
                       </Pressable>
                     </View>
                   ) : null}
-
-                  {generationSections.map((section) => (
-                    <View
-                      key={section.sectionKey}
-                      onLayout={(e) => {
-                        sectionOffsetsRef.current[section.sectionKey] = e.nativeEvent.layout.y;
-                      }}
-                      className="mb-2"
-                    >
-                      <View className="flex-row items-center mb-1 px-1 mt-2">
-                        <View className="w-1.5 h-5 rounded-full mr-2 bg-slate-700" />
-                        <Text className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-                          {getGameSectionLabel(section.sectionKey)}
-                        </Text>
-                      </View>
-
-                      {section.games.map((game: any) => {
-                        const accent = Array.isArray(game.accentColor) ? game.accentColor[0] : game.accentColor ?? "#38bdf8";
-                        const speciesCount = game.speciesCount ?? undefined;
-                        const coverUrl: string | undefined = typeof game.coverImageUrl === "string" ? game.coverImageUrl : undefined;
-
-                        return (
-                          <Pressable
-                            key={game.id}
-                            onPress={() =>
-                              router.push({
-                                pathname: "/game/[id]",
-                                params: { id: game.id },
-                              })
-                            }
-                            className="rounded-3xl bg-slate-950/80 border mb-3 overflow-hidden"
-                            style={{ borderColor: accent }}
-                          >
-                            <View className="flex-row items-center px-4 pt-3 pb-2">
-                              {coverUrl ? (
-                                <ExpoImage
-                                  source={{ uri: coverUrl }}
-                                  contentFit="cover"
-                                  transition={120}
-                                  style={{
-                                    width: 54,
-                                    height: 72,
-                                    borderRadius: 14,
-                                    marginRight: 12,
-                                    backgroundColor: "rgba(2,6,23,0.7)",
-                                    borderWidth: 1,
-                                    borderColor: "rgba(51,65,85,0.6)",
-                                  }}
-                                />
-                              ) : (
-                                <View
-                                  style={{
-                                    width: 54,
-                                    height: 72,
-                                    borderRadius: 14,
-                                    marginRight: 12,
-                                    backgroundColor: "rgba(2,6,23,0.7)",
-                                    borderWidth: 1,
-                                    borderColor: "rgba(51,65,85,0.6)",
-                                    alignItems: "center",
-                                    justifyContent: "center",
-                                  }}
-                                >
-                                  <Feather name="image" size={16} color="#64748B" />
-                                </View>
-                              )}
-
-                              <View className="flex-1">
-                                <Text className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-                                  {game.id === "pokopia" ? "Pokopia" : `Gen ${game.generationId}`}
-                                </Text>
-                                <Text className="text-[15px] font-semibold text-slate-50 mt-0.5">{game.title}</Text>
-                                {game.subtitle ? <Text className="text-[12px] text-slate-400 mt-0.5">{game.subtitle}</Text> : null}
-                              </View>
-
-                              <View className="items-end ml-3">
-                                <View className="flex-row items-center px-2.5 py-1 rounded-full bg-slate-950 border border-slate-700">
-                                  <Text className="text-[10px] font-semibold text-slate-200 mr-1">View Pokédex</Text>
-                                  <Feather name="chevron-right" size={14} color="#E5E7EB" />
-                                </View>
-                                {speciesCount ? <Text className="text-[11px] text-slate-400 mt-1">{speciesCount} species</Text> : null}
-                              </View>
-                            </View>
-
-                            <View className="px-4 pb-3 pt-1 border-t border-slate-800/80 bg-slate-950/80">
-                              <View className="flex-row items-center justify-between">
-                                <View className="flex-row items-center">
-                                  <View className="w-1.5 h-6 rounded-full mr-2" style={{ backgroundColor: accent }} />
-                                  <Text className="text-[11px] text-slate-400">
-                                    {game.id === "pokopia" ? (
-                                      <>
-                                        <Text className="text-slate-200 font-semibold">Pokopia</Text>
-                                      </>
-                                    ) : (
-                                      <>
-                                        Generation <Text className="text-slate-200 font-semibold">{game.generationId}</Text>
-                                      </>
-                                    )}
-                                    {speciesCount ? (
-                                      <>
-                                        {" • "}
-                                        <Text className="text-slate-200 font-semibold">{speciesCount}</Text> species
-                                      </>
-                                    ) : null}
-                                  </Text>
-                                </View>
-                              </View>
-
-                              {Array.isArray(game.shortCode) && game.shortCode.length > 0 ? (
-                                <View className="flex-row flex-wrap mt-2 -mr-1">
-                                  {game.shortCode.map((code: string) => (
-                                    <View key={code} className="px-2 py-1 rounded-full bg-slate-900/90 border border-slate-700 mr-2 mt-1">
-                                      <Text className="text-[10px] text-slate-300">{code}</Text>
-                                    </View>
-                                  ))}
-                                </View>
-                              ) : null}
-                            </View>
-                          </Pressable>
-                        );
-                      })}
-                    </View>
-                  ))}
                 </>
               )}
             </View>

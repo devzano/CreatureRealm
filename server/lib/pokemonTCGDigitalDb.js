@@ -58,6 +58,11 @@ async function ensureSchema(client = null) {
     `);
 
     await db.query(`
+      ALTER TABLE pokemon_tcg_digital_profiles
+      ADD COLUMN IF NOT EXISTS pool_refresh_key TEXT NOT NULL DEFAULT '';
+    `);
+
+    await db.query(`
       CREATE TABLE IF NOT EXISTS pokemon_tcg_digital_history (
         id TEXT PRIMARY KEY,
         device_id TEXT NOT NULL REFERENCES pokemon_tcg_digital_profiles(device_id) ON DELETE CASCADE,
@@ -106,7 +111,7 @@ export async function withDigitalProfileTransaction(fn) {
 export async function loadDigitalProfile(client, deviceId) {
   const result = await client.query(
     `
-      SELECT device_id, window_key, opened_today, remaining_today, total_opened, pack_pool, inventory, created_at, updated_at
+      SELECT device_id, window_key, opened_today, remaining_today, total_opened, pack_pool, pool_refresh_key, inventory, created_at, updated_at
       FROM pokemon_tcg_digital_profiles
       WHERE device_id = $1
       LIMIT 1
@@ -127,16 +132,18 @@ export async function saveDigitalProfile(client, profile) {
         remaining_today,
         total_opened,
         pack_pool,
+        pool_refresh_key,
         inventory,
         created_at,
         updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8, $9)
+      ) VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8::jsonb, $9, $10)
       ON CONFLICT (device_id) DO UPDATE SET
         window_key = EXCLUDED.window_key,
         opened_today = EXCLUDED.opened_today,
         remaining_today = EXCLUDED.remaining_today,
         total_opened = EXCLUDED.total_opened,
         pack_pool = EXCLUDED.pack_pool,
+        pool_refresh_key = EXCLUDED.pool_refresh_key,
         inventory = EXCLUDED.inventory,
         updated_at = EXCLUDED.updated_at
     `,
@@ -147,6 +154,7 @@ export async function saveDigitalProfile(client, profile) {
       profile.remainingToday,
       profile.totalOpened,
       JSON.stringify(profile.packPool ?? []),
+      profile.poolRefreshKey ?? "",
       JSON.stringify(profile.inventory ?? {}),
       profile.createdAt,
       profile.updatedAt,

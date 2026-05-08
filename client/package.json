@@ -8,8 +8,6 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "lint": "expo lint",
-    "tcg:extract-pack-assets": "node scripts/extractTCGDigitalPackAssets.cjs",
-    "tcg:extract-card-back-assets": "node scripts/extractTCGCardBackAssets.cjs",
     "build:dev:ios": "APP_VARIANT=development eas build --profile development --platform ios",
     "build:dev:android": "APP_VARIANT=development eas build --profile development --platform android",
     "build:prod:ios": "APP_VARIANT=production eas build --profile production --platform ios",

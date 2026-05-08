@@ -151,6 +151,8 @@ export default function PokemonTCGDigitalContent(props: PokemonTCGDigitalContent
   const [isCurrentCardFlipped, setIsCurrentCardFlipped] = useState(false);
   const [autoNextEnabled, setAutoNextEnabled] = useState(false);
   const [refreshingPool, setRefreshingPool] = useState(false);
+  const [showAllPullsModal, setShowAllPullsModal] = useState(false);
+  const [uniqueCardsMode, setUniqueCardsMode] = useState<null | "menu" | "dupes" | "rarest">(null);
 
   const syncDigitalInventory = usePokemonTCGCollectionStore((state) => state.syncDigitalInventory);
   const packTranslateX = useRef(new Animated.Value(0)).current;
@@ -372,6 +374,36 @@ export default function PokemonTCGDigitalContent(props: PokemonTCGDigitalContent
   }, [profile]);
 
   const packProgress = useMemo(() => getPackProgress(profile), [profile]);
+
+  const allHistoryCards = useMemo(() => {
+    const seen = new Set<string>();
+    const cards: (PokemonTCGDigitalRevealCard & { count: number })[] = [];
+    for (const entry of profile?.history ?? []) {
+      for (const card of entry.cards) {
+        if (!seen.has(card.id)) {
+          seen.add(card.id);
+          cards.push({ ...card, count: Number(profile?.inventory?.[card.id.toLowerCase()] ?? 0) });
+        }
+      }
+    }
+    return cards;
+  }, [profile]);
+
+  const dupeCards = useMemo(
+    () => allHistoryCards.filter((c) => c.count > 1).sort((a, b) => b.count - a.count),
+    [allHistoryCards]
+  );
+
+  const rarestCards = useMemo(() => {
+    const rank = (rarity: string | null) => {
+      const r = String(rarity ?? "").toLowerCase();
+      if (/secret|hyper|illustration|special illustration|ultra|rainbow|ace spec|double rare/.test(r)) return 4;
+      if (/rare|holo|amazing|radiant|promo/.test(r)) return 3;
+      if (/uncommon/.test(r)) return 2;
+      return 1;
+    };
+    return [...allHistoryCards].sort((a, b) => rank(b.rarity) - rank(a.rarity));
+  }, [allHistoryCards]);
 
   useEffect(() => {
     return () => {
@@ -731,18 +763,18 @@ export default function PokemonTCGDigitalContent(props: PokemonTCGDigitalContent
               <Text className="mt-1 text-[18px] font-semibold text-slate-100">{profile?.openedToday ?? "—"}</Text>
             </View>
           </View>
-          <View className="w-1/2 px-1 mb-2">
+          <Pressable className="w-1/2 px-1 mb-2" onPress={() => setUniqueCardsMode("menu")}>
             <View className="rounded-2xl border border-amber-400/30 bg-slate-900 px-3 py-3 items-center">
               <Text className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Unique Cards</Text>
               <Text className="mt-1 text-[18px] font-semibold text-slate-100">{digitalSummary.uniqueCards}</Text>
             </View>
-          </View>
-          <View className="w-1/2 px-1 mb-2">
+          </Pressable>
+          <Pressable className="w-1/2 px-1 mb-2" onPress={() => setShowAllPullsModal(true)}>
             <View className="rounded-2xl border border-emerald-400/30 bg-slate-900 px-3 py-3 items-center">
               <Text className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Total Pulls</Text>
               <Text className="mt-1 text-[18px] font-semibold text-slate-100">{digitalSummary.totalCards}</Text>
             </View>
-          </View>
+          </Pressable>
         </View>
 
         <View className="mt-2">
@@ -919,6 +951,146 @@ export default function PokemonTCGDigitalContent(props: PokemonTCGDigitalContent
         </View>
       ) : null}
 
+      {/* Total Pulls modal */}
+      <BottomSheetModal
+        visible={showAllPullsModal}
+        onRequestClose={() => setShowAllPullsModal(false)}
+        sheetStyle={{ maxHeight: "92%", minHeight: 420, paddingBottom: 10 }}
+      >
+        <View className="flex-row items-center justify-between mb-4">
+          <View className="flex-1 pr-3">
+            <Text className="text-slate-50 text-[16px] font-semibold">All Pulls</Text>
+            <Text className="text-slate-400 text-[12px] mt-0.5">{digitalSummary.totalCards} cards pulled from your recent opens</Text>
+          </View>
+          <Pressable onPress={() => setShowAllPullsModal(false)} className="h-10 w-10 items-center justify-center rounded-full border border-slate-700 bg-slate-900">
+            <Ionicons name="close" size={20} color="white" />
+          </Pressable>
+        </View>
+
+        {allHistoryCards.length === 0 ? (
+          <View className="items-center py-10">
+            <Text className="text-slate-400 text-sm">No pulls yet. Open some packs!</Text>
+          </View>
+        ) : (
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }}>
+            <View className="flex-row flex-wrap -mx-1">
+              {allHistoryCards.map((card) => (
+                <View key={card.id} className="w-1/3 px-1 mb-2">
+                  <Pressable
+                    onPress={() => {
+                      setShowAllPullsModal(false);
+                      onOpenPhysicalCard?.(card.id);
+                    }}
+                    className="rounded-2xl border border-slate-800 bg-slate-900 px-2 py-2 items-center"
+                  >
+                    <ExpoImage source={{ uri: card.images.small }} style={{ width: 72, height: 100 }} contentFit="contain" transition={120} />
+                    <Text numberOfLines={2} className="mt-1.5 text-[9px] font-semibold text-slate-100 text-center min-h-[22px]">{card.name}</Text>
+                    <Text numberOfLines={1} className="mt-0.5 text-[9px] text-slate-500 text-center">{card.rarity || card.supertype}</Text>
+                    {card.count > 1 ? (
+                      <View className="mt-1 rounded-full bg-fuchsia-500/20 border border-fuchsia-400/30 px-2 py-0.5">
+                        <Text className="text-[9px] font-semibold text-fuchsia-200">×{card.count}</Text>
+                      </View>
+                    ) : null}
+                  </Pressable>
+                </View>
+              ))}
+            </View>
+          </ScrollView>
+        )}
+      </BottomSheetModal>
+
+      {/* Unique Cards modal */}
+      <BottomSheetModal
+        visible={uniqueCardsMode !== null}
+        onRequestClose={() => setUniqueCardsMode(null)}
+        sheetStyle={{ maxHeight: "92%", minHeight: 420, paddingBottom: 10 }}
+      >
+        <View className="flex-row items-center justify-between mb-4">
+          <View className="flex-1 pr-3">
+            <Text className="text-slate-50 text-[16px] font-semibold">
+              {uniqueCardsMode === "menu" ? "Unique Cards" : uniqueCardsMode === "dupes" ? "Duplicates" : "Rarest Cards"}
+            </Text>
+            <Text className="text-slate-400 text-[12px] mt-0.5">
+              {uniqueCardsMode === "menu"
+                ? "What would you like to see?"
+                : uniqueCardsMode === "dupes"
+                  ? `${dupeCards.length} cards with more than one copy`
+                  : `${rarestCards.length} unique cards sorted by rarity`}
+            </Text>
+          </View>
+          <Pressable onPress={() => setUniqueCardsMode(null)} className="h-10 w-10 items-center justify-center rounded-full border border-slate-700 bg-slate-900">
+            <Ionicons name="close" size={20} color="white" />
+          </Pressable>
+        </View>
+
+        {uniqueCardsMode === "menu" ? (
+          <View className="gap-3">
+            <Pressable
+              onPress={() => setUniqueCardsMode("dupes")}
+              className="flex-row items-center rounded-3xl border border-fuchsia-400/25 bg-fuchsia-500/10 px-4 py-4"
+            >
+              <View className="w-10 h-10 rounded-full bg-fuchsia-500/20 items-center justify-center mr-3">
+                <Ionicons name="copy-outline" size={18} color="#e879f9" />
+              </View>
+              <View className="flex-1">
+                <Text className="text-[14px] font-semibold text-slate-50">Duplicates</Text>
+                <Text className="mt-0.5 text-[12px] text-slate-400">Cards you have more than one copy of</Text>
+              </View>
+              <View className="rounded-full bg-fuchsia-500/20 border border-fuchsia-400/30 px-2.5 py-1">
+                <Text className="text-[11px] font-semibold text-fuchsia-200">{dupeCards.length}</Text>
+              </View>
+            </Pressable>
+
+            <Pressable
+              onPress={() => setUniqueCardsMode("rarest")}
+              className="flex-row items-center rounded-3xl border border-amber-400/25 bg-amber-500/10 px-4 py-4"
+            >
+              <View className="w-10 h-10 rounded-full bg-amber-500/20 items-center justify-center mr-3">
+                <Ionicons name="star-outline" size={18} color="#fbbf24" />
+              </View>
+              <View className="flex-1">
+                <Text className="text-[14px] font-semibold text-slate-50">Rarest Cards</Text>
+                <Text className="mt-0.5 text-[12px] text-slate-400">Your collection sorted by rarity tier</Text>
+              </View>
+              <View className="rounded-full bg-amber-500/20 border border-amber-400/30 px-2.5 py-1">
+                <Text className="text-[11px] font-semibold text-amber-200">{rarestCards.length}</Text>
+              </View>
+            </Pressable>
+          </View>
+        ) : (
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }}>
+            {uniqueCardsMode === "dupes" && dupeCards.length === 0 ? (
+              <View className="items-center py-10">
+                <Text className="text-slate-400 text-sm text-center">No duplicates yet.</Text>
+              </View>
+            ) : null}
+            <View className="flex-row flex-wrap -mx-1">
+              {(uniqueCardsMode === "dupes" ? dupeCards : rarestCards).map((card) => (
+                <View key={card.id} className="w-1/3 px-1 mb-2">
+                  <Pressable
+                    onPress={() => {
+                      setUniqueCardsMode(null);
+                      onOpenPhysicalCard?.(card.id);
+                    }}
+                    className="rounded-2xl border border-slate-800 bg-slate-900 px-2 py-2 items-center"
+                  >
+                    <ExpoImage source={{ uri: card.images.small }} style={{ width: 72, height: 100 }} contentFit="contain" transition={120} />
+                    <Text numberOfLines={2} className="mt-1.5 text-[9px] font-semibold text-slate-100 text-center min-h-[22px]">{card.name}</Text>
+                    <Text numberOfLines={1} className="mt-0.5 text-[9px] text-slate-500 text-center">{card.rarity || card.supertype}</Text>
+                    {card.count > 1 ? (
+                      <View className="mt-1 rounded-full bg-fuchsia-500/20 border border-fuchsia-400/30 px-2 py-0.5">
+                        <Text className="text-[9px] font-semibold text-fuchsia-200">×{card.count}</Text>
+                      </View>
+                    ) : null}
+                  </Pressable>
+                </View>
+              ))}
+            </View>
+          </ScrollView>
+        )}
+      </BottomSheetModal>
+
+      {/* Pack reveal modal */}
       <BottomSheetModal
         visible={!!revealCards?.length}
         onRequestClose={resetRevealState}

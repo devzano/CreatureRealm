@@ -65,6 +65,7 @@ export type PokemonTCGDigitalProfile = {
   dailyLimit: number;
   nextResetAt: string;
   totalOpened: number;
+  poolRefreshedToday: boolean;
   inventory: Record<string, number>;
   history: PokemonTCGDigitalHistoryEntry[];
   packs: PokemonTCGDigitalPack[];
