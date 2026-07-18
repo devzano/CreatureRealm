@@ -9,8 +9,7 @@
       "distribution": "internal",
       "channel": "development",
       "env": {
-        "APP_VARIANT": "development",
-        "EXPO_RESEND_API_KEY": "EXPO_RESEND_API_KEY"
+        "APP_VARIANT": "development"
       }
     },
     "production": {
@@ -18,8 +17,7 @@
       "distribution": "store",
       "channel": "production",
       "env": {
-        "APP_VARIANT": "production",
-        "EXPO_RESEND_API_KEY": "EXPO_RESEND_API_KEY"
+        "APP_VARIANT": "production"
       }
     }
   },
