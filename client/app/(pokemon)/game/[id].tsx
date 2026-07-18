@@ -71,6 +71,7 @@ export default function GameDexScreen() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [dexSearch, setDexSearch] = useState("");
 
   const entries = usePokemonCollectionStore((state) => state.entries);
   const getEntry = usePokemonCollectionStore((state) => state.getEntry);
@@ -240,6 +241,7 @@ export default function GameDexScreen() {
 
   useEffect(() => {
     setStatusFilter("all");
+    setDexSearch("");
   }, [game?.id]);
 
   useEffect(() => {
@@ -340,16 +342,30 @@ export default function GameDexScreen() {
     if (!game) return [];
     if (!supportsAlpha && statusFilter === "alpha") return items;
     if (!supportsShiny && statusFilter === "shiny") return items;
-    if (statusFilter === "all") return items;
 
-    return items.filter((item) => {
-      const entry = getEntry(game.id, item.id);
-      if (statusFilter === "caught") return entry.caught;
-      if (statusFilter === "shiny") return supportsShiny && entry.shiny;
-      if (statusFilter === "alpha") return supportsAlpha && entry.alpha;
-      return true;
-    });
-  }, [items, statusFilter, game, getEntry, supportsAlpha, supportsShiny]);
+    let result = items;
+
+    if (statusFilter !== "all") {
+      result = result.filter((item) => {
+        const entry = getEntry(game.id, item.id);
+        if (statusFilter === "caught") return entry.caught;
+        if (statusFilter === "shiny") return supportsShiny && entry.shiny;
+        if (statusFilter === "alpha") return supportsAlpha && entry.alpha;
+        return true;
+      });
+    }
+
+    if (dexSearch.trim()) {
+      const q = dexSearch.trim().toLowerCase();
+      result = result.filter(
+        (item) =>
+          item.name.toLowerCase().includes(q) ||
+          String(item.gameDexNumber ?? item.id).includes(q)
+      );
+    }
+
+    return result;
+  }, [items, statusFilter, dexSearch, game, getEntry, supportsAlpha, supportsShiny]);
 
   const themePreviewItems = useMemo(
     () => [
@@ -680,6 +696,8 @@ export default function GameDexScreen() {
             completion={completion}
             statusFilter={statusFilter}
             onChangeStatusFilter={setStatusFilter}
+            dexSearch={dexSearch}
+            onChangeDexSearch={setDexSearch}
             renderItem={renderItem}
             nestedInDashboard
           />
@@ -747,6 +765,8 @@ export default function GameDexScreen() {
           completion={completion}
           statusFilter={statusFilter}
           onChangeStatusFilter={setStatusFilter}
+          dexSearch={dexSearch}
+          onChangeDexSearch={setDexSearch}
           renderItem={renderItem}
         />
       )}

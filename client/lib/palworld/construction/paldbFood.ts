@@ -16,6 +16,7 @@
 
 import { absUrl, cleanKey, extractSize128ImgUrl, firstMatch, htmlToText } from "@/lib/palworld/palworldDB";
 import { type TreantNode, parseTreantTreeFromPage, normalizeDetailHref } from "@/lib/palworld/paldbDetailKit";
+import { yieldToUI } from "@/lib/palworld/construction/shared";
 
 export type FoodRecipeIngredient = {
   slug: string;
@@ -416,6 +417,7 @@ export async function fetchFoodList(opts?: { force?: boolean }): Promise<FoodInd
 
     if (!res.ok) throw new Error(`PalDB Food list failed: ${res.status}`);
     const html = await res.text();
+    await yieldToUI();
     const parsed = parseCardListPage(html);
     foodListCache = parsed;
     foodListCacheAt = Date.now();

@@ -1,6 +1,6 @@
 // components/Palworld/PalworldHomeContent.tsx
 import React, { useEffect, useMemo, useRef, useState, useCallback, useDeferredValue } from "react";
-import { View, Text, Pressable, TextInput, ScrollView, ActivityIndicator, InteractionManager } from "react-native";
+import { View, Text, Pressable, TextInput, ScrollView, ActivityIndicator } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import LiquidGlass from "../ui/LiquidGlass";
 import PageWrapper from "@/components/PageWrapper";
@@ -11,7 +11,10 @@ import PalworldUpdatesSheet from "./PalworldUpdatesSheet";
 
 import PaldeckGrid, { type PalDexFilter } from "@/components/Palworld/PaldeckGrid";
 import PalworldItemsGrid from "@/components/Palworld/PalworldItemsGrid";
-import PalworldConstructionGrid from "@/components/Palworld/PalworldConstructionGrid";
+import PalworldConstructionGrid, {
+  type ConstructionCategoryKey,
+  type ConstructionCategoryStatus,
+} from "@/components/Palworld/PalworldConstructionGrid";
 import PalworldUpgradesGrid from "@/components/Palworld/PalworldUpgradesGrid";
 
 import { fetchPalList, type PalListItem } from "@/lib/palworld/paldbDeck";
@@ -41,6 +44,7 @@ import { fetchDungeonWithPals, type DungeonWithPals } from "@/lib/palworld/upgra
 import { fetchEggsIndex, type EggRow } from "@/lib/palworld/upgrades/paldbEggPals";
 import { listWorkSuitabilities, type WorkSuitabilityItem } from "@/lib/palworld/upgrades/paldbWorkSuitability";
 import { fetchSkillfruitOrchard, type SkillFruitOrchardRow } from "@/lib/palworld/upgrades/paldbSkillFruits";
+import { fetchWorkPriority, type WorkPriorityItem } from "@/lib/palworld/upgrades/paldbWorkPriority";
 
 import { fetchStorageList, type StorageIndexItem } from "@/lib/palworld/construction/paldbStorage";
 import { fetchFoundationsList, type FoundationsIndexItem } from "@/lib/palworld/construction/paldbFoundations";
@@ -52,6 +56,20 @@ import { fetchLightingList, type LightingIndexItem } from "@/lib/palworld/constr
 import { fetchProductionList, type ProductionIndexItem } from "@/lib/palworld/construction/paldbProduction";
 import { fetchPalConstructionList, type PalConstructionIndexItem } from "@/lib/palworld/construction/paldbPal";
 import { fetchOtherList, type OtherIndexItem } from "@/lib/palworld/construction/paldbOther";
+import { yieldToUI } from "@/lib/palworld/construction/shared";
+import {
+  fetchExpeditionStationBundle,
+  fetchExpeditionStationList,
+  fetchFishingPondBundle,
+  fetchFishingPondList,
+  fetchFishingShadows,
+  fetchPalExpeditions,
+  type ExpeditionStationBundle,
+  type FishingPondDetailBundle,
+  type FishingShadowEntry,
+  type PalExpeditionEntry,
+  type SpecialConstructionIndexItem,
+} from "@/lib/palworld/construction/paldbSpecialStructures";
 import {
   fetchPaldbHomeUpdates,
   fetchPaldbUpdateDetail,
@@ -79,6 +97,92 @@ type ToolCardConfig = React.ComponentProps<typeof MapCard> & {
   id: string;
   groupKey: PalToolGroupKey;
 };
+
+type ConstructionCategoryItemsMap = {
+  storage: StorageIndexItem[];
+  foundations: FoundationsIndexItem[];
+  furniture: FurnitureIndexItem[];
+  defenses: DefensesIndexItem[];
+  food: FoodIndexItem[];
+  infrastructure: InfrastructureIndexItem[];
+  lighting: LightingIndexItem[];
+  production: ProductionIndexItem[];
+  palConstruction: PalConstructionIndexItem[];
+  expeditionStation: SpecialConstructionIndexItem[];
+  palExpeditions: PalExpeditionEntry[];
+  fishingPond: SpecialConstructionIndexItem[];
+  fishingShadows: FishingShadowEntry[];
+  other: OtherIndexItem[];
+};
+
+const CONSTRUCTION_LOAD_KEYS: ConstructionCategoryKey[] = [
+  "storage",
+  "defenses",
+  "food",
+  "infrastructure",
+  "lighting",
+  "production",
+  "palConstruction",
+  "expeditionStation",
+  "fishingPond",
+  "other",
+  "foundations",
+  "furniture",
+];
+
+const CONSTRUCTION_MAX_CONCURRENT = 3;
+
+function createInitialConstructionStatus(): Record<ConstructionCategoryKey, ConstructionCategoryStatus> {
+  return {
+    storage: { loading: false, loaded: false, error: null },
+    foundations: { loading: false, loaded: false, error: null },
+    furniture: { loading: false, loaded: false, error: null },
+    defenses: { loading: false, loaded: false, error: null },
+    food: { loading: false, loaded: false, error: null },
+    infrastructure: { loading: false, loaded: false, error: null },
+    lighting: { loading: false, loaded: false, error: null },
+    production: { loading: false, loaded: false, error: null },
+    palConstruction: { loading: false, loaded: false, error: null },
+    expeditionStation: { loading: false, loaded: false, error: null },
+    palExpeditions: { loading: false, loaded: false, error: null },
+    fishingPond: { loading: false, loaded: false, error: null },
+    fishingShadows: { loading: false, loaded: false, error: null },
+    other: { loading: false, loaded: false, error: null },
+  };
+}
+
+function setConstructionStatusesForKeys(
+  prev: Record<ConstructionCategoryKey, ConstructionCategoryStatus>,
+  keys: ConstructionCategoryKey[],
+  next: Partial<ConstructionCategoryStatus> | ((current: ConstructionCategoryStatus) => ConstructionCategoryStatus)
+): Record<ConstructionCategoryKey, ConstructionCategoryStatus> {
+  const updated = { ...prev };
+  for (const key of keys) {
+    const current = prev[key];
+    updated[key] = typeof next === "function" ? next(current) : { ...current, ...next };
+  }
+  return updated;
+}
+
+function getConstructionGroupedRetryKeys(status: Record<ConstructionCategoryKey, ConstructionCategoryStatus>): ConstructionCategoryKey[] {
+  const keys = new Set<ConstructionCategoryKey>();
+
+  for (const key of CONSTRUCTION_LOAD_KEYS) {
+    if (key === "expeditionStation") {
+      if (status.expeditionStation.error || status.palExpeditions.error) keys.add("expeditionStation");
+      continue;
+    }
+
+    if (key === "fishingPond") {
+      if (status.fishingPond.error || status.fishingShadows.error) keys.add("fishingPond");
+      continue;
+    }
+
+    if (status[key].error) keys.add(key);
+  }
+
+  return Array.from(keys);
+}
 
 const PalworldHomeContent: React.FC<PalworldHomeContentProps> = ({ onBackToCollections }) => {
   const toolsScrollRef = useRef<ScrollView | null>(null);
@@ -114,10 +218,7 @@ const PalworldHomeContent: React.FC<PalworldHomeContentProps> = ({ onBackToColle
 
   const setTab = useCallback((t: ActiveTab) => {
     setActiveTabUI(t);
-
-    InteractionManager.runAfterInteractions(() => {
-      setActiveTabContent(t);
-    });
+    setActiveTabContent(t);
   }, []);
 
   const [dexLoading, setDexLoading] = useState(false);
@@ -127,8 +228,9 @@ const PalworldHomeContent: React.FC<PalworldHomeContentProps> = ({ onBackToColle
   const [itemsLoading, setItemsLoading] = useState(false);
   const [itemsError, setItemsError] = useState<string | null>(null);
 
-  const [constructionLoading, setConstructionLoading] = useState(false);
-  const [constructionError, setConstructionError] = useState<string | null>(null);
+  const [constructionCategoryStatus, setConstructionCategoryStatus] = useState<Record<ConstructionCategoryKey, ConstructionCategoryStatus>>(
+    () => createInitialConstructionStatus()
+  );
 
   const [upgradesLoading, setUpgradesLoading] = useState(false);
   const [upgradesError, setUpgradesError] = useState<string | null>(null);
@@ -160,6 +262,7 @@ const PalworldHomeContent: React.FC<PalworldHomeContentProps> = ({ onBackToColle
   const [dungeonPals, setDungeonPals] = useState<DungeonWithPals[]>([]);
   const [eggs, setEggs] = useState<EggRow[]>([]);
   const [workSuitability, setWorkSuitability] = useState<WorkSuitabilityItem[]>([]);
+  const [workPriority, setWorkPriority] = useState<WorkPriorityItem[]>([]);
   const [skillfruits, setSkillfruits] = useState<SkillFruitOrchardRow[]>([]);
 
   const [storage, setStorage] = useState<StorageIndexItem[]>([]);
@@ -171,12 +274,35 @@ const PalworldHomeContent: React.FC<PalworldHomeContentProps> = ({ onBackToColle
   const [lighting, setLighting] = useState<LightingIndexItem[]>([]);
   const [production, setProduction] = useState<ProductionIndexItem[]>([]);
   const [palConstruction, setPalConstruction] = useState<PalConstructionIndexItem[]>([]);
+  const [expeditionStation, setExpeditionStation] = useState<SpecialConstructionIndexItem[]>([]);
+  const [palExpeditions, setPalExpeditions] = useState<PalExpeditionEntry[]>([]);
+  const [fishingPond, setFishingPond] = useState<SpecialConstructionIndexItem[]>([]);
+  const [fishingShadows, setFishingShadows] = useState<FishingShadowEntry[]>([]);
   const [otherConstruction, setOtherConstruction] = useState<OtherIndexItem[]>([]);
 
   const [didLoadItemsOnce, setDidLoadItemsOnce] = useState(false);
-  const [didLoadConstructionOnce, setDidLoadConstructionOnce] = useState(false);
   const [didLoadUpgradesOnce, setDidLoadUpgradesOnce] = useState(false);
   const [didLoadPaldbUpdatesOnce, setDidLoadPaldbUpdatesOnce] = useState(false);
+
+  const constructionMountedRef = useRef(true);
+  const constructionLoadStartedRef = useRef(false);
+  const constructionHasLoadedRef = useRef(false);
+  const constructionCategoryRequestIdRef = useRef<Record<ConstructionCategoryKey, number>>({
+    storage: 0,
+    foundations: 0,
+    furniture: 0,
+    defenses: 0,
+    food: 0,
+    infrastructure: 0,
+    lighting: 0,
+    production: 0,
+    palConstruction: 0,
+    expeditionStation: 0,
+    palExpeditions: 0,
+    fishingPond: 0,
+    fishingShadows: 0,
+    other: 0,
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -200,6 +326,13 @@ const PalworldHomeContent: React.FC<PalworldHomeContentProps> = ({ onBackToColle
 
     return () => {
       cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    constructionMountedRef.current = true;
+    return () => {
+      constructionMountedRef.current = false;
     };
   }, []);
 
@@ -263,45 +396,217 @@ const PalworldHomeContent: React.FC<PalworldHomeContentProps> = ({ onBackToColle
     }
   }
 
-  async function loadConstructionData(opts?: { markDidLoad?: boolean; }) {
-    const markDidLoad = opts?.markDidLoad ?? true;
+  const loadConstructionCategory = useCallback(
+    async (key: ConstructionCategoryKey) => {
+      const startedAt = Date.now();
+      const linkedKeys: ConstructionCategoryKey[] =
+        key === "expeditionStation" || key === "palExpeditions"
+          ? ["expeditionStation", "palExpeditions"]
+          : key === "fishingPond" || key === "fishingShadows"
+            ? ["fishingPond", "fishingShadows"]
+            : [key];
 
-    try {
-      setConstructionError(null);
-      setConstructionLoading(true);
-
-      const jobs = [
-        fetchStorageList().then((list) => setStorage(list ?? [])),
-        fetchFoundationsList().then((list) => setFoundations(list ?? [])),
-        fetchFurnitureList().then((list) => setFurniture(list ?? [])),
-        fetchDefensesList().then((list) => setDefenses(list ?? [])),
-        fetchFoodList().then((list) => setFood(list ?? [])),
-        fetchInfrastructureList().then((list) => setInfrastructure(list ?? [])),
-        fetchLightingList().then((list) => setLighting(list ?? [])),
-        fetchProductionList().then((list) => setProduction(list ?? [])),
-        fetchPalConstructionList().then((list) => setPalConstruction(list ?? [])),
-        fetchOtherList().then((list) => setOtherConstruction(list ?? [])),
-      ] as const;
-
-      const settled = await Promise.allSettled(jobs);
-      const failures = settled.filter((result) => result.status === "rejected");
-
-      if (failures.length === jobs.length) {
-        throw new Error("All construction sources failed");
+      const requestId = (constructionCategoryRequestIdRef.current[key] ?? 0) + 1;
+      for (const linkedKey of linkedKeys) {
+        constructionCategoryRequestIdRef.current[linkedKey] = requestId;
       }
 
-      if (failures.length > 0) {
-        console.warn("Some paldb construction sources failed:", failures);
+      if (__DEV__) {
+        console.log(`[Construction] ${key} started`);
       }
 
-      if (markDidLoad) setDidLoadConstructionOnce(true);
-    } catch (e) {
-      console.warn("Failed to fetch paldb construction:", e);
-      setConstructionError("Failed to load Building Items from paldb.cc");
-    } finally {
-      setConstructionLoading(false);
-    }
-  }
+      setConstructionCategoryStatus((prev) =>
+        setConstructionStatusesForKeys(prev, linkedKeys, (current) => ({
+          loading: true,
+          loaded: current.loaded,
+          error: null,
+        }))
+      );
+
+      const isCurrentRequest = () =>
+        constructionMountedRef.current &&
+        linkedKeys.every((linkedKey) => constructionCategoryRequestIdRef.current[linkedKey] === requestId);
+
+      const fetcherMap: { [K in ConstructionCategoryKey]: () => Promise<ConstructionCategoryItemsMap[K]> } = {
+        storage: async () => (await fetchStorageList()) ?? [],
+        foundations: async () => (await fetchFoundationsList()) ?? [],
+        furniture: async () => (await fetchFurnitureList()) ?? [],
+        defenses: async () => (await fetchDefensesList()) ?? [],
+        food: async () => (await fetchFoodList()) ?? [],
+        infrastructure: async () => (await fetchInfrastructureList()) ?? [],
+        lighting: async () => (await fetchLightingList()) ?? [],
+        production: async () => (await fetchProductionList()) ?? [],
+        palConstruction: async () => (await fetchPalConstructionList()) ?? [],
+        expeditionStation: async () => (await fetchExpeditionStationList()) ?? [],
+        palExpeditions: async () => (await fetchPalExpeditions()) ?? [],
+        fishingPond: async () => (await fetchFishingPondList()) ?? [],
+        fishingShadows: async () => (await fetchFishingShadows()) ?? [],
+        other: async () => (await fetchOtherList()) ?? [],
+      };
+
+      try {
+        if (key === "expeditionStation" || key === "palExpeditions") {
+          const bundle: ExpeditionStationBundle = await fetchExpeditionStationBundle();
+          if (!isCurrentRequest()) return;
+
+          setExpeditionStation([bundle.construction]);
+          setPalExpeditions(bundle.expeditions);
+          setConstructionCategoryStatus((prev) =>
+            setConstructionStatusesForKeys(prev, linkedKeys, {
+              loading: false,
+              loaded: true,
+              error: null,
+            })
+          );
+
+          if (__DEV__) {
+            console.log(
+              `[Construction] expeditionStation completed in ${Date.now() - startedAt}ms (${1 + bundle.expeditions.length} entries)`
+            );
+          }
+          return;
+        }
+
+        if (key === "fishingPond" || key === "fishingShadows") {
+          const bundle: FishingPondDetailBundle = await fetchFishingPondBundle();
+          if (!isCurrentRequest()) return;
+
+          setFishingPond([bundle.construction]);
+          setFishingShadows(bundle.shadows);
+          setConstructionCategoryStatus((prev) =>
+            setConstructionStatusesForKeys(prev, linkedKeys, {
+              loading: false,
+              loaded: true,
+              error: null,
+            })
+          );
+
+          if (__DEV__) {
+            console.log(
+              `[Construction] fishingPond completed in ${Date.now() - startedAt}ms (${1 + bundle.shadows.length} entries)`
+            );
+          }
+          return;
+        }
+
+        const items = await fetcherMap[key]();
+        if (!isCurrentRequest()) return;
+
+        switch (key) {
+          case "storage":
+            setStorage(items as ConstructionCategoryItemsMap["storage"]);
+            break;
+          case "foundations":
+            setFoundations(items as ConstructionCategoryItemsMap["foundations"]);
+            break;
+          case "furniture":
+            setFurniture(items as ConstructionCategoryItemsMap["furniture"]);
+            break;
+          case "defenses":
+            setDefenses(items as ConstructionCategoryItemsMap["defenses"]);
+            break;
+          case "food":
+            setFood(items as ConstructionCategoryItemsMap["food"]);
+            break;
+          case "infrastructure":
+            setInfrastructure(items as ConstructionCategoryItemsMap["infrastructure"]);
+            break;
+          case "lighting":
+            setLighting(items as ConstructionCategoryItemsMap["lighting"]);
+            break;
+          case "production":
+            setProduction(items as ConstructionCategoryItemsMap["production"]);
+            break;
+          case "palConstruction":
+            setPalConstruction(items as ConstructionCategoryItemsMap["palConstruction"]);
+            break;
+          case "other":
+            setOtherConstruction(items as ConstructionCategoryItemsMap["other"]);
+            break;
+          default:
+            break;
+        }
+
+        setConstructionCategoryStatus((prev) =>
+          setConstructionStatusesForKeys(prev, linkedKeys, {
+            loading: false,
+            loaded: true,
+            error: null,
+          })
+        );
+
+        if (__DEV__) {
+          console.log(`[Construction] ${key} completed in ${Date.now() - startedAt}ms (${items.length} items)`);
+        }
+      } catch (error) {
+        if (__DEV__) {
+          console.log(`[Construction] ${key} failed in ${Date.now() - startedAt}ms`, error);
+        }
+
+        if (!isCurrentRequest()) return;
+
+        const message = error instanceof Error ? error.message : "Failed to load this category.";
+        setConstructionCategoryStatus((prev) =>
+          setConstructionStatusesForKeys(prev, linkedKeys, (current) => ({
+            loading: false,
+            loaded: current.loaded,
+            error: message,
+          }))
+        );
+      }
+    },
+    []
+  );
+
+  const loadConstructionData = useCallback(
+    async (opts?: { keys?: ConstructionCategoryKey[]; force?: boolean }) => {
+      const requestedKeys = opts?.keys?.length ? opts.keys : CONSTRUCTION_LOAD_KEYS;
+      const dedupedKeys = Array.from(
+        new Set(
+          requestedKeys.map((key) => {
+            if (key === "palExpeditions") return "expeditionStation";
+            if (key === "fishingShadows") return "fishingPond";
+            return key;
+          })
+        )
+      ) as ConstructionCategoryKey[];
+
+      if (!dedupedKeys.length) return;
+
+      constructionLoadStartedRef.current = true;
+      const batchStartedAt = Date.now();
+
+      const runQueue = async () => {
+        let nextIndex = 0;
+
+        const worker = async () => {
+          while (nextIndex < dedupedKeys.length) {
+            const currentIndex = nextIndex;
+            nextIndex += 1;
+            const key = dedupedKeys[currentIndex];
+            await loadConstructionCategory(key);
+            await yieldToUI();
+          }
+        };
+
+        const workerCount = Math.max(1, Math.min(CONSTRUCTION_MAX_CONCURRENT, dedupedKeys.length));
+        await Promise.allSettled(Array.from({ length: workerCount }, () => worker()));
+      };
+
+      void runQueue().then(() => {
+        if (!constructionMountedRef.current) return;
+        constructionHasLoadedRef.current = true;
+
+        if (__DEV__) {
+          const failedKeys = getConstructionGroupedRetryKeys(constructionCategoryStatus);
+          console.log(
+            `[Construction] batch settled in ${Date.now() - batchStartedAt}ms (${dedupedKeys.length - failedKeys.length}/${dedupedKeys.length} succeeded)`
+          );
+        }
+      });
+    },
+    [constructionCategoryStatus, loadConstructionCategory]
+  );
 
   async function loadUpgradesData(opts?: { markDidLoad?: boolean; }) {
     const markDidLoad = opts?.markDidLoad ?? true;
@@ -322,6 +627,7 @@ const PalworldHomeContent: React.FC<PalworldHomeContentProps> = ({ onBackToColle
         summoningAltarIndex,
         dungeonWithPalsList,
         eggsIndex,
+        workPriorityIndex,
         skillfruitList,
       ] = await Promise.all([
         fetchPassiveSkillIndex(),
@@ -335,6 +641,7 @@ const PalworldHomeContent: React.FC<PalworldHomeContentProps> = ({ onBackToColle
         fetchSummoningAltarIndex(),
         fetchDungeonWithPals(),
         fetchEggsIndex(),
+        fetchWorkPriority(),
         fetchSkillfruitOrchard(),
       ]);
 
@@ -352,6 +659,7 @@ const PalworldHomeContent: React.FC<PalworldHomeContentProps> = ({ onBackToColle
       setEggs(eggsIndex?.rows ?? []);
       const workSuitabilityIndex = listWorkSuitabilities();
       setWorkSuitability(workSuitabilityIndex);
+      setWorkPriority(workPriorityIndex ?? []);
       setSkillfruits(skillfruitList ?? []);
 
       if (markDidLoad) setDidLoadUpgradesOnce(true);
@@ -427,38 +735,42 @@ const PalworldHomeContent: React.FC<PalworldHomeContentProps> = ({ onBackToColle
     }
   }, []);
 
+  const retryConstructionCategory = useCallback(
+    (key: ConstructionCategoryKey) => {
+      const retryKey = key === "palExpeditions" ? "expeditionStation" : key === "fishingShadows" ? "fishingPond" : key;
+      loadConstructionData({ keys: [retryKey] }).catch(() => { });
+    },
+    [loadConstructionData]
+  );
+
+  const retryFailedConstructionCategories = useCallback(() => {
+    const failedKeys = getConstructionGroupedRetryKeys(constructionCategoryStatus);
+    if (!failedKeys.length) return;
+    loadConstructionData({ keys: failedKeys }).catch(() => { });
+  }, [constructionCategoryStatus, loadConstructionData]);
+
   useEffect(() => {
-    let cancelled = false;
+    if (activeTabContent === "items") {
+      if (!didLoadItemsOnce) loadItemsData({ markDidLoad: true }).catch(() => { });
+      return;
+    }
 
-    const run = () => {
-      if (cancelled) return;
-
-      if (activeTabContent === "items") {
-        if (!didLoadItemsOnce) loadItemsData({ markDidLoad: true }).catch(() => { });
-        return;
+    if (activeTabContent === "construction") {
+      if (!constructionLoadStartedRef.current && !constructionHasLoadedRef.current) {
+        loadConstructionData().catch(() => { });
       }
+      return;
+    }
 
-      if (activeTabContent === "construction") {
-        if (!didLoadConstructionOnce) loadConstructionData({ markDidLoad: true }).catch(() => { });
-        return;
-      }
+    if (activeTabContent === "upgrades") {
+      if (!didLoadUpgradesOnce) loadUpgradesData({ markDidLoad: true }).catch(() => { });
+      return;
+    }
 
-      if (activeTabContent === "upgrades") {
-        if (!didLoadUpgradesOnce) loadUpgradesData({ markDidLoad: true }).catch(() => { });
-        return;
-      }
-
-      if (activeTabContent === "tools") {
-        if (!didLoadPaldbUpdatesOnce) loadPaldbUpdatesData({ markDidLoad: true }).catch(() => { });
-      }
-    };
-
-    InteractionManager.runAfterInteractions(run);
-
-    return () => {
-      cancelled = true;
-    };
-  }, [activeTabContent, didLoadItemsOnce, didLoadConstructionOnce, didLoadPaldbUpdatesOnce, didLoadUpgradesOnce, loadPaldbUpdatesData]);
+    if (activeTabContent === "tools" && !didLoadPaldbUpdatesOnce) {
+      loadPaldbUpdatesData({ markDidLoad: true }).catch(() => { });
+    }
+  }, [activeTabContent, didLoadItemsOnce, didLoadPaldbUpdatesOnce, didLoadUpgradesOnce, loadConstructionData, loadPaldbUpdatesData]);
 
   const pageTitle = useMemo(() => {
     switch (activeTabUI) {
@@ -684,7 +996,46 @@ const PalworldHomeContent: React.FC<PalworldHomeContentProps> = ({ onBackToColle
     lighting.length === 0 &&
     production.length === 0 &&
     palConstruction.length === 0 &&
+    expeditionStation.length === 0 &&
+    palExpeditions.length === 0 &&
+    fishingPond.length === 0 &&
+    fishingShadows.length === 0 &&
     otherConstruction.length === 0;
+
+  const constructionStatusEntries = useMemo(
+    () =>
+      CONSTRUCTION_LOAD_KEYS.map((key) => {
+        if (key === "expeditionStation") {
+          return {
+            key,
+            status: {
+              loading: constructionCategoryStatus.expeditionStation.loading || constructionCategoryStatus.palExpeditions.loading,
+              loaded: constructionCategoryStatus.expeditionStation.loaded && constructionCategoryStatus.palExpeditions.loaded,
+              error: constructionCategoryStatus.expeditionStation.error ?? constructionCategoryStatus.palExpeditions.error,
+            },
+          };
+        }
+
+        if (key === "fishingPond") {
+          return {
+            key,
+            status: {
+              loading: constructionCategoryStatus.fishingPond.loading || constructionCategoryStatus.fishingShadows.loading,
+              loaded: constructionCategoryStatus.fishingPond.loaded && constructionCategoryStatus.fishingShadows.loaded,
+              error: constructionCategoryStatus.fishingPond.error ?? constructionCategoryStatus.fishingShadows.error,
+            },
+          };
+        }
+
+        return { key, status: constructionCategoryStatus[key] };
+      }),
+    [constructionCategoryStatus]
+  );
+  const constructionErrorCount = constructionStatusEntries.filter(({ status }) => !!status.error).length;
+  const constructionError =
+    constructionErrorCount === CONSTRUCTION_LOAD_KEYS.length && constructionAreEmpty
+      ? "Failed to load Building Items from paldb.cc"
+      : null;
 
   const upgradesAreEmpty =
     passiveSkills.length === 0 &&
@@ -700,6 +1051,7 @@ const PalworldHomeContent: React.FC<PalworldHomeContentProps> = ({ onBackToColle
     dungeonPals.length === 0 &&
     eggs.length === 0 &&
     workSuitability.length === 0 &&
+    workPriority.length === 0 &&
     skillfruits.length === 0;
 
   return (
@@ -925,38 +1277,37 @@ const PalworldHomeContent: React.FC<PalworldHomeContentProps> = ({ onBackToColle
           {/* CONSTRUCTION TAB */}
           {activeTabContent === "construction" && (
             <View className="flex-1">
-              {constructionLoading && constructionAreEmpty ? (
-                <View className="flex-1 items-center justify-center mt-4">
-                  <ActivityIndicator />
-                  <Text className="mt-2 text-sm text-slate-300">Loading Building Items</Text>
+              {constructionError ? (
+                <View className="px-4 mt-4 mb-2">
+                  <View className="rounded-3xl border border-rose-400/20 bg-rose-500/10 px-4 py-3">
+                    <Text className="text-sm text-rose-200 font-semibold">Building data unavailable</Text>
+                    <Text className="mt-1 text-[12px] text-rose-100/80">
+                      All construction categories failed to load. You can retry failed categories below without leaving the tab.
+                    </Text>
+                  </View>
                 </View>
-              ) : constructionError ? (
-                <View className="flex-1 items-center justify-center mt-4 px-4">
-                  <Text className="text-sm text-rose-300 text-center">{constructionError}</Text>
+              ) : null}
 
-                  <Pressable
-                    onPress={() => loadConstructionData({ markDidLoad: true })}
-                    className="mt-3 px-3 py-2 rounded-2xl bg-slate-900 border border-slate-700"
-                  >
-                    <Text className="text-[12px] text-slate-100 font-semibold">Retry</Text>
-                  </Pressable>
-                </View>
-              ) : (
-                <PalworldConstructionGrid
-                  search={deferredSearch}
-                  isLoading={constructionLoading}
-                  storage={storage}
-                  foundations={foundations}
-                  furniture={furniture}
-                  defenses={defenses}
-                  food={food}
-                  infrastructure={infrastructure}
-                  lighting={lighting}
-                  production={production}
-                  palConstruction={palConstruction}
-                  otherConstruction={otherConstruction}
-                />
-              )}
+              <PalworldConstructionGrid
+                search={deferredSearch}
+                categoryStatus={constructionCategoryStatus}
+                onRetryCategory={retryConstructionCategory}
+                onRetryFailed={constructionErrorCount > 0 ? retryFailedConstructionCategories : undefined}
+                storage={storage}
+                foundations={foundations}
+                furniture={furniture}
+                defenses={defenses}
+                food={food}
+                infrastructure={infrastructure}
+                lighting={lighting}
+                production={production}
+                palConstruction={palConstruction}
+                expeditionStation={expeditionStation}
+                palExpeditions={palExpeditions}
+                fishingPond={fishingPond}
+                fishingShadows={fishingShadows}
+                otherConstruction={otherConstruction}
+              />
             </View>
           )}
 
@@ -996,6 +1347,7 @@ const PalworldHomeContent: React.FC<PalworldHomeContentProps> = ({ onBackToColle
                   dungeonPals={dungeonPals}
                   eggs={eggs}
                   workSuitability={workSuitability}
+                  workPriority={workPriority}
                   skillfruits={skillfruits}
                 />
               )}

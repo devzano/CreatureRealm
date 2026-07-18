@@ -13,6 +13,7 @@
 
 import { absUrl, cleanKey, extractSize128ImgUrl, firstMatch, htmlToText } from "@/lib/palworld/palworldDB";
 import { type TreantNode, parseTreantTreeFromPage, normalizeDetailHref } from "@/lib/palworld/paldbDetailKit";
+import { yieldToUI } from "@/lib/palworld/construction/shared";
 
 export type OtherRecipeIngredient = {
   slug: string;
@@ -331,6 +332,7 @@ export async function fetchOtherList(opts?: { force?: boolean }): Promise<OtherI
 
     if (!res.ok) throw new Error(`PalDB Other list failed: ${res.status}`);
     const html = await res.text();
+    await yieldToUI();
     const parsed = parseCardListPage(html);
     otherListCache = parsed;
     otherListCacheAt = Date.now();

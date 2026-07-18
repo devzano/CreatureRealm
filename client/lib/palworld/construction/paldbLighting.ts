@@ -16,6 +16,7 @@
 
 import { absUrl, cleanKey, extractSize128ImgUrl, firstMatch, htmlToText } from "@/lib/palworld/palworldDB";
 import { type TreantNode, parseTreantTreeFromPage, normalizeDetailHref } from "@/lib/palworld/paldbDetailKit";
+import { yieldToUI } from "@/lib/palworld/construction/shared";
 
 export type LightingRecipeIngredient = {
   slug: string;
@@ -352,6 +353,7 @@ export async function fetchLightingList(opts?: { force?: boolean }): Promise<Lig
 
     if (!res.ok) throw new Error(`PalDB Lighting list failed: ${res.status}`);
     const html = await res.text();
+    await yieldToUI();
     const parsed = parseCardListPage(html);
     lightingListCache = parsed;
     lightingListCacheAt = Date.now();

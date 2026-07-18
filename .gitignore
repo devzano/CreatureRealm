@@ -43,3 +43,5 @@ app-example
 /android
 client/.env
 server/.env
+.claude/
+.claude/worktrees/

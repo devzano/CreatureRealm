@@ -17,6 +17,7 @@ import {
   parseTreantTreeFromPage,
   normalizeDetailHref,
 } from "@/lib/palworld/paldbDetailKit";
+import { yieldToUI } from "@/lib/palworld/construction/shared";
 
 export type StorageRecipeIngredient = {
   slug: string;
@@ -381,6 +382,7 @@ export async function fetchStorageList(opts?: { force?: boolean }): Promise<Stor
 
     if (!res.ok) throw new Error(`PalDB Storage list failed: ${res.status}`);
     const html = await res.text();
+    await yieldToUI();
     const parsed = parseCardListPage(html);
     storageListCache = parsed;
     storageListCacheAt = Date.now();

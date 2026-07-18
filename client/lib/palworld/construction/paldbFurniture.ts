@@ -17,6 +17,7 @@
 
 import { absUrl, cleanKey, extractSize128ImgUrl, firstMatch, htmlToText } from "@/lib/palworld/palworldDB";
 import { type TreantNode, parseTreantTreeFromPage, normalizeDetailHref } from "@/lib/palworld/paldbDetailKit";
+import { yieldToUI } from "@/lib/palworld/construction/shared";
 
 export type FurnitureRecipeIngredient = {
   slug: string;
@@ -435,6 +436,34 @@ function parseCardListPage(html: string): FurnitureIndexItem[] {
   return Array.from(map.values());
 }
 
+async function parseCardListPageChunked(html: string): Promise<FurnitureIndexItem[]> {
+  const src = String(html ?? "");
+  if (!src) return [];
+
+  let blocks = extractDivBlocksByClass(src, "card itemPopup");
+  if (!blocks.length) {
+    blocks = extractDivBlocksContaining(src, ["size128", "technology"]);
+  }
+
+  const out: FurnitureIndexItem[] = [];
+
+  for (let index = 0; index < blocks.length; index += 1) {
+    const block = blocks[index];
+    const parsed = parseCardListPage(block);
+    if (parsed.length) out.push(...parsed);
+
+    if (index > 0 && index % 12 === 0) {
+      await yieldToUI();
+    }
+  }
+
+  const map = new Map<string, FurnitureIndexItem>();
+  for (const item of out) {
+    if (!map.has(item.slug)) map.set(item.slug, item);
+  }
+  return Array.from(map.values());
+}
+
 // -----------------------------
 // Public API
 // -----------------------------
@@ -455,7 +484,8 @@ export async function fetchFurnitureList(opts?: { force?: boolean }): Promise<Fu
 
     if (!res.ok) throw new Error(`PalDB Furniture list failed: ${res.status}`);
     const html = await res.text();
-    const parsed = parseCardListPage(html);
+    await yieldToUI();
+    const parsed = await parseCardListPageChunked(html);
     furnitureListCache = parsed;
     furnitureListCacheAt = Date.now();
     return parsed;

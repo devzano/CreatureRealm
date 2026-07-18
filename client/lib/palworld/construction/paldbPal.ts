@@ -13,6 +13,7 @@
 
 import { absUrl, cleanKey, extractSize128ImgUrl, firstMatch, htmlToText } from "@/lib/palworld/palworldDB";
 import { type TreantNode, parseTreantTreeFromPage, normalizeDetailHref } from "@/lib/palworld/paldbDetailKit";
+import { yieldToUI } from "@/lib/palworld/construction/shared";
 
 export type PalRecipeIngredient = {
   slug: string;
@@ -331,6 +332,7 @@ export async function fetchPalConstructionList(opts?: { force?: boolean }): Prom
 
     if (!res.ok) throw new Error(`PalDB Pal list failed: ${res.status}`);
     const html = await res.text();
+    await yieldToUI();
     const parsed = parseCardListPage(html);
     palConstructionListCache = parsed;
     palConstructionListCacheAt = Date.now();

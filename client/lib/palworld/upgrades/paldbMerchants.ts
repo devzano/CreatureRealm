@@ -129,7 +129,7 @@ export function parsePaldbMerchantPageHtml(html: string): MerchantBlock[] {
   const src = String(html ?? "");
   if (!src.trim()) return [];
 
-  const headerRe = /<div\s+[^>]*class=["'][^"']*\bcard-header\b[^"']*["'][^>]*>([\s\S]*?)<\/div>/gi;
+  const headerRe = /<(?:div|h[1-6])\s+[^>]*class=["'][^"']*\bcard-header\b[^"']*["'][^>]*>([\s\S]*?)<\/(?:div|h[1-6])>/gi;
   const headers = Array.from(src.matchAll(headerRe));
   if (!headers.length) return [];
 

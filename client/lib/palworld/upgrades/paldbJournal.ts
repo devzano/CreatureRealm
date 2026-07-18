@@ -15,7 +15,7 @@
 //   absUrl, cleanKey, firstMatch, htmlToText
 //
 
-import { absUrl, cleanKey, firstMatch, htmlToText } from "@/lib/palworld/palworldDB";
+import { absUrl, cleanKey, firstMatch } from "@/lib/palworld/palworldDB";
 
 // -----------------------------
 // Types
@@ -117,9 +117,19 @@ function normalizeMultilineText(s: string): string {
 }
 
 function htmlToTextPreserveBreaks(html: string): string {
-  // Convert <br> to newlines BEFORE htmlToText so we keep paragraphs.
-  const withBreaks = String(html ?? "").replace(/<br\s*\/?>/gi, "\n");
-  return htmlToText(withBreaks);
+  return String(html ?? "")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/div>\s*<div/gi, "\n<div")
+    .replace(/<\/p>\s*<p/gi, "\n<p")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&#39;/gi, "'")
+    .replace(/&quot;/gi, '"')
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n[ \t]+/g, "\n");
 }
 
 // -----------------------------
@@ -127,18 +137,15 @@ function htmlToTextPreserveBreaks(html: string): string {
 // -----------------------------
 
 function extractMenuCardHtml(pageHtml: string): string | null {
-  // Grab the Menu card body in the left column:
-  // <h5 class="card-title text-info">Menu</h5> ... lots of <a href="...">...</a>
-  //
-  // We'll just slice from "Menu" header to the end of that card-body.
+  // Grab the Journals card list in the left column.
   const s = String(pageHtml ?? "");
   if (!s) return null;
 
-  const start = s.search(/<h5[^>]*>\s*Menu\s*<\/h5>/i);
+  const start = s.search(/<h5[^>]*>\s*Journals\s*<\/h5>/i);
   if (start < 0) return null;
 
   const after = s.slice(start);
-  const endRel = after.search(/<\/div>\s*<\/div>\s*<\/div>\s*<\/div>\s*<\/div>/i); // best-effort end of card stack
+  const endRel = after.search(/<div\s+class="col-lg-8">/i);
   if (endRel < 0) return after;
 
   return after.slice(0, endRel);
@@ -154,7 +161,6 @@ export function parseJournalIndexHtml(pageHtml: string): JournalIndex {
   const re = /<a\b[^>]*\bhref="([^"]+)"[^>]*>\s*([^<]+?)\s*<\/a>/gi;
 
   let m: RegExpExecArray | null;
-  // eslint-disable-next-line no-cond-assign
   while ((m = re.exec(menuHtml))) {
     const href = String(m[1] ?? "").trim();
     const titleRaw = String(m[2] ?? "").trim();
@@ -201,12 +207,17 @@ function parseDetailBodyBlockHtml(pageHtml: string): string | null {
   const scoped =
     firstMatch(
       pageHtml,
-      /<div\s+class="col-lg-8">[\s\S]*?<div\s+class="mt-2">\s*([\s\S]*?)\s*<\/div>/i
+      /<div\s+class="col-lg-8">[\s\S]*?<img\b[^>]*class="[^"]*\bHelpGuide\b[^"]*"[^>]*\/?>\s*([\s\S]*?)\s*(?:<div\s+class="mt-2">|<\/div>\s*<\/div>)/i
     ) ?? null;
 
   if (scoped) return scoped;
 
-  return firstMatch(pageHtml, /<div\s+class="mt-2">\s*([\s\S]*?)\s*<\/div>/i);
+  return (
+    firstMatch(
+      pageHtml,
+      /<img\b[^>]*class="[^"]*\bHelpGuide\b[^"]*"[^>]*\/?>\s*([\s\S]*?)\s*(?:<div\s+class="mt-2">|<\/div>\s*<\/div>)/i
+    ) ?? firstMatch(pageHtml, /<div\s+class="mt-2">\s*([\s\S]*?)\s*<\/div>/i)
+  );
 }
 
 function parseDetailTitleAndBody(bodyBlockHtml: string): { title: string | null; bodyText: string | null } {

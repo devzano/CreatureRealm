@@ -30,6 +30,8 @@ import type { WorkSuitabilityItem } from "@/lib/palworld/upgrades/paldbWorkSuita
 import WorkSuitabilityGrid from "@/components/Palworld/Upgrades/WorkSuitabilityGrid";
 import type { SkillFruitOrchardRow } from "@/lib/palworld/upgrades/paldbSkillFruits";
 import SkillfruitOrchardGrid from "@/components/Palworld/Upgrades/SkillfruitOrchardGrid";
+import type { WorkPriorityItem } from "@/lib/palworld/upgrades/paldbWorkPriority";
+import WorkPriorityGrid from "@/components/Palworld/Upgrades/WorkPriorityGrid";
 
 type PalworldUpgradesGridProps = {
   passiveSkills: PassiveSkillRow[];
@@ -45,6 +47,7 @@ type PalworldUpgradesGridProps = {
   dungeonPals: DungeonWithPals[];
   eggs: EggRow[];
   workSuitability: WorkSuitabilityItem[];
+  workPriority: WorkPriorityItem[];
   skillfruits: SkillFruitOrchardRow[];
   search: string;
   isLoading?: boolean;
@@ -62,7 +65,7 @@ type CategoryKey =
   | "journals"
   | "technologies"
   | "passiveSkills"
-  | "workSuitability"
+  | "workRoles"
   | "eggs"
   | "skillfruits";
 
@@ -77,11 +80,11 @@ const DEFAULT_CATEGORY_ORDER: CategoryKey[] = [
   "technologies",
   "passiveSkills",
   "eggs",
-  "workSuitability",
+  "workRoles",
   "skillfruits",
 ];
 
-function buildHaystack(parts: Array<any>) {
+function buildHaystack(parts: any[]) {
   return parts
     .map((x) => (x == null ? "" : String(x)))
     .join(" ")
@@ -218,6 +221,7 @@ const PalworldUpgradesGrid: React.FC<PalworldUpgradesGridProps> = ({
   dungeonPals,
   eggs,
   workSuitability,
+  workPriority,
   skillfruits,
   search,
   isLoading = false,
@@ -362,6 +366,14 @@ const PalworldUpgradesGrid: React.FC<PalworldUpgradesGridProps> = ({
     [workSuitability, normalizedSearch]
   );
 
+  const filteredWorkPriority = useMemo(
+    () =>
+      filterList(workPriority, normalizedSearch, (item) =>
+        buildHaystack([item.name, item.code, item.priority, item.workSlug])
+      ),
+    [workPriority, normalizedSearch]
+  );
+
   const filteredSkillfruits = useMemo(
     () =>
       filterList(skillfruits, normalizedSearch, (s) =>
@@ -384,6 +396,7 @@ const PalworldUpgradesGrid: React.FC<PalworldUpgradesGridProps> = ({
     filteredBase.length +
     filteredEggs.length +
     filteredWorkSuitability.length +
+    filteredWorkPriority.length +
     filteredSkillfruits.length;
 
   const totalAll =
@@ -400,6 +413,7 @@ const PalworldUpgradesGrid: React.FC<PalworldUpgradesGridProps> = ({
     (base?.items?.length ?? 0) +
     (eggs?.length ?? 0) +
     (workSuitability?.length ?? 0) +
+    (workPriority?.length ?? 0) +
     (skillfruits?.length ?? 0);
 
   const categories: DashboardCategory<CategoryKey>[] = useMemo(() => {
@@ -596,23 +610,50 @@ const PalworldUpgradesGrid: React.FC<PalworldUpgradesGridProps> = ({
       },
 
       {
-        key: "workSuitability",
-        title: "Work Suitability",
-        subtitle: "Pal Work Roles",
-        shown: filteredWorkSuitability.length,
-        total: (workSuitability?.length ?? 0),
-        items: filteredWorkSuitability as any[],
-        previewItems: toPreviewItems(filteredWorkSuitability, 6),
-        render: (items) => (
-          <WorkSuitabilityGrid
-            items={items as any}
-            numColumns={3}
-            emptyText={
-              normalizedSearch
-                ? "No work suitability entries match this search."
-                : "No work suitability entries found."
-            }
-          />
+        key: "workRoles",
+        title: "Work Roles",
+        subtitle: "Suitability + Priority",
+        shown: filteredWorkSuitability.length + filteredWorkPriority.length,
+        total: (workSuitability?.length ?? 0) + (workPriority?.length ?? 0),
+        items: [...filteredWorkSuitability, ...filteredWorkPriority] as any[],
+        previewItems: [
+          ...toPreviewItems(filteredWorkSuitability, 3),
+          ...toPreviewItems(filteredWorkPriority, 3),
+        ],
+        render: () => (
+          <View>
+            <View className="px-4 mt-2 mb-2">
+              <Text className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/60">Work Suitability</Text>
+              <Text className="text-[11px] text-white/35 mt-0.5">
+                {filteredWorkSuitability.length} / {workSuitability?.length ?? 0}
+              </Text>
+            </View>
+            <WorkSuitabilityGrid
+              items={filteredWorkSuitability as any}
+              numColumns={3}
+              emptyText={
+                normalizedSearch
+                  ? "No work suitability entries match this search."
+                  : "No work suitability entries found."
+              }
+            />
+
+            <View className="px-4 mt-6 mb-2">
+              <Text className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/60">Work Priority</Text>
+              <Text className="text-[11px] text-white/35 mt-0.5">
+                {filteredWorkPriority.length} / {workPriority?.length ?? 0}
+              </Text>
+            </View>
+            <WorkPriorityGrid
+              items={filteredWorkPriority as any}
+              numColumns={2}
+              emptyText={
+                normalizedSearch
+                  ? "No work priority entries match this search."
+                  : "No work priority entries found."
+              }
+            />
+          </View>
         ),
       },
 
@@ -661,6 +702,8 @@ const PalworldUpgradesGrid: React.FC<PalworldUpgradesGridProps> = ({
     eggs,
     filteredWorkSuitability,
     workSuitability,
+    filteredWorkPriority,
+    workPriority,
     filteredSkillfruits,
     skillfruits,
   ]);

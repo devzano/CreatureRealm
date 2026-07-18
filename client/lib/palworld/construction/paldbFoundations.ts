@@ -16,6 +16,7 @@
 
 import { absUrl, cleanKey, extractSize128ImgUrl, firstMatch, htmlToText } from "@/lib/palworld/palworldDB";
 import { type TreantNode, parseTreantTreeFromPage, normalizeDetailHref } from "@/lib/palworld/paldbDetailKit";
+import { yieldToUI } from "@/lib/palworld/construction/shared";
 
 export type FoundationRecipeIngredient = {
   slug: string;
@@ -335,6 +336,30 @@ function parseCardListPage(html: string): FoundationsIndexItem[] {
   return Array.from(map.values());
 }
 
+async function parseCardListPageChunked(html: string): Promise<FoundationsIndexItem[]> {
+  const src = String(html ?? "");
+  if (!src) return [];
+
+  const cards = extractDivBlocksByClass(src, "card itemPopup");
+  const out: FoundationsIndexItem[] = [];
+
+  for (let index = 0; index < cards.length; index += 1) {
+    const card = cards[index];
+    const parsed = parseCardListPage(card);
+    if (parsed.length) out.push(...parsed);
+
+    if (index > 0 && index % 12 === 0) {
+      await yieldToUI();
+    }
+  }
+
+  const map = new Map<string, FoundationsIndexItem>();
+  for (const item of out) {
+    if (!map.has(item.slug)) map.set(item.slug, item);
+  }
+  return Array.from(map.values());
+}
+
 // -----------------------------
 // Public API
 // -----------------------------
@@ -355,7 +380,8 @@ export async function fetchFoundationsList(opts?: { force?: boolean }): Promise<
 
     if (!res.ok) throw new Error(`PalDB Foundations list failed: ${res.status}`);
     const html = await res.text();
-    const parsed = parseCardListPage(html);
+    await yieldToUI();
+    const parsed = await parseCardListPageChunked(html);
     foundationsListCache = parsed;
     foundationsListCacheAt = Date.now();
     return parsed;

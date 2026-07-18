@@ -16,6 +16,7 @@
 
 import { absUrl, cleanKey, extractSize128ImgUrl, firstMatch, htmlToText } from "@/lib/palworld/palworldDB";
 import { type TreantNode, parseTreantTreeFromPage, normalizeDetailHref } from "@/lib/palworld/paldbDetailKit";
+import { yieldToUI } from "@/lib/palworld/construction/shared";
 
 export type ProductionRecipeIngredient = {
   slug: string;
@@ -378,6 +379,7 @@ export async function fetchProductionList(opts?: { force?: boolean }): Promise<P
     const res = await fetch(productionUrl(), { method: "GET", headers: { "accept-language": "en-US,en;q=0.9" } });
     if (!res.ok) throw new Error(`PalDB Production list failed: ${res.status}`);
     const html = await res.text();
+    await yieldToUI();
     const parsed = parseCardListPage(html);
     productionListCache = parsed;
     productionListCacheAt = Date.now();

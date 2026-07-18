@@ -34,6 +34,7 @@ type PalworldCollectionState = {
   toggleCaught: (dexId: string) => void;
   toggleLucky: (dexId: string) => void;
   toggleAlpha: (dexId: string) => void;
+  clearPaldeckSelections: () => void;
   getEntry: (dexId: string) => PalworldCollectionEntry;
 
   toggleBase: (dexId: string) => void;
@@ -75,6 +76,18 @@ const defaultEntry: PalworldCollectionEntry = {
 function makeKey(dexId: string): string {
   const s = String(dexId ?? "").trim();
   return s;
+}
+
+function isEntryMeaningfullyEmpty(entry: PalworldCollectionEntry): boolean {
+  return !entry.caught &&
+    !entry.lucky &&
+    !entry.alpha &&
+    !entry.base &&
+    !entry.journal &&
+    !entry.mission &&
+    !(entry.luckyHuntCount > 0) &&
+    entry.luckyHuntMethod === "none" &&
+    !String(entry.notes ?? "").trim();
 }
 
 let teamCounter = 1;
@@ -128,6 +141,29 @@ export const usePalworldCollectionStore = create<PalworldCollectionState>()(
               [key]: { ...defaultEntry, ...prev, alpha: !prev.alpha },
             },
           };
+        }),
+
+      clearPaldeckSelections: () =>
+        set((state) => {
+          const nextEntries: Record<string, PalworldCollectionEntry> = {};
+
+          for (const [rawKey, rawEntry] of Object.entries(state.entries)) {
+            const key = makeKey(rawKey);
+            if (!key) continue;
+
+            const nextEntry = {
+              ...defaultEntry,
+              ...rawEntry,
+              caught: false,
+              lucky: false,
+              alpha: false,
+            };
+
+            if (isEntryMeaningfullyEmpty(nextEntry)) continue;
+            nextEntries[key] = nextEntry;
+          }
+
+          return { entries: nextEntries };
         }),
 
       getEntry: (dexId) => {

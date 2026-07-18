@@ -6,6 +6,7 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import type { CreatureRealmGame } from "@/lib/pokemon/gameFilters";
 import AppImages from "@/constants/images";
 import LocalIcon from "@/components/LocalIcon";
+import PokopiaSearchInput from "@/components/Pokemon/PokopiaGame/PokopiaSearchInput";
 import { getCoverArtStyle } from "./gameDexHelpers";
 
 type StatusFilter = "all" | "caught" | "shiny" | "alpha";
@@ -36,6 +37,8 @@ type Props<T extends ListItem> = {
   completion: Completion;
   statusFilter: StatusFilter;
   onChangeStatusFilter: (value: StatusFilter) => void;
+  dexSearch?: string;
+  onChangeDexSearch?: (value: string) => void;
   renderItem: ({ item }: { item: T }) => React.ReactElement;
   nestedInDashboard?: boolean;
 };
@@ -142,6 +145,8 @@ export default function GameDexContent<T extends ListItem>({
   completion,
   statusFilter,
   onChangeStatusFilter,
+  dexSearch,
+  onChangeDexSearch,
   renderItem,
   nestedInDashboard,
 }: Props<T>) {
@@ -173,7 +178,9 @@ export default function GameDexContent<T extends ListItem>({
 
       {filteredItems.length === 0 ? (
         <View className="mt-10 items-center">
-          <Text className="text-sm text-slate-400">No Pokémon match this filter yet.</Text>
+          <Text className="text-sm text-slate-400">
+            {dexSearch?.trim() ? `No Pokémon found for "${dexSearch.trim()}".` : "No Pokémon match this filter yet."}
+          </Text>
         </View>
       ) : null}
     </View>
@@ -249,6 +256,16 @@ export default function GameDexContent<T extends ListItem>({
         </View>
       </View>
 
+      {isPokopia && onChangeDexSearch != null ? (
+        <View className="mt-3 mx-1">
+          <PokopiaSearchInput
+            value={dexSearch ?? ""}
+            onChangeText={onChangeDexSearch}
+            placeholder="Search Pokémon by name or #…"
+          />
+        </View>
+      ) : null}
+
       <View className="mt-3 flex-row flex-wrap justify-center items-center">
         <StatusChip
           label="All"
@@ -305,7 +322,9 @@ export default function GameDexContent<T extends ListItem>({
           numColumns={2}
           ListEmptyComponent={
             <View className="mt-10 items-center">
-              <Text className="text-sm text-slate-400">No Pokémon match this filter yet.</Text>
+              <Text className="text-sm text-slate-400">
+                {dexSearch?.trim() ? `No Pokémon found for "${dexSearch.trim()}".` : "No Pokémon match this filter yet."}
+              </Text>
             </View>
           }
           contentContainerStyle={{

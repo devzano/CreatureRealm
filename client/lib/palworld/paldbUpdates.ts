@@ -189,31 +189,55 @@ function buildVersionHref(title: string) {
   return normalized;
 }
 
-function parseVersionBlocks(html: string) {
-  const items: PaldbUpdateListItem[] = [];
-  const blockRe =
-    /<div\s+class=["']card mb-2 markdown["'][\s\S]*?<div[^>]+class=['"]card-body clearfix['"][^>]*>([\s\S]*?)<\/div>\s*<\/div>\s*<\/div>/gi;
+function isVersionHistoryTitle(value: string) {
+  return /^(version|patch note|patch notes)\b/i.test(value) || /\bv\d+(?:\.\d+)+\b/i.test(value);
+}
 
-  let match: RegExpExecArray | null;
-  while ((match = blockRe.exec(html))) {
-    const bodyHtml = match[1] ?? "";
+function splitVersionSections(html: string) {
+  const pageHtml =
+    firstMatch(html, /<div[^>]+class=["']page-content container["'][^>]*>([\s\S]*?)<\/div>\s*<\/div>\s*<\/div>/i) ??
+    html;
+  const sections: string[] = [];
+  const headingRe = /<(h1|h2)[^>]*>([\s\S]*?)<\/\1>/gi;
+  const headings = Array.from(pageHtml.matchAll(headingRe))
+    .map((match) => ({
+      index: match.index ?? -1,
+      html: match[0] ?? "",
+      text: cleanKey(htmlToText(match[2] ?? "")),
+    }))
+    .filter((entry) => entry.index >= 0 && isVersionHistoryTitle(entry.text));
+
+  for (let index = 0; index < headings.length; index += 1) {
+    const start = headings[index]!.index;
+    const end = index + 1 < headings.length ? headings[index + 1]!.index : pageHtml.length;
+    sections.push(pageHtml.slice(start, end));
+  }
+
+  return sections;
+}
+
+function parseVersionPage(html: string) {
+  const items: PaldbUpdateListItem[] = [];
+  const blocks = splitVersionSections(html);
+
+  for (const bodyHtml of blocks) {
     const parsedDetail = parseDetailFromBody(bodyHtml, null);
-    if (!/^(Version|Patch Note)\b/i.test(parsedDetail.title)) continue;
+    if (!isVersionHistoryTitle(parsedDetail.title)) continue;
     const href = buildVersionHref(parsedDetail.title);
-    const url = href ? absUrl(`/en/${href}`) : null;
+    const anchor = slugify(parsedDetail.title);
 
     items.push({
-      id: `version-${href ?? slugify(parsedDetail.title)}`,
+      id: `version-${href ?? anchor}`,
       category: "versionChanges",
       title: parsedDetail.title,
       description: parsedDetail.summary ?? "Recent balance changes and bug fixes.",
       date: parsedDetail.date,
       imageUrl: parsedDetail.imageUrls[0] ?? null,
-      href,
-      url,
+      href: anchor ? `version#${anchor}` : href,
+      url: null,
       prefetchedDetail: {
         ...parsedDetail,
-        url,
+        url: null,
       },
     });
   }
@@ -221,25 +245,32 @@ function parseVersionBlocks(html: string) {
   return items;
 }
 
+function findHomepageUpdateHeadings(html: string) {
+  const headingRe = /<h5[^>]*>([\s\S]*?)<\/h5>/gi;
+  const matches: { index: number; label: string }[] = [];
+  let match: RegExpExecArray | null;
+
+  while ((match = headingRe.exec(html))) {
+    const label = cleanKey(htmlToText(match[1] ?? ""));
+    if (!label) continue;
+    if (label !== "Content Update" && label !== "News Patch") continue;
+    matches.push({
+      index: match.index ?? -1,
+      label,
+    });
+  }
+
+  return matches.filter((entry) => entry.index >= 0);
+}
+
 function sectionBounds(html: string, label: "Content Update" | "News Patch") {
-  const startRe =
-    label === "Content Update"
-      ? /<h5[^>]*>\s*<span[^>]*>\s*Content\s*<\/span>\s*<span[^>]*>\s*Update\s*<\/span>\s*<\/h5>/i
-      : /<h5[^>]*class="mt-4"[^>]*>\s*<span[^>]*>\s*News\s*<\/span>\s*<span[^>]*>\s*Patch\s*<\/span>\s*<\/h5>/i;
-  const endRe =
-    label === "Content Update"
-      ? /<h5[^>]*class="mt-4"[^>]*>\s*<span[^>]*>\s*News\s*<\/span>\s*<span[^>]*>\s*Patch\s*<\/span>\s*<\/h5>/i
-      : /<\/div>\s*<\/div>\s*<\/div>\s*<\/div>\s*<\/div>\s*$/i;
+  const headings = findHomepageUpdateHeadings(html);
+  const currentIndex = headings.findIndex((entry) => entry.label === label);
+  if (currentIndex < 0) return null;
 
-  const startMatch = startRe.exec(html);
-  const start = startMatch?.index ?? -1;
-  if (start < 0) return null;
-
-  const rest = html.slice(start);
-  const endMatch = endRe.exec(rest);
-  const next = endMatch?.index ?? -1;
-  const slice = next >= 0 ? rest.slice(0, next) : rest;
-  return slice;
+  const start = headings[currentIndex]!.index;
+  const end = currentIndex + 1 < headings.length ? headings[currentIndex + 1]!.index : html.length;
+  return html.slice(start, end);
 }
 
 function parseCardSection(html: string, category: Exclude<PaldbUpdateCategory, "versionChanges">) {
@@ -324,10 +355,14 @@ function extractMainDetailBody(html: string) {
 
 export function parsePaldbHomeUpdatesHtml(html: string): PaldbHomeUpdates {
   return {
-    versionChanges: parseVersionBlocks(html),
+    versionChanges: [],
     contentUpdates: parseCardSection(html, "contentUpdates"),
     patchNotes: parseCardSection(html, "patchNotes"),
   };
+}
+
+export function parsePaldbVersionUpdatesHtml(html: string) {
+  return parseVersionPage(html);
 }
 
 export async function fetchPaldbHomeUpdates(opts?: { force?: boolean }) {
@@ -338,19 +373,28 @@ export async function fetchPaldbHomeUpdates(opts?: { force?: boolean }) {
   if (!force && homePending) return homePending;
 
   const request = (async () => {
-    const res = await fetch(`${BASE}/en/`, {
-      headers: {
-        Accept: "text/html",
-        "Accept-Language": "en-US,en;q=0.9",
-      },
-    });
+    const headers = {
+      Accept: "text/html",
+      "Accept-Language": "en-US,en;q=0.9",
+    };
+    const [homeRes, versionRes] = await Promise.all([
+      fetch(`${BASE}/en/`, { headers }),
+      fetch(`${BASE}/en/version`, { headers }),
+    ]);
 
-    if (!res.ok) {
-      throw new Error(`fetchPaldbHomeUpdates failed: ${res.status} ${res.statusText}`);
+    if (!homeRes.ok) {
+      throw new Error(`fetchPaldbHomeUpdates failed: ${homeRes.status} ${homeRes.statusText}`);
+    }
+    if (!versionRes.ok) {
+      throw new Error(`fetchPaldbVersionUpdates failed: ${versionRes.status} ${versionRes.statusText}`);
     }
 
-    const html = await res.text();
-    const parsed = parsePaldbHomeUpdatesHtml(html);
+    const [homeHtml, versionHtml] = await Promise.all([homeRes.text(), versionRes.text()]);
+    const parsedHome = parsePaldbHomeUpdatesHtml(homeHtml);
+    const parsed = {
+      ...parsedHome,
+      versionChanges: parsePaldbVersionUpdatesHtml(versionHtml),
+    } satisfies PaldbHomeUpdates;
     homeCache = parsed;
     homeCacheAt = Date.now();
     return parsed;

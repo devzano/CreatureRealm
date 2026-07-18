@@ -199,6 +199,10 @@ function normalizeDataHoverToSlug(dataHover: string): string {
 
 function parseLevelNumber(block: string): number {
   const nStr =
+    firstMatch(
+      block,
+      /<div[^>]*class=(?:"[^"]*\bd-flex\b[^"]*\bjustify-content-center\b[^"]*\balign-items-center\b[^"]*"|'[^']*\bd-flex\b[^']*\bjustify-content-center\b[^']*\balign-items-center\b[^']*')[^>]*>\s*<div>\s*([0-9]{1,4})\s*<\/div>\s*<\/div>/i
+    ) ??
     firstMatch(block, /<div[^>]*position:\s*absolute[^>]*>\s*([0-9]{1,4})\s*<\/div>/i) ??
     firstMatch(block, />\s*([0-9]{1,4})\s*<\/div>\s*<\/div>\s*<div[^>]*class="d-inline-block\s+hoverTech/i);
 
@@ -220,10 +224,9 @@ export function parseTechnologiesHtml(html: string): TechnologyItem[] {
     if (!level) continue;
 
     const re =
-      /<div\b[^>]*class=(?:"([^"]*\bhoverTech\b[^"]*)"|'([^']*\bhoverTech\b[^']*)')[^>]*style=(?:"[^"]*background-image:\s*url\(([^)]+)\)[^"]*"|'[^']*background-image:\s*url\(([^)]+)\)[^']*')[^>]*data-hover=(?:"([^"]+)"|'([^']+)')[^>]*>\s*<div\b[^>]*class=(?:"[^"]*\bhoverTechHeader\b[^"]*"|'[^']*\bhoverTechHeader\b[^']*')[^>]*>\s*([^<]+?)\s*<\/div>\s*<div\b[^>]*class=(?:"[^"]*\bhoverTechFooter\b[^"]*"|'[^']*\bhoverTechFooter\b[^']*')[^>]*>\s*([^<]+?)\s*<\/div>\s*<\/div>/gi;
+      /<div\b[^>]*class=(?:"([^"]*\bhoverTech\b[^"]*)"|'([^']*\bhoverTech\b[^']*)')[^>]*style=(?:"[^"]*background-image:\s*url\(([^)]+)\)[^"]*"|'[^']*background-image:\s*url\(([^)]+)\)[^']*')[^>]*data-hover=(?:"([^"]+)"|'([^']+)')[^>]*>\s*(?:<div\b[^>]*class=(?:"[^"]*\bhoverTechCost\b[^"]*"|'[^']*\bhoverTechCost\b[^']*')[^>]*>[\s\S]*?<\/div>\s*)?<div\b[^>]*class=(?:"[^"]*\bhoverTechHeader\b[^"]*"|'[^']*\bhoverTechHeader\b[^']*')[^>]*>\s*([^<]+?)\s*<\/div>\s*<div\b[^>]*class=(?:"[^"]*\bhoverTechFooter\b[^"]*"|'[^']*\bhoverTechFooter\b[^']*')[^>]*>\s*([^<]+?)\s*<\/div>\s*<\/div>/gi;
 
     let m: RegExpExecArray | null;
-    // eslint-disable-next-line no-cond-assign
     while ((m = re.exec(block))) {
       const classAttr = (m[1] ?? m[2] ?? "").trim();
       const bgUrl = (m[3] ?? m[4] ?? "").trim();

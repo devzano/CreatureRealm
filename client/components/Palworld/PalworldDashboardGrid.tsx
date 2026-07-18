@@ -1,6 +1,6 @@
 // components/Palworld/PalworldDashboardGrid.tsx
 import React, { useCallback, useMemo, useRef, useState, useEffect } from "react";
-import { View, Text, ScrollView, Pressable, LayoutChangeEvent, Modal, TextInput, ActivityIndicator, InteractionManager } from "react-native";
+import { View, Text, ScrollView, Pressable, LayoutChangeEvent, Modal, TextInput, ActivityIndicator } from "react-native";
 
 export type DashboardRenderCtx = {
   scrollRef: React.RefObject<ScrollView | null>;
@@ -18,6 +18,10 @@ export type DashboardCategory<K extends string> = {
   total: number;
   items: any[];
   previewItems?: any[];
+  isLoading?: boolean;
+  isLoaded?: boolean;
+  error?: string | null;
+  onRetry?: (() => void) | null;
   render: (items: any[], ctx: DashboardRenderCtx) => React.ReactNode;
 };
 
@@ -117,49 +121,14 @@ export default function PalworldDashboardGrid<K extends string>(props: PalworldD
   const [selected, setSelected] = useState<K | "all">("all");
   const [isReorderOpen, setIsReorderOpen] = useState(false);
 
-  const [navBusy, setNavBusy] = useState(false);
-  const navBusyRef = useRef(false);
-  const busyTokenRef = useRef(0);
-
-  const setNavBusySafe = useCallback((v: boolean) => {
-    navBusyRef.current = v;
-    setNavBusy(v);
-  }, []);
-
   const beginNav = useCallback(
     (nextSelected: K | "all") => {
-      // prevent double-taps stacking
-      if (navBusyRef.current) return;
-
-      const token = ++busyTokenRef.current;
-      setNavBusySafe(true);
-
-      InteractionManager.runAfterInteractions(() => {
-        if (busyTokenRef.current !== token) return;
-
-        setSelected(nextSelected);
-
-        setTimeout(() => scrollRef.current?.scrollTo({ y: 0, animated: true }), 0);
-
-        const MIN_MS = 220;
-        const start = Date.now();
-
-        const clear = () => {
-          if (busyTokenRef.current !== token) return;
-
-          const elapsed = Date.now() - start;
-          const remaining = Math.max(0, MIN_MS - elapsed);
-
-          setTimeout(() => {
-            if (busyTokenRef.current !== token) return;
-            setNavBusySafe(false);
-          }, remaining);
-        };
-
-        requestAnimationFrame(clear);
+      setSelected(nextSelected);
+      requestAnimationFrame(() => {
+        scrollRef.current?.scrollTo({ y: 0, animated: true });
       });
     },
-    [setNavBusySafe]
+    []
   );
 
   const onStickyHeaderLayout = useCallback((e: LayoutChangeEvent) => {
@@ -209,7 +178,7 @@ export default function PalworldDashboardGrid<K extends string>(props: PalworldD
   const visibleCards = useMemo(() => {
     const base = orderedCategories;
     if (!normalizedSearch) return base;
-    return base.filter((c) => c.shown > 0);
+    return base.filter((c) => c.shown > 0 || !!c.isLoading || !!c.error);
   }, [orderedCategories, normalizedSearch]);
 
   const handlePillPress = useCallback(
@@ -264,13 +233,26 @@ export default function PalworldDashboardGrid<K extends string>(props: PalworldD
     if (!cat) return null;
 
     const isEmpty = cat.shown === 0;
+    const isCategoryLoading = !!cat.isLoading;
+    const hasCategoryError = !!cat.error;
+    const hasExistingItems = cat.total > 0 || cat.items.length > 0;
 
     return (
       <View>
+        {topContent ? <View className="px-4 pt-4">{topContent}</View> : null}
         {renderCategoryHeader(cat.title, cat.subtitle, cat.shown, cat.total)}
-        {isEmpty && isLoading ? (
+        {hasCategoryError && isEmpty && !isCategoryLoading ? (
           <View className="px-4">
-            <LoadingState label={loadingLabel} />
+            <EmptyState
+              title={`${cat.title} unavailable`}
+              subtitle={cat.error ?? "This category could not be loaded right now."}
+              actionLabel={cat.onRetry ? "Retry" : undefined}
+              onAction={cat.onRetry ?? undefined}
+            />
+          </View>
+        ) : isEmpty && isCategoryLoading ? (
+          <View className="px-4">
+            <LoadingState label={cat.total > 0 ? "Refreshing category…" : loadingLabel} />
           </View>
         ) : isEmpty ? (
           <View className="px-4">
@@ -280,12 +262,24 @@ export default function PalworldDashboardGrid<K extends string>(props: PalworldD
             />
           </View>
         ) : (
-          cat.render(cat.items, renderCtx)
+          <>
+            {(isCategoryLoading || hasCategoryError) && hasExistingItems ? (
+              <View className="px-4 mb-3">
+                <InlineCategoryStatus
+                  isLoading={isCategoryLoading}
+                  error={cat.error}
+                  onRetry={cat.onRetry ?? undefined}
+                  loadingLabel="Refreshing category…"
+                />
+              </View>
+            ) : null}
+            {cat.render(cat.items, renderCtx)}
+          </>
         )}
         <View className="h-10" />
       </View>
     );
-  }, [orderedCategories, selected, normalizedSearch, renderCategoryHeader, renderCtx, isLoading, loadingLabel]);
+  }, [orderedCategories, selected, normalizedSearch, renderCategoryHeader, renderCtx, loadingLabel, topContent]);
 
   const canOpenReorder = reorderEnabled && selected === "all";
 
@@ -443,11 +437,7 @@ export default function PalworldDashboardGrid<K extends string>(props: PalworldD
                       <Pressable
                         key={String(c.key)}
                         onPress={() => beginNav(c.key)}
-                        disabled={navBusy}
-                        className={[
-                          "rounded-3xl border border-white/10 bg-white/[0.03]",
-                          navBusy ? "opacity-70" : "active:opacity-90",
-                        ].join(" ")}
+                        className="rounded-3xl border border-white/10 bg-white/[0.03] active:opacity-90"
                         style={{ width: "48%" }}
                       >
                         <DashboardCard
@@ -457,8 +447,11 @@ export default function PalworldDashboardGrid<K extends string>(props: PalworldD
                           topNames={topNames}
                           hasMore={hasMore}
                           moreCount={c.shown - previewMax}
-                          isLoading={isLoading && c.shown === 0 && c.total === 0}
-                          loadingLabel={loadingLabel}
+                          isLoading={c.isLoading ?? (isLoading && c.shown === 0 && c.total === 0)}
+                          isLoaded={c.isLoaded}
+                          error={c.error}
+                          onRetry={c.onRetry ?? undefined}
+                          loadingLabel={c.total > 0 ? "Refreshing…" : loadingLabel}
                         />
                       </Pressable>
                     );
@@ -471,39 +464,6 @@ export default function PalworldDashboardGrid<K extends string>(props: PalworldD
           </View>
         )}
       </ScrollView>
-
-      {/* Dim + loader overlay */}
-      {navBusy ? (
-        <View
-          pointerEvents="auto"
-          style={{
-            position: "absolute",
-            left: 0,
-            right: 0,
-            top: 0,
-            bottom: 0,
-            backgroundColor: "rgba(0,0,0,0.45)",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          <View
-            style={{
-              paddingHorizontal: 16,
-              paddingVertical: 14,
-              borderRadius: 16,
-              borderWidth: 1,
-              borderColor: "rgba(255,255,255,0.12)",
-              backgroundColor: "rgba(0,0,0,0.55)",
-            }}
-          >
-            <ActivityIndicator />
-            <Text style={{ color: "rgba(255,255,255,0.75)", marginTop: 8, fontSize: 12, fontWeight: "600" }}>
-              Opening…
-            </Text>
-          </View>
-        </View>
-      ) : null}
 
       <Modal visible={isReorderOpen} transparent animationType="fade" onRequestClose={() => setIsReorderOpen(false)}>
         <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.70)" }} className="px-4 justify-end">
@@ -605,9 +565,23 @@ function DashboardCard(props: {
   hasMore: boolean;
   moreCount: number;
   isLoading?: boolean;
+  isLoaded?: boolean;
+  error?: string | null;
+  onRetry?: () => void;
   loadingLabel?: string;
 }) {
-  const { title, subtitle, shown, topNames, hasMore, moreCount, isLoading = false, loadingLabel = "Loading…" } = props;
+  const {
+    title,
+    subtitle,
+    shown,
+    topNames,
+    hasMore,
+    moreCount,
+    isLoading = false,
+    error = null,
+    onRetry,
+    loadingLabel = "Loading…",
+  } = props;
 
   return (
     <View className="p-3">
@@ -623,7 +597,7 @@ function DashboardCard(props: {
       </Text>
 
       <View className="mt-3">
-        {isLoading ? (
+        {topNames.length === 0 && isLoading ? (
           <View className="flex-row items-center">
             <ActivityIndicator size="small" />
             <Text className="text-[11px] text-white/45 ml-2">{loadingLabel}</Text>
@@ -646,11 +620,74 @@ function DashboardCard(props: {
         )}
       </View>
 
+      {topNames.length > 0 && isLoading ? (
+        <View className="mt-3 flex-row items-center">
+          <ActivityIndicator size="small" />
+          <Text className="text-[11px] text-white/45 ml-2">{loadingLabel}</Text>
+        </View>
+      ) : null}
+
+      {!isLoading && error ? (
+        <View className="mt-3">
+          <Text className="text-[11px] text-rose-300/90">{error}</Text>
+          {onRetry ? (
+            <Pressable
+              onPress={onRetry}
+              className="mt-2 self-start px-2.5 py-1.5 rounded-full border border-rose-400/30 bg-rose-400/10 active:opacity-90"
+            >
+              <Text className="text-[10px] font-semibold text-rose-100">Retry</Text>
+            </Pressable>
+          ) : null}
+        </View>
+      ) : null}
+
       <View className="mt-3">
         <View className="rounded-2xl border border-white/10 bg-white/[0.04] px-2.5 py-2">
           <Text className="text-[11px] text-white/70">Open {title}</Text>
         </View>
       </View>
+    </View>
+  );
+}
+
+function InlineCategoryStatus(props: {
+  isLoading?: boolean;
+  error?: string | null;
+  onRetry?: () => void;
+  loadingLabel?: string;
+}) {
+  const { isLoading = false, error = null, onRetry, loadingLabel = "Loading…" } = props;
+
+  if (!isLoading && !error) return null;
+
+  return (
+    <View
+      className="rounded-2xl border px-3 py-2"
+      style={{
+        borderColor: error ? "rgba(251, 113, 133, 0.25)" : "rgba(255,255,255,0.10)",
+        backgroundColor: error ? "rgba(136, 19, 55, 0.16)" : "rgba(255,255,255,0.04)",
+      }}
+    >
+      {isLoading ? (
+        <View className="flex-row items-center">
+          <ActivityIndicator size="small" />
+          <Text className="ml-2 text-[11px] text-white/65">{loadingLabel}</Text>
+        </View>
+      ) : null}
+
+      {error ? (
+        <View className={isLoading ? "mt-2" : ""}>
+          <Text className="text-[11px] text-rose-200">{error}</Text>
+          {onRetry ? (
+            <Pressable
+              onPress={onRetry}
+              className="mt-2 self-start px-2.5 py-1.5 rounded-full border border-rose-400/30 bg-rose-400/10 active:opacity-90"
+            >
+              <Text className="text-[10px] font-semibold text-rose-100">Retry</Text>
+            </Pressable>
+          ) : null}
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -672,12 +709,20 @@ function Pill(props: { label: string; count: number; active: boolean; onPress: (
   );
 }
 
-function EmptyState(props: { title: string; subtitle?: string }) {
-  const { title, subtitle } = props;
+function EmptyState(props: { title: string; subtitle?: string; actionLabel?: string; onAction?: () => void }) {
+  const { title, subtitle, actionLabel, onAction } = props;
   return (
     <View className="rounded-3xl border border-white/10 bg-white/[0.03] px-4 py-4">
       <Text className="text-[12px] text-white/80 font-semibold">{title}</Text>
       {!!subtitle && <Text className="text-[11px] text-white/45 mt-1">{subtitle}</Text>}
+      {actionLabel && onAction ? (
+        <Pressable
+          onPress={onAction}
+          className="mt-3 self-start px-3 py-2 rounded-2xl border border-white/10 bg-white/[0.04] active:opacity-90"
+        >
+          <Text className="text-[11px] text-white/80 font-semibold">{actionLabel}</Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }

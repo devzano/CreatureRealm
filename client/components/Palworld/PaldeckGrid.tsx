@@ -1,6 +1,6 @@
 // components/Palworld/PaldeckGrid.tsx
 import React, { useCallback, useMemo } from "react";
-import { View, Text, FlatList, Pressable } from "react-native";
+import { View, Text, FlatList, Pressable, Alert } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 
@@ -9,7 +9,6 @@ import { usePalworldCollectionStore } from "@/store/palworldCollectionStore";
 import AppImages from "@/constants/images";
 import RemoteIcon from "./RemoteIcon";
 import { Image } from "expo-image";
-import LiquidGlass from "../ui/LiquidGlass";
 import GlassBadge from "../ui/helpers/GlassBadge";
 
 export type PalDexFilter = "all" | "caught" | "lucky" | "alpha";
@@ -25,6 +24,11 @@ const EMPTY_ENTRY = Object.freeze({
 
 const ACTIVE_HIGHLIGHT = "#0cd3f1";
 const ALPHA_HIGHLIGHT = "#ef4444";
+const FILTER_ICONS: Record<Exclude<PalDexFilter, "all">, any> = {
+  alpha: AppImages.alphaPalworldIcon,
+  lucky: AppImages.luckyPalworldIcon,
+  caught: AppImages.caughtPalworldIcon,
+};
 
 type PaldeckGridProps = {
   pals: PalListItem[];
@@ -56,6 +60,7 @@ const PaldeckGrid: React.FC<PaldeckGridProps> = ({
   );
 
   const normalizedSearch = search.trim().toLowerCase();
+  const clearPaldeckSelections = usePalworldCollectionStore((s) => s.clearPaldeckSelections);
 
   const filteredPals = useMemo(() => {
     let base = pals;
@@ -117,11 +122,20 @@ const PaldeckGrid: React.FC<PaldeckGridProps> = ({
     );
   }, []);
 
-  const FILTER_ICONS: Record<string, any> = {
-    alpha: AppImages.alphaPalworldIcon,
-    lucky: AppImages.luckyPalworldIcon,
-    caught: AppImages.caughtPalworldIcon,
-  };
+  const onLongPressCount = useCallback(() => {
+    Alert.alert(
+      "Reset Paldeck Selection",
+      "Clear all caught, lucky, and alpha marks in this Paldeck?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Reset",
+          style: "destructive",
+          onPress: () => clearPaldeckSelections(),
+        },
+      ]
+    );
+  }, [clearPaldeckSelections]);
 
   const FilterChip = useCallback(
     ({ id, label }: { id: PalDexFilter; label: string }) => {
@@ -187,10 +201,12 @@ const PaldeckGrid: React.FC<PaldeckGridProps> = ({
           gap: 10,
         }}
       >
-        <GlassBadge
-          label={`Showing ${filteredPals.length} / ${pals.length} pals`}
-          tintColor="rgba(148,163,184,0.08)"
-        />
+        <Pressable onLongPress={onLongPressCount} delayLongPress={350} hitSlop={8}>
+          <GlassBadge
+            label={`Showing ${filteredPals.length} / ${pals.length} pals`}
+            tintColor="rgba(148,163,184,0.08)"
+          />
+        </Pressable>
 
         <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
           <FilterChip id="all" label="All" />
@@ -237,7 +253,9 @@ const PalDexTile: React.FC<PalDexTileProps> = React.memo(({ pal, onOpen }) => {
 
   const entry = usePalworldCollectionStore((s) => {
     return (s.entries[dexId] as any) ?? EMPTY_ENTRY;
-  });
+});
+
+PalDexTile.displayName = "PalDexTile";
 
   const toggleCaught = usePalworldCollectionStore((s) => s.toggleCaught);
   const toggleLucky = usePalworldCollectionStore((s) => (s as any).toggleLucky);

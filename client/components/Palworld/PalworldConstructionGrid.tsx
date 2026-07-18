@@ -1,5 +1,6 @@
 // components/Palworld/PalworldConstructionGrid.tsx
 import React, { useMemo } from "react";
+import { ActivityIndicator, Pressable, Text, View } from "react-native";
 
 import PalworldDashboardGrid, { type DashboardCategory } from "@/components/Palworld/PalworldDashboardGrid";
 import { usePalworldDashboardOrderStore } from "@/store/palworldDashboardOrderStore";
@@ -24,6 +25,16 @@ import type { PalConstructionIndexItem } from "@/lib/palworld/construction/paldb
 import PalGrid from "@/components/Palworld/Construction/PalGrid";
 import type { OtherIndexItem } from "@/lib/palworld/construction/paldbOther";
 import OtherGrid from "@/components/Palworld/Construction/OtherGrid";
+import SpecialConstructionGrid from "@/components/Palworld/Construction/SpecialConstructionGrid";
+import PalExpeditionsGrid from "@/components/Palworld/Construction/PalExpeditionsGrid";
+import FishingShadowsGrid from "@/components/Palworld/Construction/FishingShadowsGrid";
+import {
+  fetchExpeditionStationDetail,
+  fetchFishingPondDetail,
+  type FishingShadowEntry,
+  type PalExpeditionEntry,
+  type SpecialConstructionIndexItem,
+} from "@/lib/palworld/construction/paldbSpecialStructures";
 
 type PalworldConstructionGridProps = {
   storage: StorageIndexItem[];
@@ -35,13 +46,19 @@ type PalworldConstructionGridProps = {
   lighting: LightingIndexItem[];
   production: ProductionIndexItem[];
   palConstruction: PalConstructionIndexItem[];
+  expeditionStation: SpecialConstructionIndexItem[];
+  palExpeditions: PalExpeditionEntry[];
+  fishingPond: SpecialConstructionIndexItem[];
+  fishingShadows: FishingShadowEntry[];
   otherConstruction: OtherIndexItem[];
 
   search: string;
-  isLoading?: boolean;
+  categoryStatus: Record<ConstructionCategoryKey, ConstructionCategoryStatus>;
+  onRetryCategory?: (key: ConstructionCategoryKey) => void;
+  onRetryFailed?: () => void;
 };
 
-type CategoryKey =
+export type ConstructionCategoryKey =
   | "storage"
   | "foundations"
   | "furniture"
@@ -51,11 +68,21 @@ type CategoryKey =
   | "lighting"
   | "production"
   | "palConstruction"
+  | "expeditionStation"
+  | "palExpeditions"
+  | "fishingPond"
+  | "fishingShadows"
   | "other";
+
+export type ConstructionCategoryStatus = {
+  loading: boolean;
+  loaded: boolean;
+  error: string | null;
+};
 
 type PreviewItem = { name: string };
 
-function buildHaystack(parts: Array<any>) {
+function buildHaystack(parts: any[]) {
   return parts
     .map((x) => (x == null ? "" : String(x)))
     .join(" ")
@@ -95,7 +122,7 @@ function toPreviewItems(list: any[], max = 6): PreviewItem[] {
   return out;
 }
 
-const DEFAULT_CATEGORY_ORDER: CategoryKey[] = [
+const DEFAULT_CATEGORY_ORDER: ConstructionCategoryKey[] = [
   "storage",
   "foundations",
   "furniture",
@@ -105,6 +132,8 @@ const DEFAULT_CATEGORY_ORDER: CategoryKey[] = [
   "lighting",
   "production",
   "palConstruction",
+  "expeditionStation",
+  "fishingPond",
   "other",
 ];
 
@@ -118,9 +147,15 @@ const PalworldConstructionGrid: React.FC<PalworldConstructionGridProps> = ({
   lighting,
   production,
   palConstruction,
+  expeditionStation,
+  palExpeditions,
+  fishingPond,
+  fishingShadows,
   otherConstruction,
   search,
-  isLoading = false,
+  categoryStatus,
+  onRetryCategory,
+  onRetryFailed,
 }) => {
   const normalizedSearch = (search ?? "").trim().toLowerCase();
 
@@ -286,6 +321,76 @@ const PalworldConstructionGrid: React.FC<PalworldConstructionGridProps> = ({
     [otherConstruction, normalizedSearch]
   );
 
+  const filteredExpeditionStation = useMemo(
+    () =>
+      filterList(expeditionStation, normalizedSearch, (x) =>
+        buildHaystack([
+          x.name,
+          x.slug,
+          x.categoryText,
+          x.technologyLevel,
+          x.description,
+          x.workSuitability?.name,
+          x.workSuitability?.level,
+          (x.recipe ?? []).map((r) => `${r.name} ${r.slug} ${r.qty}`).join(" "),
+          (x.detailRows ?? []).map((row) => `${row.label} ${row.value}`).join(" "),
+        ])
+      ),
+    [expeditionStation, normalizedSearch]
+  );
+
+  const filteredPalExpeditions = useMemo(
+    () =>
+      filterList(palExpeditions, normalizedSearch, (entry) =>
+        buildHaystack([
+          entry.name,
+          entry.slug,
+          entry.objective,
+          entry.risk,
+          entry.duration,
+          entry.recommendedFirepower,
+          entry.requiredType,
+          entry.rewards.map((reward) => `${reward.name} ${reward.quantityText ?? ""} ${reward.chanceText ?? ""}`).join(" "),
+        ])
+      ),
+    [palExpeditions, normalizedSearch]
+  );
+
+  const filteredFishingPond = useMemo(
+    () =>
+      filterList(fishingPond, normalizedSearch, (x) =>
+        buildHaystack([
+          x.name,
+          x.slug,
+          x.categoryText,
+          x.technologyLevel,
+          x.description,
+          x.workSuitability?.name,
+          x.workSuitability?.level,
+          (x.recipe ?? []).map((r) => `${r.name} ${r.slug} ${r.qty}`).join(" "),
+          (x.detailRows ?? []).map((row) => `${row.label} ${row.value}`).join(" "),
+        ])
+      ),
+    [fishingPond, normalizedSearch]
+  );
+
+  const filteredFishingShadows = useMemo(
+    () =>
+      filterList(fishingShadows, normalizedSearch, (entry) =>
+        buildHaystack([
+          entry.shadowSize,
+          entry.kind,
+          entry.name,
+          entry.slug,
+          entry.levelText,
+          entry.quantityText,
+          entry.chanceText,
+          entry.isAlpha ? "alpha" : "",
+        ])
+      ),
+    [fishingShadows, normalizedSearch]
+  );
+
   const totalShown =
     filteredStorage.length +
     filteredFoundations.length +
@@ -296,6 +401,10 @@ const PalworldConstructionGrid: React.FC<PalworldConstructionGridProps> = ({
     filteredLighting.length +
     filteredProduction.length +
     filteredPalConstruction.length +
+    filteredExpeditionStation.length +
+    filteredPalExpeditions.length +
+    filteredFishingPond.length +
+    filteredFishingShadows.length +
     filteredOther.length;
 
   const totalAll =
@@ -308,9 +417,13 @@ const PalworldConstructionGrid: React.FC<PalworldConstructionGridProps> = ({
     (lighting?.length ?? 0) +
     (production?.length ?? 0) +
     (palConstruction?.length ?? 0) +
+    (expeditionStation?.length ?? 0) +
+    (palExpeditions?.length ?? 0) +
+    (fishingPond?.length ?? 0) +
+    (fishingShadows?.length ?? 0) +
     (otherConstruction?.length ?? 0);
 
-  const categories: DashboardCategory<CategoryKey>[] = useMemo(() => {
+  const categories: DashboardCategory<ConstructionCategoryKey>[] = useMemo(() => {
     return [
       {
         key: "storage",
@@ -320,6 +433,10 @@ const PalworldConstructionGrid: React.FC<PalworldConstructionGridProps> = ({
         total: storage?.length ?? 0,
         items: filteredStorage as any[],
         previewItems: toPreviewItems(filteredStorage, 6),
+        isLoading: categoryStatus.storage.loading,
+        isLoaded: categoryStatus.storage.loaded,
+        error: categoryStatus.storage.error,
+        onRetry: onRetryCategory ? () => onRetryCategory("storage") : null,
         render: (items) => (
           <StorageGrid items={items as any} numColumns={3} emptyText="No storage found. Try a different search." />
         ),
@@ -332,6 +449,10 @@ const PalworldConstructionGrid: React.FC<PalworldConstructionGridProps> = ({
         total: foundations?.length ?? 0,
         items: filteredFoundations as any[],
         previewItems: toPreviewItems(filteredFoundations, 6),
+        isLoading: categoryStatus.foundations.loading,
+        isLoaded: categoryStatus.foundations.loaded,
+        error: categoryStatus.foundations.error,
+        onRetry: onRetryCategory ? () => onRetryCategory("foundations") : null,
         render: (items) => (
           <FoundationGrid items={items as any} numColumns={3} emptyText="No foundations found. Try a different search." />
         ),
@@ -344,6 +465,10 @@ const PalworldConstructionGrid: React.FC<PalworldConstructionGridProps> = ({
         total: furniture?.length ?? 0,
         items: filteredFurniture as any[],
         previewItems: toPreviewItems(filteredFurniture, 6),
+        isLoading: categoryStatus.furniture.loading,
+        isLoaded: categoryStatus.furniture.loaded,
+        error: categoryStatus.furniture.error,
+        onRetry: onRetryCategory ? () => onRetryCategory("furniture") : null,
         render: (items) => (
           <FurnitureGrid items={items as any} numColumns={3} emptyText="No furniture found. Try a different search." />
         ),
@@ -356,6 +481,10 @@ const PalworldConstructionGrid: React.FC<PalworldConstructionGridProps> = ({
         total: defenses?.length ?? 0,
         items: filteredDefenses as any[],
         previewItems: toPreviewItems(filteredDefenses, 6),
+        isLoading: categoryStatus.defenses.loading,
+        isLoaded: categoryStatus.defenses.loaded,
+        error: categoryStatus.defenses.error,
+        onRetry: onRetryCategory ? () => onRetryCategory("defenses") : null,
         render: (items) => (
           <DefensesGrid items={items as any} numColumns={3} emptyText="No defenses found. Try a different search." />
         ),
@@ -368,6 +497,10 @@ const PalworldConstructionGrid: React.FC<PalworldConstructionGridProps> = ({
         total: food?.length ?? 0,
         items: filteredFood as any[],
         previewItems: toPreviewItems(filteredFood, 6),
+        isLoading: categoryStatus.food.loading,
+        isLoaded: categoryStatus.food.loaded,
+        error: categoryStatus.food.error,
+        onRetry: onRetryCategory ? () => onRetryCategory("food") : null,
         render: (items) => <FoodGrid items={items as any} numColumns={3} emptyText="No food found. Try a different search." />,
       },
       {
@@ -378,6 +511,10 @@ const PalworldConstructionGrid: React.FC<PalworldConstructionGridProps> = ({
         total: infrastructure?.length ?? 0,
         items: filteredInfrastructure as any[],
         previewItems: toPreviewItems(filteredInfrastructure, 6),
+        isLoading: categoryStatus.infrastructure.loading,
+        isLoaded: categoryStatus.infrastructure.loaded,
+        error: categoryStatus.infrastructure.error,
+        onRetry: onRetryCategory ? () => onRetryCategory("infrastructure") : null,
         render: (items) => (
           <InfrastructureGrid items={items as any} numColumns={3} emptyText="No infrastructure found. Try a different search." />
         ),
@@ -390,6 +527,10 @@ const PalworldConstructionGrid: React.FC<PalworldConstructionGridProps> = ({
         total: lighting?.length ?? 0,
         items: filteredLighting as any[],
         previewItems: toPreviewItems(filteredLighting, 6),
+        isLoading: categoryStatus.lighting.loading,
+        isLoaded: categoryStatus.lighting.loaded,
+        error: categoryStatus.lighting.error,
+        onRetry: onRetryCategory ? () => onRetryCategory("lighting") : null,
         render: (items) => (
           <LightingGrid items={items as any} numColumns={3} emptyText="No lighting found. Try a different search." />
         ),
@@ -402,6 +543,10 @@ const PalworldConstructionGrid: React.FC<PalworldConstructionGridProps> = ({
         total: production?.length ?? 0,
         items: filteredProduction as any[],
         previewItems: toPreviewItems(filteredProduction, 6),
+        isLoading: categoryStatus.production.loading,
+        isLoaded: categoryStatus.production.loaded,
+        error: categoryStatus.production.error,
+        onRetry: onRetryCategory ? () => onRetryCategory("production") : null,
         render: (items) => (
           <ProductionGrid items={items as any} numColumns={3} emptyText="No production found. Try a different search." />
         ),
@@ -414,7 +559,111 @@ const PalworldConstructionGrid: React.FC<PalworldConstructionGridProps> = ({
         total: palConstruction?.length ?? 0,
         items: filteredPalConstruction as any[],
         previewItems: toPreviewItems(filteredPalConstruction, 6),
+        isLoading: categoryStatus.palConstruction.loading,
+        isLoaded: categoryStatus.palConstruction.loaded,
+        error: categoryStatus.palConstruction.error,
+        onRetry: onRetryCategory ? () => onRetryCategory("palConstruction") : null,
         render: (items) => <PalGrid items={items as any} numColumns={3} emptyText="No pal construction found. Try a different search." />,
+      },
+      {
+        key: "expeditionStation",
+        title: "Expeditions",
+        subtitle: "Station + Routes",
+        shown: filteredExpeditionStation.length + filteredPalExpeditions.length,
+        total: (expeditionStation?.length ?? 0) + (palExpeditions?.length ?? 0),
+        items: [...filteredExpeditionStation, ...filteredPalExpeditions] as any[],
+        previewItems: [
+          ...toPreviewItems(filteredExpeditionStation, 2),
+          ...toPreviewItems(filteredPalExpeditions, 4),
+        ],
+        isLoading: categoryStatus.expeditionStation.loading || categoryStatus.palExpeditions.loading,
+        isLoaded: categoryStatus.expeditionStation.loaded && categoryStatus.palExpeditions.loaded,
+        error: categoryStatus.expeditionStation.error ?? categoryStatus.palExpeditions.error,
+        onRetry: onRetryCategory
+          ? () => {
+              onRetryCategory("expeditionStation");
+              onRetryCategory("palExpeditions");
+            }
+          : null,
+        render: () => (
+          <View>
+            <View className="px-4 mt-2 mb-2">
+              <Text className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/60">Pal Expedition Station</Text>
+              <Text className="text-[11px] text-white/35 mt-0.5">
+                {filteredExpeditionStation.length} / {expeditionStation?.length ?? 0}
+              </Text>
+            </View>
+            <SpecialConstructionGrid
+              items={filteredExpeditionStation}
+              fetchDetail={fetchExpeditionStationDetail}
+              typeLabel="Pal Station"
+              numColumns={2}
+              emptyText="No expedition station data found. Try a different search."
+            />
+
+            <View className="px-4 mt-6 mb-2">
+              <Text className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/60">Pal Expeditions</Text>
+              <Text className="text-[11px] text-white/35 mt-0.5">
+                {filteredPalExpeditions.length} / {palExpeditions?.length ?? 0}
+              </Text>
+            </View>
+            <PalExpeditionsGrid
+              items={filteredPalExpeditions}
+              numColumns={2}
+              emptyText="No expedition routes found. Try a different search."
+            />
+          </View>
+        ),
+      },
+      {
+        key: "fishingPond",
+        title: "Fishing",
+        subtitle: "Pond + Shadows",
+        shown: filteredFishingPond.length + filteredFishingShadows.length,
+        total: (fishingPond?.length ?? 0) + (fishingShadows?.length ?? 0),
+        items: [...filteredFishingPond, ...filteredFishingShadows] as any[],
+        previewItems: [
+          ...toPreviewItems(filteredFishingPond, 2),
+          ...toPreviewItems(filteredFishingShadows, 4),
+        ],
+        isLoading: categoryStatus.fishingPond.loading || categoryStatus.fishingShadows.loading,
+        isLoaded: categoryStatus.fishingPond.loaded && categoryStatus.fishingShadows.loaded,
+        error: categoryStatus.fishingPond.error ?? categoryStatus.fishingShadows.error,
+        onRetry: onRetryCategory
+          ? () => {
+              onRetryCategory("fishingPond");
+              onRetryCategory("fishingShadows");
+            }
+          : null,
+        render: () => (
+          <View>
+            <View className="px-4 mt-2 mb-2">
+              <Text className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/60">Fishing Pond</Text>
+              <Text className="text-[11px] text-white/35 mt-0.5">
+                {filteredFishingPond.length} / {fishingPond?.length ?? 0}
+              </Text>
+            </View>
+            <SpecialConstructionGrid
+              items={filteredFishingPond}
+              fetchDetail={fetchFishingPondDetail}
+              typeLabel="Fishing"
+              numColumns={2}
+              emptyText="No fishing pond data found. Try a different search."
+            />
+
+            <View className="px-4 mt-6 mb-2">
+              <Text className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/60">Fishing Shadows</Text>
+              <Text className="text-[11px] text-white/35 mt-0.5">
+                {filteredFishingShadows.length} / {fishingShadows?.length ?? 0}
+              </Text>
+            </View>
+            <FishingShadowsGrid
+              items={filteredFishingShadows}
+              numColumns={3}
+              emptyText="No fishing shadow data found. Try a different search."
+            />
+          </View>
+        ),
       },
       {
         key: "other",
@@ -424,10 +673,15 @@ const PalworldConstructionGrid: React.FC<PalworldConstructionGridProps> = ({
         total: otherConstruction?.length ?? 0,
         items: filteredOther as any[],
         previewItems: toPreviewItems(filteredOther, 6),
+        isLoading: categoryStatus.other.loading,
+        isLoaded: categoryStatus.other.loaded,
+        error: categoryStatus.other.error,
+        onRetry: onRetryCategory ? () => onRetryCategory("other") : null,
         render: (items) => <OtherGrid items={items as any} numColumns={3} emptyText="No other construction found. Try a different search." />,
       },
     ];
   }, [
+    categoryStatus,
     filteredStorage,
     filteredFoundations,
     filteredFurniture,
@@ -437,6 +691,10 @@ const PalworldConstructionGrid: React.FC<PalworldConstructionGridProps> = ({
     filteredLighting,
     filteredProduction,
     filteredPalConstruction,
+    filteredExpeditionStation,
+    filteredPalExpeditions,
+    filteredFishingPond,
+    filteredFishingShadows,
     filteredOther,
     storage,
     foundations,
@@ -447,28 +705,76 @@ const PalworldConstructionGrid: React.FC<PalworldConstructionGridProps> = ({
     lighting,
     production,
     palConstruction,
+    expeditionStation,
+    palExpeditions,
+    fishingPond,
+    fishingShadows,
     otherConstruction,
+    onRetryCategory,
   ]);
 
+  const totalCategoryCount = categories.length;
+  const loadedCategoryCount = categories.filter((category) => !!category.isLoaded).length;
+  const loadingCategoryCount = categories.filter((category) => !!category.isLoading).length;
+  const failedCategoryCount = categories.filter((category) => !!category.error).length;
+  const hasSettledAll = loadedCategoryCount + failedCategoryCount === totalCategoryCount;
+  const showProgress = loadingCategoryCount > 0 || failedCategoryCount > 0;
+  const progressLabel = loadingCategoryCount > 0
+    ? `Loading Building data — ${loadedCategoryCount} of ${totalCategoryCount} categories ready`
+    : failedCategoryCount > 0
+      ? `${loadedCategoryCount} of ${totalCategoryCount} categories loaded • ${failedCategoryCount} unavailable`
+      : null;
+
+  const topContent = showProgress && progressLabel ? (
+    <View
+      className="rounded-3xl border px-3.5 py-3"
+      style={{ borderColor: "rgba(255,255,255,0.10)", backgroundColor: "rgba(255,255,255,0.04)" }}
+    >
+      <View className="flex-row items-center justify-between">
+        <View className="flex-1 pr-3">
+          <View className="flex-row items-center">
+            {loadingCategoryCount > 0 ? <ActivityIndicator size="small" /> : null}
+            <Text className="text-[12px] font-semibold text-white/85 ml-2">{progressLabel}</Text>
+          </View>
+          <Text className="text-[11px] text-white/45 mt-1">
+            {hasSettledAll
+              ? "Loaded categories stay interactive even if some sources fail."
+              : "Loaded categories are ready now. Remaining categories continue in the background."}
+          </Text>
+        </View>
+
+        {failedCategoryCount > 0 && onRetryFailed ? (
+          <Pressable
+            onPress={onRetryFailed}
+            className="px-3 py-2 rounded-2xl border border-white/10 bg-white/[0.04] active:opacity-90"
+          >
+            <Text className="text-[11px] font-semibold text-white/80">Retry Failed</Text>
+          </Pressable>
+        ) : null}
+      </View>
+    </View>
+  ) : null;
+
   const orderKey = "palworld.construction" as const;
-  const storedOrder = usePalworldDashboardOrderStore((s) => s.orders[orderKey]) as CategoryKey[] | undefined;
+  const storedOrder = usePalworldDashboardOrderStore((s) => s.orders[orderKey]) as ConstructionCategoryKey[] | undefined;
   const saveOrder = usePalworldDashboardOrderStore((s) => s.setOrder);
   const reorderEnabled = !normalizedSearch;
-  const effectiveOrder = (storedOrder?.length ? storedOrder : DEFAULT_CATEGORY_ORDER) as CategoryKey[];
+  const effectiveOrder = (storedOrder?.length ? storedOrder : DEFAULT_CATEGORY_ORDER) as ConstructionCategoryKey[];
 
   return (
-    <PalworldDashboardGrid<CategoryKey>
+    <PalworldDashboardGrid<ConstructionCategoryKey>
       search={search}
       totalShown={totalShown}
       totalAll={totalAll}
       categories={categories}
-      isLoading={isLoading}
+      isLoading={loadingCategoryCount > 0}
       loadingLabel="Loading construction categories…"
       reorderEnabled={reorderEnabled}
       defaultOrder={DEFAULT_CATEGORY_ORDER}
       order={effectiveOrder}
       onOrderChange={(next) => saveOrder(orderKey, next as string[])}
       previewMax={3}
+      topContent={topContent}
     />
   );
 };
